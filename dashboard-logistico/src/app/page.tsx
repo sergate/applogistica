@@ -50,7 +50,15 @@ export default function DashboardLayout() {
         body: formData,
       });
 
-      const data = await res.json();
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(
+          `El servidor respondió con un error inesperado (status ${res.status}). ` +
+            "Puede ser que alguno de los archivos sea demasiado grande, o un problema de configuración del servidor."
+        );
+      }
 
       if (!res.ok && res.status !== 207) {
         throw new Error(data.error || "Error al procesar los archivos.");

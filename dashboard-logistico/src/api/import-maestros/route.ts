@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseClient";
+import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { parseCsvFile, parseExcelFile } from "@/lib/fileParsers";
 
 export const runtime = "nodejs"; // necesitamos Node (no Edge) por el parseo de Excel/CSV
@@ -114,6 +114,17 @@ async function replaceInBatches(
 }
 
 export async function POST(request: NextRequest) {
+  if (!supabaseEnvOk) {
+    return NextResponse.json(
+      {
+        success: false,
+        error:
+          "Faltan configurar SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.",
+      },
+      { status: 500 }
+    );
+  }
+
   try {
     const formData = await request.formData();
 
