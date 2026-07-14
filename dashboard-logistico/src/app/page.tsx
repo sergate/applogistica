@@ -3,28 +3,28 @@
 import { useState } from "react";
 
 export default function DashboardLayout() {
+  // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState("Resumen");
+  const [activeTab, setActiveTab] = useState("Resumen"); 
+
+  // Estados para la interactividad de las tablas en "Resumen"
   const [selectedMarca, setSelectedMarca] = useState<string | null>(null);
   const [selectedCanal, setSelectedCanal] = useState<string | null>(null);
-  const [files, setFiles] = useState<{ clientes: File | null; grupo: File | null; tienda: File | null }>({ 
-    clientes: null, grupo: null, tienda: null 
-  });
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por marca", "Por canal", "Por categoría"];
 
   // =========================================================================
-  // DATOS MOCK
+  // DATOS MOCK - STATUS DE PREPARACIÓN
   // =========================================================================
   const kpiData = [
-    { title: "Total Unidades", value: "85.781", theme: "blue" },
-    { title: "Unidades Pickeadas", value: "2.794", theme: "green" },
-    { title: "Unidades Separadas", value: "2.712", theme: "purple" },
-    { title: "Pendiente Picking", value: "83.002", theme: "orange" },
-    { title: "Pendiente Separación", value: "83.084", theme: "red" },
-    { title: "Efic. Picking", value: "3.3%", theme: "green" },
-    { title: "Efic. Separación", value: "3.2%", theme: "purple" },
-    { title: "Total Registros", value: "1.316", theme: "blue" }
+    { title: "Total Unidades", value: "85.781", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> },
+    { title: "Unidades Pickeadas", value: "2.794", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline strokeLinecap="round" strokeLinejoin="round" points="22 4 12 14.01 9 11.01" /></svg> },
+    { title: "Unidades Separadas", value: "2.712", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
+    { title: "Pendiente Picking", value: "83.002", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
+    { title: "Pendiente Separación", value: "83.084", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
+    { title: "Efic. Picking", value: "3.3%", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
+    { title: "Efic. Separación", value: "3.2%", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
+    { title: "Total Registros", value: "1.316", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
   ];
 
   const marcasData = [
@@ -34,101 +34,339 @@ export default function DashboardLayout() {
     { name: "CHEEKY", dot: "bg-red-400", uni: "74.635", pick: "2.202", sep: "2.144", pendPick: "72.444", pendSep: "72.502", eficPick: "3.0%", eficSep: "2.9%", reg: "876" }
   ];
 
-  const procesosData = [
-    { id: '1', proceso: 'Recepción', unidades: "1.500", horas: 8.5, prod: 176, remanentes: 200 },
-    { id: '2', proceso: 'Putaway', unidades: "1.250", horas: 7.0, prod: 178, remanentes: 50 },
+  const canalesData = [
+    { name: "CLIENTE", dot: "bg-pink-400", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" },
+    { name: "PROPIO", dot: "bg-blue-400", uni: "1.476", pick: "12", sep: "5", pendPick: "1.464", pendSep: "1.471", eficPick: "0.8%", eficSep: "0.3%" },
+    { name: "DEPOSITO", dot: "bg-emerald-500", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" },
+    { name: "FRANQUICIA", dot: "bg-orange-400", uni: "302", pick: "0", sep: "0", pendPick: "302", pendSep: "302", eficPick: "0.0%", eficSep: "0.0%" }
   ];
 
-  const cargaInicialData = [
-    { id: '1', plan: 'PLN-202610-01', ruta: 'Ruta Norte', meta: "500", preparado: "480", pendiente: "20", avance: 96.0 },
+  const clientesData = [
+    { codigo: "300139", cliente: "GLUZ DEBORA RUTH", lineas: "2", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" }
   ];
 
   const fechasData = [
     { fecha: "2026-07-13", marca: "CHEEKY", dot: "bg-red-500", uni: "17.367", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
+    { fecha: "2026-07-13", marca: "FLY", dot: "bg-emerald-500", uni: "583", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
+    { fecha: "2026-07-13", marca: "AWADA", dot: "bg-purple-400", uni: "1.530", pick: "7", sep: "0", eficPick: "0.5%", eficSep: "0.0%" },
+    { fecha: "2026-07-13", marca: "CQQTQ", dot: "bg-blue-400", uni: "4.068", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
   ];
 
-  // LOGICA
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, key: 'clientes' | 'grupo' | 'tienda') => {
-    if (e.target.files) setFiles(prev => ({ ...prev, [key]: e.target.files![0] }));
+  // =========================================================================
+  // DATOS MOCK - OTRAS SECCIONES (Productividad, Carga, Remanentes)
+  // =========================================================================
+  const procesosData = [
+    { id: '1', proceso: 'Recepción', unidades: "1.500", horas: 8.5, prod: 176, remanentes: 200 },
+    { id: '2', proceso: 'Putaway', unidades: "1.250", horas: 7.0, prod: 178, remanentes: 50 },
+    { id: '3', proceso: 'Picking E-com', unidades: "850", horas: 8.0, prod: 106, remanentes: 120 },
+    { id: '4', proceso: 'Picking Retail', unidades: "2.400", horas: 7.5, prod: 320, remanentes: 300 },
+    { id: '5', proceso: 'Despacho', unidades: "3.100", horas: 9.0, prod: 344, remanentes: 0 },
+  ];
+
+  const cargaInicialData = [
+    { id: '1', plan: 'PLN-202610-01', ruta: 'Ruta Norte', meta: "500", preparado: "480", pendiente: "20", avance: 96.0 },
+    { id: '2', plan: 'PLN-202610-02', ruta: 'Ruta Sur', meta: "750", preparado: "300", pendiente: "450", avance: 40.0 },
+    { id: '3', plan: 'PLN-202610-03', ruta: 'AMBA', meta: "1.200", preparado: "1.150", pendiente: "50", avance: 95.8 },
+    { id: '4', plan: 'PLN-202610-04', ruta: 'Interior Centro', meta: "400", preparado: "150", pendiente: "250", avance: 37.5 },
+  ];
+
+  const getThemeClasses = (theme: string) => {
+    switch (theme) {
+      case "blue": return { text: "text-sky-500", bgIcon: "bg-sky-100", textIcon: "text-sky-500", blob: "bg-sky-50" };
+      case "green": return { text: "text-emerald-500", bgIcon: "bg-emerald-100", textIcon: "text-emerald-500", blob: "bg-emerald-50" };
+      case "purple": return { text: "text-indigo-400", bgIcon: "bg-indigo-100", textIcon: "text-indigo-400", blob: "bg-indigo-50" };
+      case "orange": return { text: "text-orange-400", bgIcon: "bg-orange-100", textIcon: "text-orange-400", blob: "bg-orange-50" };
+      case "red": return { text: "text-red-400", bgIcon: "bg-red-100", textIcon: "text-red-400", blob: "bg-red-50" };
+      default: return { text: "text-slate-500", bgIcon: "bg-slate-100", textIcon: "text-slate-500", blob: "bg-slate-50" };
+    }
+  };
+
+  const handleMarcaClick = (marca: string) => {
+    setSelectedMarca(marca === selectedMarca ? null : marca);
+    setSelectedCanal(null);
+  };
+
+  const handleCanalClick = (canal: string) => {
+    setSelectedCanal(canal === selectedCanal ? null : canal);
   };
 
   return (
-    <div className="flex h-screen bg-[#f8f9fc] font-sans text-slate-800">
-      {/* SIDEBAR */}
-      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col flex-shrink-0">
-        <div className="h-16 flex items-center px-6 bg-slate-950 font-bold text-white">WMS Analytics</div>
-        <nav className="flex-1 p-3 space-y-1">
-          <button onClick={() => setActiveTab("Producción por proceso")} className="w-full text-left px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800">Producción por proceso</button>
+    <div className="flex h-screen bg-[#f8f9fc] font-sans text-slate-800 overflow-hidden">
+      
+      {/* ================= BARRA LATERAL ================= */}
+      <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col shadow-xl z-10 flex-shrink-0">
+        <div className="h-16 flex items-center px-6 border-b border-slate-800 bg-slate-950">
+          <svg className="w-6 h-6 text-blue-500 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
+          <span className="text-lg font-bold text-white tracking-wide">WMS Analytics</span>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+          <button onClick={() => setActiveTab("Producción por proceso")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Producción por proceso" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
+            Producción por proceso
+          </button>
+
           <div className="pt-2">
-            <button onClick={() => setIsPrepOpen(!isPrepOpen)} className="w-full flex justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 text-sm">Status de preparación ▾</button>
-            {isPrepOpen && prepSubSections.map(sub => (
-              <button key={sub} onClick={() => setActiveTab(sub)} className={`w-full text-left pl-8 py-2 text-sm ${activeTab === sub ? "text-blue-400" : "text-slate-400"}`}>{sub}</button>
-            ))}
+            <button onClick={() => setIsPrepOpen(!isPrepOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                Status de preparación
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isPrepOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isPrepOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {prepSubSections.map((sub, idx) => (
+                  <button key={idx} onClick={() => setActiveTab(sub)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-          <button onClick={() => setActiveTab("Status carga inicial")} className="w-full text-left px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800">Status carga inicial</button>
-          <button onClick={() => setActiveTab("Status remanentes")} className="w-full text-left px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800">Status remanentes</button>
-          <button onClick={() => setActiveTab("Productividad por proceso")} className="w-full text-left px-3 py-2.5 rounded-lg text-sm hover:bg-slate-800">Productividad por proceso</button>
+
+          <button onClick={() => setActiveTab("Status carga inicial")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Status carga inicial" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            Status carga inicial
+          </button>
+
+          <button onClick={() => setActiveTab("Status remanentes")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Status remanentes" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
+            Status remanentes
+          </button>
+
+          <button onClick={() => setActiveTab("Productividad por proceso")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Productividad por proceso" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Productividad por proceso
+          </button>
         </nav>
       </aside>
 
-      {/* MAIN */}
-      <main className="flex-1 overflow-auto p-8">
-        <h1 className="text-xl font-bold mb-6">{activeTab}</h1>
+      {/* ================= ÁREA PRINCIPAL ================= */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
+          <h1 className="text-xl font-bold text-slate-800">
+            {activeTab === "Resumen" ? "Status de Preparación - Resumen" : 
+             activeTab === "Por fecha" ? "Status de Preparación - Por Fecha" : activeTab}
+          </h1>
+        </header>
 
-        {activeTab === "Importar datos" && (
-          <div className="bg-white rounded-xl border p-8 max-w-4xl shadow-sm">
-            <h2 className="font-bold mb-6">Importar Archivos WMS</h2>
-            <div className="grid grid-cols-3 gap-6">
-              {['clientes', 'grupo', 'tienda'].map(key => (
-                <div key={key} className="border-2 border-dashed p-4 rounded text-center">
-                  <p className="text-xs mb-2 uppercase">{key}</p>
-                  <input type="file" onChange={(e) => handleFileChange(e, key as any)} />
+        <div className="flex-1 overflow-auto p-8 space-y-6">
+          
+          {/* ================= PESTAÑA: RESUMEN ================= */}
+          {activeTab === "Resumen" && (
+            <>
+              {/* TARJETAS KPI */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {kpiData.map((kpi, index) => {
+                  const themeClasses = getThemeClasses(kpi.theme);
+                  return (
+                    <div key={index} className="relative overflow-hidden bg-white rounded-xl border border-slate-200 p-5 h-32 flex flex-col justify-center">
+                      <div className={`absolute -right-8 -bottom-12 w-40 h-40 rounded-[100%] ${themeClasses.blob} opacity-80`}></div>
+                      <div className="relative z-10 w-full flex justify-between items-center">
+                        <div>
+                          <h3 className="text-sm font-medium text-slate-500 mb-1">{kpi.title}</h3>
+                          <p className={`text-[32px] font-bold tracking-tight ${themeClasses.text} leading-none`}>{kpi.value}</p>
+                        </div>
+                        <div className={`w-[46px] h-[46px] rounded-xl flex items-center justify-center ${themeClasses.bgIcon} ${themeClasses.textIcon}`}>{kpi.icon}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* TABLA MARCAS */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800">Detalle por Marca</h2>
+                <p className="text-sm text-slate-500 mb-6">Haz click en una marca para ver el desglose por canal</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">Unidades</th>
+                        <th className="py-3 px-4 text-left">Pickeadas</th>
+                        <th className="py-3 px-4 text-left">Separadas</th>
+                        <th className="py-3 px-4 text-left">Pend. Picking</th>
+                        <th className="py-3 px-4 text-left">Pend. Sep.</th>
+                        <th className="py-3 px-4 text-left">Efic. Pick.</th>
+                        <th className="py-3 px-4 text-left">Efic. Sep.</th>
+                        <th className="py-3 px-4 text-left">Registros</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {marcasData.map((marca, i) => (
+                        <tr key={i} onClick={() => handleMarcaClick(marca.name)} className={`cursor-pointer transition-colors ${selectedMarca === marca.name ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
+                          <td className="py-3 px-4 text-left flex items-center gap-3 font-semibold text-slate-800"><span className={`w-2.5 h-2.5 rounded-full ${marca.dot}`}></span> {marca.name}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.uni}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.pick}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.sep}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{marca.pendPick}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficPick}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficSep}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.reg}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
+              </div>
+            </>
+          )}
+
+          {/* ================= PESTAÑA: POR FECHA ================= */}
+          {activeTab === "Por fecha" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Detalle por Fecha</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Fecha</th>
+                      <th className="py-4 px-4 text-left">Marca</th>
+                      <th className="py-4 px-4 text-left">Unidades</th>
+                      <th className="py-4 px-4 text-left">Pickeadas</th>
+                      <th className="py-4 px-4 text-left">Separadas</th>
+                      <th className="py-4 px-4 text-left">Efic. Pick.</th>
+                      <th className="py-4 px-4 text-left">Efic. Sep.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {fechasData.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
+                        <td className="py-4 px-4 text-left flex items-center gap-3 font-bold text-slate-900"><span className={`w-2 h-2 rounded-full ${row.dot}`}></span>{row.marca}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.uni}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.pick}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.sep}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.eficPick}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.eficSep}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === "Resumen" && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-4 gap-4">
-              {kpiData.map((kpi, i) => <div key={i} className="bg-white rounded-xl border p-5"><h3 className="text-xs text-slate-500">{kpi.title}</h3><p className="text-2xl font-bold">{kpi.value}</p></div>)}
+          {/* ================= PESTAÑA: PRODUCTIVIDAD POR PROCESO ================= */}
+          {activeTab === "Productividad por proceso" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Productividad Diaria</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Proceso</th>
+                      <th className="py-4 px-4 text-left">Unidades Procesadas</th>
+                      <th className="py-4 px-4 text-left">Horas Operativas</th>
+                      <th className="py-4 px-4 text-left">Productividad (Uds/Hr)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {procesosData.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-900 font-medium">{row.proceso}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.unidades}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.horas} hs</td>
+                        <td className="py-4 px-4 text-left">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${row.prod < 120 ? 'text-red-700 bg-red-100' : 'text-emerald-700 bg-emerald-100'}`}>
+                            {row.prod}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="bg-white rounded-xl border p-6">
-              <table className="w-full text-sm text-left">
-                <thead><tr className="border-b text-slate-500"><th className="py-2">Marca</th><th>Unidades</th></tr></thead>
-                <tbody>{marcasData.map(m => <tr key={m.name} className="border-b"><td className="py-2">{m.name}</td><td>{m.uni}</td></tr>)}</tbody>
-              </table>
+          )}
+
+          {/* ================= PESTAÑA: STATUS CARGA INICIAL ================= */}
+          {activeTab === "Status carga inicial" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Planes de Picking y Rutas</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Plan / Ruta</th>
+                      <th className="py-4 px-4 text-left">Carga Inicial (Meta)</th>
+                      <th className="py-4 px-4 text-left">Preparado</th>
+                      <th className="py-4 px-4 text-left">Pendiente</th>
+                      <th className="py-4 px-4 text-left">% Avance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cargaInicialData.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left">
+                          <div className="font-bold text-slate-900">{row.plan}</div>
+                          <div className="text-xs text-slate-500">{row.ruta}</div>
+                        </td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.meta}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.preparado}</td>
+                        <td className="py-4 px-4 text-left font-medium text-orange-500">{row.pendiente}</td>
+                        <td className="py-4 px-4 text-left">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${row.avance < 50 ? 'text-red-700 bg-red-100' : 'text-emerald-700 bg-emerald-100'}`}>
+                            {row.avance}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {activeTab === "Por fecha" && (
-          <div className="bg-white rounded-xl border p-8">
-            <table className="w-full text-sm text-left">
-              <thead><tr className="border-b text-slate-500"><th className="py-2">Fecha</th><th>Marca</th><th>Unidades</th></tr></thead>
-              <tbody>{fechasData.map((r, i) => <tr key={i} className="border-b"><td className="py-2">{r.fecha}</td><td>{r.marca}</td><td>{r.uni}</td></tr>)}</tbody>
-            </table>
-          </div>
-        )}
+          {/* ================= PESTAÑA: STATUS REMANENTES ================= */}
+          {activeTab === "Status remanentes" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Remanentes por Proceso</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Proceso</th>
+                      <th className="py-4 px-4 text-left">Unidades Pendientes (Remanente)</th>
+                      <th className="py-4 px-4 text-left">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {procesosData.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-900 font-medium">{row.proceso}</td>
+                        <td className="py-4 px-4 text-left font-bold text-slate-700">{row.remanentes}</td>
+                        <td className="py-4 px-4 text-left">
+                          {row.remanentes === 0 ? (
+                            <span className="text-emerald-600 font-medium flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Completado</span>
+                          ) : row.remanentes > 150 ? (
+                            <span className="text-red-500 font-medium flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> Crítico</span>
+                          ) : (
+                            <span className="text-orange-500 font-medium flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> En proceso</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-        {activeTab === "Productividad por proceso" && (
-          <div className="bg-white rounded-xl border p-8">
-             <table className="w-full text-sm text-left">
-              <thead><tr className="border-b text-slate-500"><th className="py-2">Proceso</th><th>Productividad</th></tr></thead>
-              <tbody>{procesosData.map(p => <tr key={p.id} className="border-b"><td className="py-2">{p.proceso}</td><td>{p.prod}</td></tr>)}</tbody>
-             </table>
-          </div>
-        )}
+          {/* ================= PESTAÑAS EN DESARROLLO ================= */}
+          {!["Resumen", "Por fecha", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
+               <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+               <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
+               <p className="mt-2 text-sm text-center max-w-md">Esta vista aún no ha sido maquetada. Navega a las otras secciones del menú lateral.</p>
+            </div>
+          )}
 
-        {activeTab === "Status carga inicial" && (
-          <div className="bg-white rounded-xl border p-8">
-             <table className="w-full text-sm text-left">
-              <thead><tr className="border-b text-slate-500"><th className="py-2">Plan</th><th>Avance</th></tr></thead>
-              <tbody>{cargaInicialData.map(c => <tr key={c.id} className="border-b"><td className="py-2">{c.plan}</td><td>{c.avance}%</td></tr>)}</tbody>
-             </table>
-          </div>
-        )}
+        </div>
       </main>
     </div>
   );

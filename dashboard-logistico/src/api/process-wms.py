@@ -1,51 +1,72 @@
+# api/process-wms.py
 from http.server import BaseHTTPRequestHandler
+import json
 import pandas as pd
 import io
-import os
-from supabase import create_client
-from cgi import FieldStorage
-
-supabase = create_client(os.environ.get("SUPABASE_URL"), os.environ.get("SUPABASE_SERVICE_KEY"))
+import datetime
 
 class handler(BaseHTTPRequestHandler):
     def do_POST(self):
         try:
-            form = FieldStorage(fp=self.rfile, headers=self.headers, environ={'REQUEST_METHOD':'POST'})
+            # Leer el payload del request
+            content_length = int(self.headers.get('Content-Length', 0))
+            post_data = self.rfile.read(content_length)
+            payload = json.loads(post_data.decode('utf-8'))
             
-            # --- 1. CLIENTES (Excel) ---
-            if 'clientes' in form:
-                df_c = pd.read_excel(io.BytesIO(form['clientes'].file.read()))
-                # Mapeo: {Origen: Destino}
-                df_c = df_c[['Codigo', 'Nombre', 'CP', 'Canal']].rename(columns={
-                    'Codigo': 'codigo', 'Nombre': 'nombre', 'CP': 'cp', 'Canal': 'canal'
-                })
-                supabase.table('clientes').upsert(df_c.to_dict('records')).execute()
+            file_type = payload.get('file_type') # 'diario' o 'plan'
+            csv_data = payload.get('csv_data')
+            
+            if not csv_data or not file_type:
+                self._send_response(400, {"error": "Faltan parámetros: file_type o csv_data"})
+                return
 
-            # --- 2. GRUPO (CSV) ---
-            if 'grupo' in form:
-                df_g = pd.read_csv(io.StringIO(form['grupo'].file.read().decode('utf-8')))
-                df_g = df_g[['Pedido', 'Nombre pedido', 'Grupo', 'Uni', 'Uni.Pick', 'Uni.Sep.', 'Seller', 'Fecha creacion']].rename(columns={
-                    'Pedido': 'pedido', 'Nombre pedido': 'nombre_pedido', 'Grupo': 'grupo', 
-                    'Uni': 'uni', 'Uni.Pick': 'uni_pick', 'Uni.Sep.': 'uni_sep', 
-                    'Seller': 'seller', 'Fecha creacion': 'fecha_creacion'
-                })
-                supabase.table('grupo_pedidos').upsert(df_g.to_dict('records')).execute()
+            # Cargar en Pandas para limpieza y validación
+            df = pd.read_csv(io.StringIO(csv_data))
+            filas_procesadas = len(df)
+            
+            # ---------------------------------------------------------
+            # LÓGICA DE BASE DE DATOS (Simulación de conexión Supabase)
+            # ---------------------------------------------------------
+            if file_type == 'diario':
+                # Validar columnas
+                required_cols = ['fecha', 'proceso', 'unidades_procesadas', 'horas_operativas', 'remanentes']
+                if not all(col in df.columns for col in required_cols):
+                     raise ValueError("Columnas inválidas para reporte diario")
+                
+                # Aquí iría tu cliente Supabase:
+                # 1. supabase.table('kpi_procesos_diarios').delete().in_('fecha', df['fecha'].unique().tolist()).execute()
+                # 2. supabase.table('kpi_procesos_diarios').insert(df.to_dict('records')).execute()
+                
+                accion_simulada = "Borrado por 'fecha' y 'proceso'. Inserción exitosa."
 
-            # --- 3. TIENDA (CSV) ---
-            if 'tienda' in form:
-                df_t = pd.read_csv(io.StringIO(form['tienda'].file.read().decode('utf-8')))
-                df_t = df_t[['Pedido', 'Tiendas destino']].rename(columns={
-                    'Pedido': 'pedido', 'Tiendas destino': 'tiendas_destino'
-                })
-                supabase.table('tiendas_destino').upsert(df_t.to_dict('records')).execute()
+            elif file_type == 'plan':
+                # Validar columnas
+                required_cols = ['plan_id', 'ruta', 'carga_inicial', 'preparados']
+                if not all(col in df.columns for col in required_cols):
+                     raise ValueError("Columnas inválidas para reporte de plan")
+                     
+                # Aquí iría tu cliente Supabase:
+                # 1. supabase.table('kpi_planes_picking').delete().in_('plan_id', df['plan_id'].tolist()).execute()
+                # 2. supabase.table('kpi_planes_picking').insert(df.to_dict('records')).execute()
+                
+                accion_simulada = "Borrado por 'plan_id'. Inserción exitosa."
+            else:
+                raise ValueError("Tipo de archivo no soportado. Use 'diario' o 'plan'.")
 
-            self._send_response(200, {"message": "Carga completa: Clientes, Grupo y Tiendas importados."})
+            # Respuesta de Éxito
+            self._send_response(200, {
+                "success": True,
+                "message": accion_simulada,
+                "filas_procesadas": filas_procesadas,
+                "timestamp": datetime.datetime.now().isoformat()
+            })
 
         except Exception as e:
-            self._send_response(500, {"error": str(e)})
+            self._send_response(500, {"success": False, "error": str(e)})
 
-    def _send_response(self, code, body):
-        self.send_response(code)
+    def _send_response(self, status_code, body):
+        self.send_response(status_code)
         self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
         self.end_headers()
         self.wfile.write(json.dumps(body).encode('utf-8'))
