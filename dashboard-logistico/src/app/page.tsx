@@ -1,11 +1,79 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+type ImportKey = "clientes" | "grupos" | "tiendas";
+
+interface ImportFileResult {
+  archivo: ImportKey;
+  filasLeidas: number;
+  filasInsertadas: number;
+  error: string | null;
+}
 
 export default function DashboardLayout() {
   // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
   const [activeTab, setActiveTab] = useState("Resumen"); 
+
+  // =========================================================================
+  // ESTADO: IMPORTAR DATOS (Clientes / Grupos / Tiendas -> Supabase)
+  // =========================================================================
+  const [archivoClientes, setArchivoClientes] = useState<File | null>(null);
+  const [archivoGrupos, setArchivoGrupos] = useState<File | null>(null);
+  const [archivoTiendas, setArchivoTiendas] = useState<File | null>(null);
+  const [isProcesando, setIsProcesando] = useState(false);
+  const [resultadosImport, setResultadosImport] = useState<ImportFileResult[] | null>(null);
+  const [errorImport, setErrorImport] = useState<string | null>(null);
+
+  const inputClientesRef = useRef<HTMLInputElement>(null);
+  const inputGruposRef = useRef<HTMLInputElement>(null);
+  const inputTiendasRef = useRef<HTMLInputElement>(null);
+
+  const todosLosArchivosListos = !!archivoClientes && !!archivoGrupos && !!archivoTiendas;
+
+  const handleProcesarDatos = async () => {
+    if (!todosLosArchivosListos) return;
+
+    setIsProcesando(true);
+    setErrorImport(null);
+    setResultadosImport(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("clientes", archivoClientes as File);
+      formData.append("grupos", archivoGrupos as File);
+      formData.append("tiendas", archivoTiendas as File);
+
+      const res = await fetch("/api/import-maestros", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+
+      if (!res.ok && res.status !== 207) {
+        throw new Error(data.error || "Error al procesar los archivos.");
+      }
+
+      setResultadosImport(data.resultados ?? null);
+    } catch (err) {
+      setErrorImport(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setIsProcesando(false);
+    }
+  };
+
+  const resetImportState = () => {
+    setArchivoClientes(null);
+    setArchivoGrupos(null);
+    setArchivoTiendas(null);
+    setResultadosImport(null);
+    setErrorImport(null);
+    if (inputClientesRef.current) inputClientesRef.current.value = "";
+    if (inputGruposRef.current) inputGruposRef.current.value = "";
+    if (inputTiendasRef.current) inputTiendasRef.current.value = "";
+  };
 
   // Estados para la interactividad de las tablas en "Resumen"
   const [selectedMarca, setSelectedMarca] = useState<string | null>(null);
@@ -148,7 +216,8 @@ export default function DashboardLayout() {
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
           <h1 className="text-xl font-bold text-slate-800">
             {activeTab === "Resumen" ? "Status de Preparación - Resumen" : 
-             activeTab === "Por fecha" ? "Status de Preparación - Por Fecha" : activeTab}
+             activeTab === "Por fecha" ? "Status de Preparación - Por Fecha" :
+             activeTab === "Importar datos" ? "Status de Preparación - Importar Datos" : activeTab}
           </h1>
         </header>
 
@@ -214,6 +283,145 @@ export default function DashboardLayout() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* ================= PESTAÑA: IMPORTAR DATOS ================= */}
+          {activeTab === "Importar datos" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Maestros</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Subí los 3 archivos de maestros. Al procesar, se cargan directamente en Supabase.
+              </p>
+
+              <div className="space-y-4">
+                {/* --- CLIENTES (Excel) --- */}
+                <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
+                  <div>
+                    <p className="font-semibold text-slate-800">Clientes</p>
+                    <p className="text-xs text-slate-500">Formato Excel (.xlsx, .xls)</p>
+                    {archivoClientes && (
+                      <p className="text-xs text-emerald-600 font-medium mt-1">{archivoClientes.name}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={inputClientesRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => setArchivoClientes(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      onClick={() => inputClientesRef.current?.click()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                    >
+                      {archivoClientes ? "Cambiar archivo" : "Seleccionar archivo"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* --- GRUPOS (CSV) --- */}
+                <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
+                  <div>
+                    <p className="font-semibold text-slate-800">Grupos</p>
+                    <p className="text-xs text-slate-500">Formato CSV (.csv)</p>
+                    {archivoGrupos && (
+                      <p className="text-xs text-emerald-600 font-medium mt-1">{archivoGrupos.name}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={inputGruposRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => setArchivoGrupos(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      onClick={() => inputGruposRef.current?.click()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                    >
+                      {archivoGrupos ? "Cambiar archivo" : "Seleccionar archivo"}
+                    </button>
+                  </div>
+                </div>
+
+                {/* --- TIENDAS (CSV) --- */}
+                <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
+                  <div>
+                    <p className="font-semibold text-slate-800">Tiendas</p>
+                    <p className="text-xs text-slate-500">Formato CSV (.csv)</p>
+                    {archivoTiendas && (
+                      <p className="text-xs text-emerald-600 font-medium mt-1">{archivoTiendas.name}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={inputTiendasRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => setArchivoTiendas(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      onClick={() => inputTiendasRef.current?.click()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                    >
+                      {archivoTiendas ? "Cambiar archivo" : "Seleccionar archivo"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* --- ACCIONES --- */}
+              <div className="flex items-center gap-3 mt-6">
+                <button
+                  onClick={handleProcesarDatos}
+                  disabled={!todosLosArchivosListos || isProcesando}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    !todosLosArchivosListos || isProcesando
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {isProcesando ? "Procesando..." : "Procesar datos"}
+                </button>
+                <button
+                  onClick={resetImportState}
+                  disabled={isProcesando}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Limpiar
+                </button>
+              </div>
+
+              {/* --- RESULTADOS --- */}
+              {errorImport && (
+                <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {errorImport}
+                </div>
+              )}
+
+              {resultadosImport && (
+                <div className="mt-6 space-y-2">
+                  {resultadosImport.map((r) => (
+                    <div
+                      key={r.archivo}
+                      className={`p-4 rounded-lg border text-sm ${
+                        r.error
+                          ? "bg-red-50 border-red-200 text-red-700"
+                          : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                      }`}
+                    >
+                      <span className="font-semibold capitalize">{r.archivo}:</span>{" "}
+                      {r.error
+                        ? r.error
+                        : `${r.filasInsertadas} de ${r.filasLeidas} filas cargadas correctamente.`}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
 
           {/* ================= PESTAÑA: POR FECHA ================= */}
@@ -358,7 +566,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Importar datos", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
