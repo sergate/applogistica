@@ -5,21 +5,21 @@ import { useState } from "react";
 export default function DashboardLayout() {
   // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState("Resumen");
+  const [activeTab, setActiveTab] = useState("Resumen"); 
 
-  // Estados para la interactividad de las tablas (Drill-down)
+  // Estados para la interactividad de las tablas en "Resumen"
   const [selectedMarca, setSelectedMarca] = useState<string | null>(null);
   const [selectedCanal, setSelectedCanal] = useState<string | null>(null);
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por marca", "Por canal", "Por categoría"];
 
   // =========================================================================
-  // DATOS MOCK (Basados exactamente en las imágenes proporcionadas)
+  // DATOS MOCK - STATUS DE PREPARACIÓN
   // =========================================================================
   const kpiData = [
     { title: "Total Unidades", value: "85.781", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> },
     { title: "Unidades Pickeadas", value: "2.794", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline strokeLinecap="round" strokeLinejoin="round" points="22 4 12 14.01 9 11.01" /></svg> },
-    { title: "Unidades Separadas", value: "2.712", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 12 17 22 12" /></svg> },
+    { title: "Unidades Separadas", value: "2.712", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
     { title: "Pendiente Picking", value: "83.002", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
     { title: "Pendiente Separación", value: "83.084", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
     { title: "Efic. Picking", value: "3.3%", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
@@ -45,6 +45,31 @@ export default function DashboardLayout() {
     { codigo: "300139", cliente: "GLUZ DEBORA RUTH", lineas: "2", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" }
   ];
 
+  const fechasData = [
+    { fecha: "2026-07-13", marca: "CHEEKY", dot: "bg-red-500", uni: "17.367", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
+    { fecha: "2026-07-13", marca: "FLY", dot: "bg-emerald-500", uni: "583", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
+    { fecha: "2026-07-13", marca: "AWADA", dot: "bg-purple-400", uni: "1.530", pick: "7", sep: "0", eficPick: "0.5%", eficSep: "0.0%" },
+    { fecha: "2026-07-13", marca: "CQQTQ", dot: "bg-blue-400", uni: "4.068", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
+  ];
+
+  // =========================================================================
+  // DATOS MOCK - OTRAS SECCIONES (Productividad, Carga, Remanentes)
+  // =========================================================================
+  const procesosData = [
+    { id: '1', proceso: 'Recepción', unidades: "1.500", horas: 8.5, prod: 176, remanentes: 200 },
+    { id: '2', proceso: 'Putaway', unidades: "1.250", horas: 7.0, prod: 178, remanentes: 50 },
+    { id: '3', proceso: 'Picking E-com', unidades: "850", horas: 8.0, prod: 106, remanentes: 120 },
+    { id: '4', proceso: 'Picking Retail', unidades: "2.400", horas: 7.5, prod: 320, remanentes: 300 },
+    { id: '5', proceso: 'Despacho', unidades: "3.100", horas: 9.0, prod: 344, remanentes: 0 },
+  ];
+
+  const cargaInicialData = [
+    { id: '1', plan: 'PLN-202610-01', ruta: 'Ruta Norte', meta: "500", preparado: "480", pendiente: "20", avance: 96.0 },
+    { id: '2', plan: 'PLN-202610-02', ruta: 'Ruta Sur', meta: "750", preparado: "300", pendiente: "450", avance: 40.0 },
+    { id: '3', plan: 'PLN-202610-03', ruta: 'AMBA', meta: "1.200", preparado: "1.150", pendiente: "50", avance: 95.8 },
+    { id: '4', plan: 'PLN-202610-04', ruta: 'Interior Centro', meta: "400", preparado: "150", pendiente: "250", avance: 37.5 },
+  ];
+
   const getThemeClasses = (theme: string) => {
     switch (theme) {
       case "blue": return { text: "text-sky-500", bgIcon: "bg-sky-100", textIcon: "text-sky-500", blob: "bg-sky-50" };
@@ -56,10 +81,9 @@ export default function DashboardLayout() {
     }
   };
 
-  // Manejadores de Clics
   const handleMarcaClick = (marca: string) => {
     setSelectedMarca(marca === selectedMarca ? null : marca);
-    setSelectedCanal(null); // Resetea el canal si cambio de marca
+    setSelectedCanal(null);
   };
 
   const handleCanalClick = (canal: string) => {
@@ -101,20 +125,39 @@ export default function DashboardLayout() {
               </div>
             )}
           </div>
+
+          <button onClick={() => setActiveTab("Status carga inicial")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Status carga inicial" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+            Status carga inicial
+          </button>
+
+          <button onClick={() => setActiveTab("Status remanentes")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Status remanentes" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
+            Status remanentes
+          </button>
+
+          <button onClick={() => setActiveTab("Productividad por proceso")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Productividad por proceso" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
+            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Productividad por proceso
+          </button>
         </nav>
       </aside>
 
       {/* ================= ÁREA PRINCIPAL ================= */}
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0">
-          <h1 className="text-xl font-bold text-slate-800">{activeTab === "Resumen" ? "Status de Preparación - Resumen" : activeTab}</h1>
+          <h1 className="text-xl font-bold text-slate-800">
+            {activeTab === "Resumen" ? "Status de Preparación - Resumen" : 
+             activeTab === "Por fecha" ? "Status de Preparación - Por Fecha" : activeTab}
+          </h1>
         </header>
 
         <div className="flex-1 overflow-auto p-8 space-y-6">
           
-          {activeTab === "Resumen" ? (
+          {/* ================= PESTAÑA: RESUMEN ================= */}
+          {activeTab === "Resumen" && (
             <>
-              {/* 1. TARJETAS DE KPIs SUPERIORES */}
+              {/* TARJETAS KPI */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {kpiData.map((kpi, index) => {
                   const themeClasses = getThemeClasses(kpi.theme);
@@ -133,197 +176,193 @@ export default function DashboardLayout() {
                 })}
               </div>
 
-              {/* 2. TABLA: DETALLE POR MARCA */}
+              {/* TABLA MARCAS */}
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800">Detalle por Marca</h2>
                 <p className="text-sm text-slate-500 mb-6">Haz click en una marca para ver el desglose por canal</p>
-                
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left">
                     <thead className="text-slate-500 font-medium border-b border-slate-200">
                       <tr>
-                        <th className="py-3 px-4">Marca</th>
-                        <th className="py-3 px-4">Unidades</th>
-                        <th className="py-3 px-4">Pickeadas</th>
-                        <th className="py-3 px-4">Separadas</th>
-                        <th className="py-3 px-4">Pend. Picking</th>
-                        <th className="py-3 px-4">Pend. Sep.</th>
-                        <th className="py-3 px-4">Efic. Pick.</th>
-                        <th className="py-3 px-4">Efic. Sep.</th>
-                        <th className="py-3 px-4">Registros</th>
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">Unidades</th>
+                        <th className="py-3 px-4 text-left">Pickeadas</th>
+                        <th className="py-3 px-4 text-left">Separadas</th>
+                        <th className="py-3 px-4 text-left">Pend. Picking</th>
+                        <th className="py-3 px-4 text-left">Pend. Sep.</th>
+                        <th className="py-3 px-4 text-left">Efic. Pick.</th>
+                        <th className="py-3 px-4 text-left">Efic. Sep.</th>
+                        <th className="py-3 px-4 text-left">Registros</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {marcasData.map((marca, i) => (
-                        <tr 
-                          key={i} 
-                          onClick={() => handleMarcaClick(marca.name)}
-                          className={`cursor-pointer transition-colors ${selectedMarca === marca.name ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
-                        >
-                          <td className="py-3 px-4 flex items-center gap-3 font-semibold text-slate-800">
-                            <span className={`w-2.5 h-2.5 rounded-full ${marca.dot}`}></span> {marca.name}
-                          </td>
-                          <td className="py-3 px-4 text-slate-600">{marca.uni}</td>
-                          <td className="py-3 px-4 text-slate-600">{marca.pick}</td>
-                          <td className="py-3 px-4 text-slate-600">{marca.sep}</td>
-                          <td className="py-3 px-4 font-semibold text-orange-500">{marca.pendPick}</td>
-                          <td className="py-3 px-4 font-semibold text-red-500">{marca.pendSep}</td>
-                          <td className="py-3 px-4 text-slate-600">{marca.eficPick}</td>
-                          <td className="py-3 px-4 text-slate-600">{marca.eficSep}</td>
-                          <td className="py-3 px-4 text-slate-600">{marca.reg}</td>
+                        <tr key={i} onClick={() => handleMarcaClick(marca.name)} className={`cursor-pointer transition-colors ${selectedMarca === marca.name ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
+                          <td className="py-3 px-4 text-left flex items-center gap-3 font-semibold text-slate-800"><span className={`w-2.5 h-2.5 rounded-full ${marca.dot}`}></span> {marca.name}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.uni}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.pick}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.sep}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{marca.pendPick}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficPick}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficSep}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.reg}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               </div>
-
-              {/* 3. TABLA: CANALES DE LA MARCA (Aparece al hacer click en una marca) */}
-              {selectedMarca && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm flex gap-8">
-                  
-                  {/* Gráfico de Dona Simulado */}
-                  <div className="w-1/3 flex flex-col">
-                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                      <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
-                      Canales de <span className="text-purple-600">{selectedMarca}</span>
-                    </h2>
-                    <p className="text-sm text-slate-500 mb-8">Haz click en un canal para ver el detalle de pedidos</p>
-                    
-                    <div className="flex-1 flex items-center justify-center relative">
-                      {/* CSS Conic Gradient simulando el Donut Chart de la imagen */}
-                      <div className="w-48 h-48 rounded-full relative" style={{ background: "conic-gradient(#f97316 0% 83%, #10b981 83% 100%)" }}>
-                        <div className="absolute inset-5 bg-white rounded-full"></div>
-                      </div>
-                      <span className="absolute top-1/4 -left-4 text-xs font-bold text-orange-500">PROPIO 83%</span>
-                      <span className="absolute bottom-1/4 -right-4 text-xs font-bold text-emerald-500">FRANQUICIA</span>
-                    </div>
-                  </div>
-
-                  {/* Tabla de Canales */}
-                  <div className="w-2/3 overflow-x-auto pt-10">
-                    <table className="w-full text-sm text-left">
-                      <thead className="text-slate-500 font-medium border-b border-slate-200">
-                        <tr>
-                          <th className="py-3 px-4">Canal</th>
-                          <th className="py-3 px-4">Unidades</th>
-                          <th className="py-3 px-4">Pickeadas</th>
-                          <th className="py-3 px-4">Separadas</th>
-                          <th className="py-3 px-4">Pend. Pick.</th>
-                          <th className="py-3 px-4">Pend. Sep.</th>
-                          <th className="py-3 px-4">Efic. Pick.</th>
-                          <th className="py-3 px-4">Efic. Sep.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {canalesData.map((canal, i) => (
-                          <tr 
-                            key={i} 
-                            onClick={() => handleCanalClick(canal.name)}
-                            className={`cursor-pointer transition-colors ${selectedCanal === canal.name ? 'bg-purple-50' : 'hover:bg-slate-50'}`}
-                          >
-                            <td className="py-3 px-4 flex items-center gap-3 font-bold text-slate-800">
-                              <span className={`w-2.5 h-2.5 rounded-full ${canal.dot}`}></span> {canal.name}
-                            </td>
-                            <td className="py-3 px-4 text-slate-600">{canal.uni}</td>
-                            <td className="py-3 px-4 text-slate-600">{canal.pick}</td>
-                            <td className="py-3 px-4 text-slate-600">{canal.sep}</td>
-                            <td className="py-3 px-4 font-semibold text-orange-500">{canal.pendPick}</td>
-                            <td className="py-3 px-4 font-semibold text-red-500">{canal.pendSep}</td>
-                            <td className="py-3 px-4 text-slate-600">{canal.eficPick}</td>
-                            <td className="py-3 px-4 text-slate-600">{canal.eficSep}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* 4. TABLA: CLIENTES DEL CANAL Y MARCA (Aparece al hacer click en un canal) */}
-              {selectedMarca && selectedCanal && (
-                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                      <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                      Clientes de <span className="text-purple-600">{selectedMarca}</span>
-                      <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                      <span className="text-orange-500">{selectedCanal}</span> 
-                      <span className="text-sm font-normal text-slate-500 ml-2">(1 de 1 clientes)</span>
-                    </h2>
-                    
-                    {/* Buscador de cliente */}
-                    <div className="relative">
-                      <svg className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-                      <input type="text" placeholder="Buscar cliente..." className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
-                    </div>
-                  </div>
-
-                  {/* Tarjetas resumen mini */}
-                  <div className="grid grid-cols-5 gap-3 mb-6 text-center">
-                    <div className="bg-sky-50 rounded-lg py-3 border border-sky-100">
-                      <p className="text-xs text-slate-500 mb-1">Unidades</p>
-                      <p className="text-xl font-bold text-sky-600">2</p>
-                    </div>
-                    <div className="bg-emerald-50 rounded-lg py-3 border border-emerald-100">
-                      <p className="text-xs text-slate-500 mb-1">Pickeadas</p>
-                      <p className="text-xl font-bold text-emerald-600">0</p>
-                    </div>
-                    <div className="bg-purple-50 rounded-lg py-3 border border-purple-100">
-                      <p className="text-xs text-slate-500 mb-1">Separadas</p>
-                      <p className="text-xl font-bold text-purple-600">0</p>
-                    </div>
-                    <div className="bg-yellow-50 rounded-lg py-3 border border-yellow-100">
-                      <p className="text-xs text-slate-500 mb-1">Pend. Picking</p>
-                      <p className="text-xl font-bold text-yellow-600">2</p>
-                    </div>
-                    <div className="bg-red-50 rounded-lg py-3 border border-red-100">
-                      <p className="text-xs text-slate-500 mb-1">Pend. Separación</p>
-                      <p className="text-xl font-bold text-red-600">2</p>
-                    </div>
-                  </div>
-
-                  {/* Tabla de Clientes */}
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left">
-                      <thead className="text-slate-500 font-medium border-b border-slate-200">
-                        <tr>
-                          <th className="py-3 px-4">Código</th>
-                          <th className="py-3 px-4">Cliente</th>
-                          <th className="py-3 px-4">Líneas</th>
-                          <th className="py-3 px-4">Unidades</th>
-                          <th className="py-3 px-4">Pickeadas</th>
-                          <th className="py-3 px-4">Separadas</th>
-                          <th className="py-3 px-4">Pend. Pick.</th>
-                          <th className="py-3 px-4">Pend. Sep.</th>
-                          <th className="py-3 px-4">Efic. Pick.</th>
-                          <th className="py-3 px-4">Efic. Sep.</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {clientesData.map((cli, i) => (
-                          <tr key={i} className="hover:bg-slate-50">
-                            <td className="py-3 px-4"><span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs border border-slate-200">{cli.codigo}</span></td>
-                            <td className="py-3 px-4 font-bold text-slate-900">{cli.cliente}</td>
-                            <td className="py-3 px-4 text-slate-600">{cli.lineas}</td>
-                            <td className="py-3 px-4 text-slate-600">{cli.uni}</td>
-                            <td className="py-3 px-4 text-slate-600">{cli.pick}</td>
-                            <td className="py-3 px-4 text-slate-600">{cli.sep}</td>
-                            <td className="py-3 px-4 font-semibold text-orange-500">{cli.pendPick}</td>
-                            <td className="py-3 px-4 font-semibold text-red-500">{cli.pendSep}</td>
-                            <td className="py-3 px-4 text-slate-600">{cli.eficPick}</td>
-                            <td className="py-3 px-4 text-slate-600">{cli.eficSep}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
             </>
-          ) : (
+          )}
+
+          {/* ================= PESTAÑA: POR FECHA ================= */}
+          {activeTab === "Por fecha" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Detalle por Fecha</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Fecha</th>
+                      <th className="py-4 px-4 text-left">Marca</th>
+                      <th className="py-4 px-4 text-left">Unidades</th>
+                      <th className="py-4 px-4 text-left">Pickeadas</th>
+                      <th className="py-4 px-4 text-left">Separadas</th>
+                      <th className="py-4 px-4 text-left">Efic. Pick.</th>
+                      <th className="py-4 px-4 text-left">Efic. Sep.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {fechasData.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
+                        <td className="py-4 px-4 text-left flex items-center gap-3 font-bold text-slate-900"><span className={`w-2 h-2 rounded-full ${row.dot}`}></span>{row.marca}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.uni}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.pick}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.sep}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.eficPick}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.eficSep}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: PRODUCTIVIDAD POR PROCESO ================= */}
+          {activeTab === "Productividad por proceso" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Productividad Diaria</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Proceso</th>
+                      <th className="py-4 px-4 text-left">Unidades Procesadas</th>
+                      <th className="py-4 px-4 text-left">Horas Operativas</th>
+                      <th className="py-4 px-4 text-left">Productividad (Uds/Hr)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {procesosData.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-900 font-medium">{row.proceso}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.unidades}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.horas} hs</td>
+                        <td className="py-4 px-4 text-left">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${row.prod < 120 ? 'text-red-700 bg-red-100' : 'text-emerald-700 bg-emerald-100'}`}>
+                            {row.prod}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: STATUS CARGA INICIAL ================= */}
+          {activeTab === "Status carga inicial" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Planes de Picking y Rutas</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Plan / Ruta</th>
+                      <th className="py-4 px-4 text-left">Carga Inicial (Meta)</th>
+                      <th className="py-4 px-4 text-left">Preparado</th>
+                      <th className="py-4 px-4 text-left">Pendiente</th>
+                      <th className="py-4 px-4 text-left">% Avance</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {cargaInicialData.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left">
+                          <div className="font-bold text-slate-900">{row.plan}</div>
+                          <div className="text-xs text-slate-500">{row.ruta}</div>
+                        </td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.meta}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.preparado}</td>
+                        <td className="py-4 px-4 text-left font-medium text-orange-500">{row.pendiente}</td>
+                        <td className="py-4 px-4 text-left">
+                          <span className={`px-2 py-1 rounded text-xs font-bold ${row.avance < 50 ? 'text-red-700 bg-red-100' : 'text-emerald-700 bg-emerald-100'}`}>
+                            {row.avance}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: STATUS REMANENTES ================= */}
+          {activeTab === "Status remanentes" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-slate-800 mb-6">Remanentes por Proceso</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">Proceso</th>
+                      <th className="py-4 px-4 text-left">Unidades Pendientes (Remanente)</th>
+                      <th className="py-4 px-4 text-left">Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {procesosData.map((row) => (
+                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-900 font-medium">{row.proceso}</td>
+                        <td className="py-4 px-4 text-left font-bold text-slate-700">{row.remanentes}</td>
+                        <td className="py-4 px-4 text-left">
+                          {row.remanentes === 0 ? (
+                            <span className="text-emerald-600 font-medium flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg> Completado</span>
+                          ) : row.remanentes > 150 ? (
+                            <span className="text-red-500 font-medium flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg> Crítico</span>
+                          ) : (
+                            <span className="text-orange-500 font-medium flex items-center gap-1"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> En proceso</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑAS EN DESARROLLO ================= */}
+          {!["Resumen", "Por fecha", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
-               <p>Contenido para la pestaña: {activeTab}</p>
+               <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+               <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
+               <p className="mt-2 text-sm text-center max-w-md">Esta vista aún no ha sido maquetada. Navega a las otras secciones del menú lateral.</p>
             </div>
           )}
 
