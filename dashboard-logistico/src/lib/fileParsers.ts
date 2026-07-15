@@ -14,14 +14,40 @@ function normalizeHeader(header: string): string {
     .replace(/^_+|_+$/g, ""); // saca "_" sobrantes al principio/final
 }
 
+// Únicos campos que realmente necesitamos como NÚMERO en Supabase (columnas INT).
+// Todo lo demás (pedido, codigo, tiendas_destino, tracking_pedido, etc.) se deja
+// como texto tal cual viene del archivo, para no perder ceros a la izquierda
+// y que los códigos matcheen exacto entre tablas al cruzarlos.
+const CAMPOS_NUMERICOS = new Set([
+  "uni",
+  "uni_pick",
+  "uni_sep",
+  "uni_plan",
+  "uni_pend",
+]);
+
 function normalizeRecordKeys(
   records: Record<string, unknown>[]
 ): Record<string, unknown>[] {
   return records.map((row) => {
     const normalized: Record<string, unknown> = {};
     for (const key of Object.keys(row)) {
-      const value = row[key];
-      normalized[normalizeHeader(key)] = value === "" ? null : value;
+      const headerNormalizado = normalizeHeader(key);
+      let value = row[key];
+
+      if (value === "") value = null;
+
+      // Solo forzamos a número los campos de cantidades (uni, uni_pick, etc).
+      // El resto queda como string, para no romper códigos con ceros a la izquierda.
+      if (CAMPOS_NUMERICOS.has(headerNormalizado) && value !== null && value !== undefined) {
+        const n = Number(String(value).trim().replace(",", "."));
+        value = Number.isFinite(n) ? n : null;
+      } else if (value !== null && value !== undefined) {
+        // Todo lo demás: texto, sin importar si "parece" un número.
+        value = String(value).trim();
+      }
+
+      normalized[headerNormalizado] = value;
     }
     return normalized;
   });
@@ -30,6 +56,10 @@ function normalizeRecordKeys(
 /**
  * Parsea un archivo Excel (.xlsx/.xls) a un array de objetos, usando la
  * primera fila como encabezados de columna.
+ *
+ * raw:false hace que las celdas se lean como el texto formateado que se ve
+ * en Excel (no como el número/fecha crudo), así un código como "0123" no
+ * se convierte en el número 123 y pierde el cero a la izquierda.
  */
 export async function parseExcelFile(
   file: File
@@ -45,7 +75,7 @@ export async function parseExcelFile(
   const sheet = workbook.Sheets[firstSheetName];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, {
     defval: null,
-    raw: true,
+    raw: false,
   });
 
   return normalizeRecordKeys(rows);
@@ -55,6 +85,11 @@ export async function parseExcelFile(
  * Parsea un archivo CSV a un array de objetos, usando la primera fila
  * como encabezados de columna. Detecta automáticamente el separador
  * (coma o punto y coma), muy común en exports de sistemas locales.
+ *
+ * dynamicTyping queda en false a propósito: NO queremos que Papa Parse
+ * adivine tipos, porque convierte códigos como "007123" al número 7123
+ * y pierde los ceros a la izquierda. La conversión a número se hace
+ * explícita en normalizeRecordKeys, solo para los campos de cantidades.
  */
 export async function parseCsvFile(
   file: File
@@ -64,7 +99,7 @@ export async function parseCsvFile(
   const result = Papa.parse<Record<string, unknown>>(text, {
     header: true,
     skipEmptyLines: true,
-    dynamicTyping: true,
+    dynamicTyping: false,
   });
 
   if (result.errors.length > 0) {
