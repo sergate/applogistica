@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllGrupoPedidos, esContable, num } from "@/lib/resumenHelpers";
+import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
@@ -69,7 +69,7 @@ export async function GET() {
       }))
       .sort((a, b) => b.uni - a.uni);
 
-    return NextResponse.json({ success: true, kpis, marcas });
+    return NextResponse.json({ success: true, kpis, marcas, updatedAt: ultimaActualizacion(rows) });
   } catch (err) {
     return NextResponse.json(
       {

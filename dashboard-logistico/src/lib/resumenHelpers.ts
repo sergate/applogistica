@@ -15,6 +15,7 @@ export interface GrupoPedidoRow {
   uni: number | null;
   uni_pick: number | null;
   uni_sep: number | null;
+  updated_at: string | null;
 }
 
 // Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
@@ -26,7 +27,7 @@ export async function fetchAllGrupoPedidos(): Promise<GrupoPedidoRow[]> {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("grupo_pedidos")
-      .select("pedido, grupo, seller, estado_pedido, uni, uni_pick, uni_sep")
+      .select("pedido, grupo, seller, estado_pedido, uni, uni_pick, uni_sep, updated_at")
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) {
@@ -58,3 +59,14 @@ export function esContable(row: GrupoPedidoRow): boolean {
 }
 
 export const num = (v: number | null): number => Number(v) || 0;
+
+/** Devuelve el updated_at más reciente entre todas las filas (o null si no hay filas). */
+export function ultimaActualizacion(rows: GrupoPedidoRow[]): string | null {
+  let max: string | null = null;
+  for (const r of rows) {
+    if (r.updated_at && (!max || r.updated_at > max)) {
+      max = r.updated_at;
+    }
+  }
+  return max;
+}

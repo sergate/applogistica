@@ -47,6 +47,7 @@ interface ResumenData {
     totalRegistros: number;
   };
   marcas: MarcaResumen[];
+  updatedAt: string | null;
 }
 
 export default function DashboardLayout() {
@@ -173,6 +174,16 @@ export default function DashboardLayout() {
   // Formato numérico es-AR ("85.781") y de porcentaje ("3.3%")
   const fmtNum = (n: number) => Math.round(n).toLocaleString("es-AR");
   const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+  const fmtFecha = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleString("es-AR", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "—";
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por marca", "Por canal", "Por categoría"];
 
@@ -374,6 +385,16 @@ export default function DashboardLayout() {
               {resumenLoading && !resumenData && (
                 <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
                   Cargando datos de grupo_pedidos...
+                </div>
+              )}
+
+              {resumenData && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(resumenData.updatedAt)}</span>
                 </div>
               )}
 
