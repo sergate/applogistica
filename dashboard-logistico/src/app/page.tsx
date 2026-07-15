@@ -127,7 +127,7 @@ export default function DashboardLayout() {
       setResumenLoading(true);
       setResumenError(null);
       try {
-        const res = await fetch("/api/resumen");
+        const res = await fetch("/api/resumen", { cache: "no-store" });
         let data;
         try {
           data = await res.json();

@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
+export const revalidate = 0;
 
 // Grupos que NO cuentan para los cálculos de Status de Preparación
 // (son materiales de vidriera/empaque/packaging/promoción, no unidades de venta)
