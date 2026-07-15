@@ -5,16 +5,19 @@ import { parseCsvFile, parseExcelFile } from "@/lib/fileParsers";
 export const runtime = "nodejs"; // necesitamos Node (no Edge) por el parseo de Excel/CSV
 
 // -----------------------------------------------------------------------
-// Configuración de cada archivo esperado, calcada de tu script SQL:
+// Configuración de cada archivo esperado:
 //
-// - clientes        -> tabla "clientes"        (PK: codigo)          -> UPSERT
-// - grupos          -> tabla "grupo_pedidos"    (PK: pedido)         -> UPSERT
-// - tiendas         -> tabla "tiendas_destino"  (PK: id autogenerado,
-//                       "pedido" es FK a grupo_pedidos y NO es único) -> REPLACE
-//                       (se borran las filas de esos "pedido" y se insertan de nuevo)
+// - clientes  -> tabla "clientes"        (PK: codigo, sí es único) -> UPSERT
+// - grupos    -> tabla "grupo_pedidos"    (PK: id autogenerado;
+//                 "pedido" puede repetirse, una fila por cada "grupo")
+//                 -> REEMPLAZO TOTAL (se borra toda la tabla y se inserta de nuevo)
+// - tiendas   -> tabla "tiendas_destino"  (PK: id autogenerado;
+//                 "pedido" puede repetirse, una fila por tienda destino)
+//                 -> REEMPLAZO TOTAL
 //
-// Por la FK de tiendas_destino -> grupo_pedidos, el archivo de "grupos" se
-// procesa antes que el de "tiendas" (el for de abajo es secuencial, no paralelo).
+// grupos y tiendas usan reemplazo total porque cada archivo es la foto
+// completa y vigente de los pedidos activos (no algo incremental) — así
+// evitamos que queden filas viejas/de prueba mezcladas con las nuevas.
 // -----------------------------------------------------------------------
 const IMPORT_CONFIG = {
   clientes: {
@@ -26,14 +29,12 @@ const IMPORT_CONFIG = {
   grupos: {
     table: "grupo_pedidos",
     parser: "csv",
-    mode: "upsert",
-    conflictColumn: "pedido",
+    mode: "full_replace",
   },
   tiendas: {
     table: "tiendas_destino",
     parser: "csv",
-    mode: "replace",
-    keyColumn: "pedido",
+    mode: "full_replace",
   },
 } as const;
 
@@ -48,77 +49,12 @@ interface FileResult {
   error: string | null;
 }
 
-async function upsertInBatches(
+async function insertInBatches(
   table: string,
-  conflictColumn: string,
   records: Record<string, unknown>[]
 ): Promise<number> {
-  // Postgres no permite que un mismo UPSERT toque la misma fila 2 veces.
-  // Si el archivo trae la misma clave repetida (ej: mismo "pedido" en 2 filas),
-  // nos quedamos con la última ocurrencia antes de mandarlo a Supabase.
-  const deduped = new Map<unknown, Record<string, unknown>>();
-  let sinClave = 0;
-  for (const record of records) {
-    const key = record[conflictColumn];
-    if (key === null || key === undefined || key === "") {
-      sinClave += 1;
-      continue;
-    }
-    deduped.set(key, record); // si se repite, la última fila pisa a la anterior
-  }
-  const uniqueRecords = Array.from(deduped.values());
-
   let totalInsertadas = 0;
 
-  for (let i = 0; i < uniqueRecords.length; i += BATCH_SIZE) {
-    const batch = uniqueRecords.slice(i, i + BATCH_SIZE);
-    const { error, count } = await supabaseAdmin
-      .from(table)
-      .upsert(batch, { onConflict: conflictColumn, count: "exact" });
-
-    if (error) {
-      throw new Error(`Supabase (${table}): ${error.message}`);
-    }
-    totalInsertadas += count ?? batch.length;
-  }
-
-  if (sinClave > 0) {
-    console.warn(
-      `[import-maestros] ${table}: se ignoraron ${sinClave} fila(s) sin valor en "${conflictColumn}".`
-    );
-  }
-
-  return totalInsertadas;
-}
-
-/**
- * Para tablas sin columna única disponible (como tiendas_destino, donde el
- * PK es un id autogenerado): borra las filas existentes que coincidan con
- * los valores de "keyColumn" presentes en el archivo, y después inserta
- * todo de nuevo. Evita duplicar filas si el mismo archivo se reimporta.
- */
-async function replaceInBatches(
-  table: string,
-  keyColumn: string,
-  records: Record<string, unknown>[]
-): Promise<number> {
-  const uniqueKeys = Array.from(
-    new Set(
-      records
-        .map((r) => r[keyColumn])
-        .filter((v) => v !== null && v !== undefined && v !== "")
-    )
-  );
-
-  for (let i = 0; i < uniqueKeys.length; i += BATCH_SIZE) {
-    const chunk = uniqueKeys.slice(i, i + BATCH_SIZE);
-    const { error } = await supabaseAdmin.from(table).delete().in(keyColumn, chunk);
-    if (error) {
-      throw new Error(`Supabase (${table} - borrado previo): ${error.message}`);
-    }
-  }
-
-  let totalInsertadas = 0;
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE);
     const { error, count } = await supabaseAdmin
@@ -132,6 +68,61 @@ async function replaceInBatches(
   }
 
   return totalInsertadas;
+}
+
+/**
+ * Upsert por columna única (para tablas donde sí existe una clave real,
+ * como clientes.codigo). Deduplica dentro del archivo por si la misma
+ * clave aparece 2 veces (Postgres no permite tocar la misma fila 2 veces
+ * en un solo UPSERT).
+ */
+async function upsertInBatches(
+  table: string,
+  conflictColumn: string,
+  records: Record<string, unknown>[]
+): Promise<number> {
+  const deduped = new Map<unknown, Record<string, unknown>>();
+  for (const record of records) {
+    const key = record[conflictColumn];
+    if (key === null || key === undefined || key === "") continue;
+    deduped.set(key, record);
+  }
+  const uniqueRecords = Array.from(deduped.values());
+
+  let totalInsertadas = 0;
+  for (let i = 0; i < uniqueRecords.length; i += BATCH_SIZE) {
+    const batch = uniqueRecords.slice(i, i + BATCH_SIZE);
+    const { error, count } = await supabaseAdmin
+      .from(table)
+      .upsert(batch, { onConflict: conflictColumn, count: "exact" });
+
+    if (error) {
+      throw new Error(`Supabase (${table}): ${error.message}`);
+    }
+    totalInsertadas += count ?? batch.length;
+  }
+
+  return totalInsertadas;
+}
+
+/**
+ * Reemplazo total: borra TODAS las filas de la tabla y después inserta
+ * el contenido completo del archivo. Usado para tablas donde no existe
+ * una columna única por fila (grupo_pedidos, tiendas_destino), y donde
+ * cada archivo representa la foto completa y vigente de los datos.
+ */
+async function fullReplaceInBatches(
+  table: string,
+  records: Record<string, unknown>[]
+): Promise<number> {
+  // Truco para borrar TODAS las filas con el cliente de Supabase (que exige
+  // algún filtro): "id no es null" matchea siempre, ya que id es NOT NULL.
+  const { error: delError } = await supabaseAdmin.from(table).delete().not("id", "is", null);
+  if (delError) {
+    throw new Error(`Supabase (${table} - borrado total): ${delError.message}`);
+  }
+
+  return insertInBatches(table, records);
 }
 
 export async function POST(request: NextRequest) {
@@ -170,8 +161,7 @@ export async function POST(request: NextRequest) {
     const resultados: FileResult[] = [];
     let huboError = false;
 
-    // Secuencial (no Promise.all): grupos debe insertarse antes que tiendas
-    // por la FK tiendas_destino.pedido -> grupo_pedidos.pedido
+    // Secuencial (no Promise.all): procesamos clientes, grupos y tiendas en orden.
     for (const [key, config] of entries) {
       const file = files[key]!;
       try {
@@ -194,7 +184,7 @@ export async function POST(request: NextRequest) {
         const filasInsertadas =
           config.mode === "upsert"
             ? await upsertInBatches(config.table, config.conflictColumn, records)
-            : await replaceInBatches(config.table, config.keyColumn, records);
+            : await fullReplaceInBatches(config.table, records);
 
         resultados.push({
           archivo: key,
