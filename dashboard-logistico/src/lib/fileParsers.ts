@@ -10,8 +10,8 @@ function normalizeHeader(header: string): string {
     .replace(/[\u0300-\u036f]/g, "") // saca acentos
     .trim()
     .toLowerCase()
-    .replace(/\s+/g, "_")
-    .replace(/[^a-z0-9_]/g, "");
+    .replace(/[^a-z0-9]+/g, "_") // cualquier corrida de espacios/puntos/símbolos -> un solo "_"
+    .replace(/^_+|_+$/g, ""); // saca "_" sobrantes al principio/final
 }
 
 function normalizeRecordKeys(
