@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type ImportKey = "clientes" | "grupos" | "tiendas";
 
@@ -9,6 +9,32 @@ interface ImportFileResult {
   filasLeidas: number;
   filasInsertadas: number;
   error: string | null;
+}
+
+interface MarcaResumen {
+  name: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  eficPick: number;
+  eficSep: number;
+  reg: number;
+}
+
+interface ResumenData {
+  kpis: {
+    totalUni: number;
+    totalPick: number;
+    totalSep: number;
+    pendPick: number;
+    pendSep: number;
+    eficPick: number;
+    eficSep: number;
+    totalRegistros: number;
+  };
+  marcas: MarcaResumen[];
 }
 
 export default function DashboardLayout() {
@@ -87,28 +113,83 @@ export default function DashboardLayout() {
   const [selectedMarca, setSelectedMarca] = useState<string | null>(null);
   const [selectedCanal, setSelectedCanal] = useState<string | null>(null);
 
+  // =========================================================================
+  // ESTADO: RESUMEN (datos reales desde grupo_pedidos vía /api/resumen)
+  // =========================================================================
+  const [resumenData, setResumenData] = useState<ResumenData | null>(null);
+  const [resumenLoading, setResumenLoading] = useState(false);
+  const [resumenError, setResumenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarResumen() {
+      setResumenLoading(true);
+      setResumenError(null);
+      try {
+        const res = await fetch("/api/resumen");
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "No se pudo cargar el resumen.");
+        }
+        if (!cancelado) setResumenData(data);
+      } catch (err) {
+        if (!cancelado) setResumenError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setResumenLoading(false);
+      }
+    }
+
+    cargarResumen();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
+  const DOT_PALETTE = [
+    "bg-purple-400", "bg-emerald-500", "bg-blue-400", "bg-red-400",
+    "bg-orange-400", "bg-pink-400", "bg-teal-400", "bg-amber-400",
+  ];
+  const dotForMarca = (index: number) => DOT_PALETTE[index % DOT_PALETTE.length];
+
+  // Formato numérico es-AR ("85.781") y de porcentaje ("3.3%")
+  const fmtNum = (n: number) => Math.round(n).toLocaleString("es-AR");
+  const fmtPct = (n: number) => `${n.toFixed(1)}%`;
+
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por marca", "Por canal", "Por categoría"];
 
   // =========================================================================
   // DATOS MOCK - STATUS DE PREPARACIÓN
   // =========================================================================
   const kpiData = [
-    { title: "Total Unidades", value: "85.781", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> },
-    { title: "Unidades Pickeadas", value: "2.794", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline strokeLinecap="round" strokeLinejoin="round" points="22 4 12 14.01 9 11.01" /></svg> },
-    { title: "Unidades Separadas", value: "2.712", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
-    { title: "Pendiente Picking", value: "83.002", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
-    { title: "Pendiente Separación", value: "83.084", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
-    { title: "Efic. Picking", value: "3.3%", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
-    { title: "Efic. Separación", value: "3.2%", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
-    { title: "Total Registros", value: "1.316", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
+    { title: "Total Unidades", value: resumenData ? fmtNum(resumenData.kpis.totalUni) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> },
+    { title: "Unidades Pickeadas", value: resumenData ? fmtNum(resumenData.kpis.totalPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline strokeLinecap="round" strokeLinejoin="round" points="22 4 12 14.01 9 11.01" /></svg> },
+    { title: "Unidades Separadas", value: resumenData ? fmtNum(resumenData.kpis.totalSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
+    { title: "Pendiente Picking", value: resumenData ? fmtNum(resumenData.kpis.pendPick) : "—", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
+    { title: "Pendiente Separación", value: resumenData ? fmtNum(resumenData.kpis.pendSep) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
+    { title: "Efic. Picking", value: resumenData ? fmtPct(resumenData.kpis.eficPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
+    { title: "Efic. Separación", value: resumenData ? fmtPct(resumenData.kpis.eficSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
+    { title: "Total Registros", value: resumenData ? fmtNum(resumenData.kpis.totalRegistros) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
   ];
 
-  const marcasData = [
-    { name: "AWADA", dot: "bg-purple-400", uni: "1.782", pick: "12", sep: "5", pendPick: "1.770", pendSep: "1.777", eficPick: "0.7%", eficSep: "0.3%", reg: "59" },
-    { name: "FLY", dot: "bg-emerald-500", uni: "2.797", pick: "62", sep: "62", pendPick: "2.735", pendSep: "2.735", eficPick: "2.2%", eficSep: "2.2%", reg: "90" },
-    { name: "CQQTQ", dot: "bg-blue-400", uni: "6.567", pick: "518", sep: "501", pendPick: "6.053", pendSep: "6.070", eficPick: "7.9%", eficSep: "7.6%", reg: "291" },
-    { name: "CHEEKY", dot: "bg-red-400", uni: "74.635", pick: "2.202", sep: "2.144", pendPick: "72.444", pendSep: "72.502", eficPick: "3.0%", eficSep: "2.9%", reg: "876" }
-  ];
+  const marcasData = (resumenData?.marcas ?? []).map((m, idx) => ({
+    name: m.name,
+    dot: dotForMarca(idx),
+    uni: fmtNum(m.uni),
+    pick: fmtNum(m.pick),
+    sep: fmtNum(m.sep),
+    pendPick: fmtNum(m.pendPick),
+    pendSep: fmtNum(m.pendSep),
+    eficPick: fmtPct(m.eficPick),
+    eficSep: fmtPct(m.eficSep),
+    reg: fmtNum(m.reg),
+  }));
 
   const canalesData = [
     { name: "CLIENTE", dot: "bg-pink-400", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" },
@@ -234,6 +315,17 @@ export default function DashboardLayout() {
           {/* ================= PESTAÑA: RESUMEN ================= */}
           {activeTab === "Resumen" && (
             <>
+              {resumenError && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el resumen: {resumenError}
+                </div>
+              )}
+              {resumenLoading && !resumenData && (
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando datos de grupo_pedidos...
+                </div>
+              )}
+
               {/* TARJETAS KPI */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {kpiData.map((kpi, index) => {
