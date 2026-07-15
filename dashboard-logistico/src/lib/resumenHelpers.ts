@@ -15,6 +15,7 @@ export interface GrupoPedidoRow {
   uni: number | null;
   uni_pick: number | null;
   uni_sep: number | null;
+  fecha_creacion: string | null;
   updated_at: string | null;
 }
 
@@ -27,7 +28,7 @@ export async function fetchAllGrupoPedidos(): Promise<GrupoPedidoRow[]> {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("grupo_pedidos")
-      .select("pedido, grupo, seller, estado_pedido, uni, uni_pick, uni_sep, updated_at")
+      .select("pedido, grupo, seller, estado_pedido, uni, uni_pick, uni_sep, fecha_creacion, updated_at")
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) {

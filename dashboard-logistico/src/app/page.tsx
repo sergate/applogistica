@@ -35,6 +35,16 @@ interface CanalResumen {
   reg: number;
 }
 
+interface FechaResumen {
+  fecha: string;
+  marca: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  eficPick: number;
+  eficSep: number;
+}
+
 interface ResumenData {
   kpis: {
     totalUni: number;
@@ -170,6 +180,11 @@ export default function DashboardLayout() {
     "bg-orange-400", "bg-pink-400", "bg-teal-400", "bg-amber-400",
   ];
   const dotForMarca = (index: number) => DOT_PALETTE[index % DOT_PALETTE.length];
+  const dotForMarcaName = (name: string) => {
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
+    return DOT_PALETTE[hash % DOT_PALETTE.length];
+  };
 
   // Formato numérico es-AR ("85.781") y de porcentaje ("3.3%")
   const fmtNum = (n: number) => Math.round(n).toLocaleString("es-AR");
@@ -184,6 +199,44 @@ export default function DashboardLayout() {
           minute: "2-digit",
         })
       : "—";
+
+  // =========================================================================
+  // ESTADO: POR FECHA (datos reales desde grupo_pedidos vía /api/resumen/por-fecha)
+  // =========================================================================
+  const [fechaData, setFechaData] = useState<{ filas: FechaResumen[]; updatedAt: string | null } | null>(null);
+  const [fechaLoading, setFechaLoading] = useState(false);
+  const [fechaError, setFechaError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarPorFecha() {
+      setFechaLoading(true);
+      setFechaError(null);
+      try {
+        const res = await fetch("/api/resumen/por-fecha", { cache: "no-store" });
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "No se pudo cargar el detalle por fecha.");
+        }
+        if (!cancelado) setFechaData({ filas: data.filas, updatedAt: data.updatedAt });
+      } catch (err) {
+        if (!cancelado) setFechaError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setFechaLoading(false);
+      }
+    }
+
+    cargarPorFecha();
+    return () => {
+      cancelado = true;
+    };
+  }, []);
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por marca", "Por canal", "Por categoría"];
 
@@ -225,12 +278,16 @@ export default function DashboardLayout() {
     { codigo: "300139", cliente: "GLUZ DEBORA RUTH", lineas: "2", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" }
   ];
 
-  const fechasData = [
-    { fecha: "2026-07-13", marca: "CHEEKY", dot: "bg-red-500", uni: "17.367", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
-    { fecha: "2026-07-13", marca: "FLY", dot: "bg-emerald-500", uni: "583", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
-    { fecha: "2026-07-13", marca: "AWADA", dot: "bg-purple-400", uni: "1.530", pick: "7", sep: "0", eficPick: "0.5%", eficSep: "0.0%" },
-    { fecha: "2026-07-13", marca: "CQQTQ", dot: "bg-blue-400", uni: "4.068", pick: "0", sep: "0", eficPick: "0.0%", eficSep: "0.0%" },
-  ];
+  const fechasData = (fechaData?.filas ?? []).map((f) => ({
+    fecha: f.fecha,
+    marca: f.marca,
+    dot: dotForMarcaName(f.marca),
+    uni: fmtNum(f.uni),
+    pick: fmtNum(f.pick),
+    sep: fmtNum(f.sep),
+    eficPick: fmtPct(f.eficPick),
+    eficSep: fmtPct(f.eficSep),
+  }));
 
   // =========================================================================
   // DATOS MOCK - OTRAS SECCIONES (Productividad, Carga, Remanentes)
@@ -661,7 +718,30 @@ export default function DashboardLayout() {
           {/* ================= PESTAÑA: POR FECHA ================= */}
           {activeTab === "Por fecha" && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-800 mb-6">Detalle por Fecha</h2>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold text-slate-800">Detalle por Fecha</h2>
+                {fechaData && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(fechaData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              {fechaError && (
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el detalle por fecha: {fechaError}
+                </div>
+              )}
+              {fechaLoading && !fechaData && (
+                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando datos de grupo_pedidos...
+                </div>
+              )}
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-slate-500 font-medium border-b border-slate-200">
