@@ -9,11 +9,13 @@ export const revalidate = 0;
 const IN_CHUNK = 200; // troceamos los .in() para no mandar cláusulas gigantes
 
 /**
- * Para una lista de pedidos, devuelve el código de tienda destino de cada uno
- * (nos quedamos con la primera fila que aparezca para ese pedido).
+ * Para una lista de pedidos, devuelve TODOS los códigos de tienda asociados
+ * a cada uno (un pedido puede tener varias tiendas destino). Guardamos la
+ * lista completa -no solo la primera- porque Supabase no garantiza el orden
+ * de las filas sin un ORDER BY explícito, y no queremos depender de eso.
  */
-async function fetchTiendaPorPedido(pedidos: string[]): Promise<Map<string, string>> {
-  const map = new Map<string, string>();
+async function fetchTiendasPorPedido(pedidos: string[]): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>();
 
   for (let i = 0; i < pedidos.length; i += IN_CHUNK) {
     const chunk = pedidos.slice(i, i + IN_CHUNK);
@@ -28,9 +30,9 @@ async function fetchTiendaPorPedido(pedidos: string[]): Promise<Map<string, stri
 
     for (const row of data ?? []) {
       const codigoTienda = row.tiendas_destino as string | null;
-      if (!map.has(row.pedido) && codigoTienda) {
-        map.set(row.pedido, codigoTienda);
-      }
+      if (!codigoTienda) continue;
+      if (!map.has(row.pedido)) map.set(row.pedido, []);
+      map.get(row.pedido)!.push(codigoTienda);
     }
   }
 
@@ -102,8 +104,8 @@ export async function GET(request: NextRequest) {
     }
 
     const pedidos = Array.from(porPedido.keys());
-    const [tiendaPorPedido, canalPorCodigo] = await Promise.all([
-      fetchTiendaPorPedido(pedidos),
+    const [tiendasPorPedido, canalPorCodigo] = await Promise.all([
+      fetchTiendasPorPedido(pedidos),
       fetchCanalPorCodigoTienda(),
     ]);
 
@@ -113,8 +115,20 @@ export async function GET(request: NextRequest) {
     >();
 
     for (const [pedido, acc] of porPedido) {
-      const codigoTienda = tiendaPorPedido.get(pedido);
-      const canal = (codigoTienda && canalPorCodigo.get(codigoTienda)) || "SIN CANAL";
+      const codigosTienda = tiendasPorPedido.get(pedido) ?? [];
+
+      // Probamos todos los códigos de tienda del pedido hasta encontrar uno
+      // que exista en "clientes". No asumimos que la primera fila devuelta
+      // sea la "correcta" (Supabase no garantiza orden sin ORDER BY).
+      let canal: string | null = null;
+      for (const codigoTienda of codigosTienda) {
+        const match = canalPorCodigo.get(codigoTienda);
+        if (match) {
+          canal = match;
+          break;
+        }
+      }
+      canal = canal || "SIN CANAL";
 
       if (!porCanal.has(canal)) {
         porCanal.set(canal, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
