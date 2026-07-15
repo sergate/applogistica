@@ -209,6 +209,7 @@ export default function DashboardLayout() {
   const [fechaLoading, setFechaLoading] = useState(false);
   const [fechaError, setFechaError] = useState<string | null>(null);
   const [rangoFecha, setRangoFecha] = useState<7 | 14 | 30>(7);
+  const [filtroMarcaFecha, setFiltroMarcaFecha] = useState<string>("TODAS");
 
   useEffect(() => {
     let cancelado = false;
@@ -296,7 +297,16 @@ export default function DashboardLayout() {
   const filasSinFecha =
     rangoFecha === 30 ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA") : [];
 
-  const fechasData = [...filasConFecha, ...filasSinFecha].map((f) => ({
+  // Lista de marcas disponibles para el filtro (únicas, ordenadas alfabéticamente)
+  const marcasDisponiblesFecha = Array.from(
+    new Set((fechaData?.filas ?? []).map((f) => f.marca))
+  ).sort();
+
+  const filasFiltradasPorMarca = [...filasConFecha, ...filasSinFecha].filter(
+    (f) => filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha
+  );
+
+  const fechasData = filasFiltradasPorMarca.map((f) => ({
     fecha: f.fecha,
     marca: f.marca,
     dot: dotForMarcaName(f.marca),
@@ -308,6 +318,24 @@ export default function DashboardLayout() {
     eficPick: fmtPct(f.eficPick),
     eficSep: fmtPct(f.eficSep),
   }));
+
+  // Subtotal sobre los datos ya filtrados (fecha + marca). La eficiencia se
+  // recalcula sobre los totales sumados, NO como promedio de los % de cada fila.
+  const subtotalFecha = filasFiltradasPorMarca.reduce(
+    (acc, f) => ({
+      uni: acc.uni + f.uni,
+      pick: acc.pick + f.pick,
+      sep: acc.sep + f.sep,
+    }),
+    { uni: 0, pick: 0, sep: 0 }
+  );
+  const subtotalFechaCalculado = {
+    ...subtotalFecha,
+    pendPick: subtotalFecha.uni - subtotalFecha.pick,
+    pendSep: subtotalFecha.uni - subtotalFecha.sep,
+    eficPick: subtotalFecha.uni > 0 ? (subtotalFecha.pick / subtotalFecha.uni) * 100 : 0,
+    eficSep: subtotalFecha.uni > 0 ? (subtotalFecha.sep / subtotalFecha.uni) * 100 : 0,
+  };
 
   // =========================================================================
   // DATOS MOCK - OTRAS SECCIONES (Productividad, Carga, Remanentes)
@@ -751,24 +779,37 @@ export default function DashboardLayout() {
                 )}
               </div>
 
-              <div className="flex items-center gap-2 mb-6">
-                {([
-                  { label: "Última semana", dias: 7 as const },
-                  { label: "Últimos 14 días", dias: 14 as const },
-                  { label: "Último mes", dias: 30 as const },
-                ]).map((opcion) => (
-                  <button
-                    key={opcion.dias}
-                    onClick={() => setRangoFecha(opcion.dias)}
-                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      rangoFecha === opcion.dias
-                        ? "bg-blue-600 text-white"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    {opcion.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-3 mb-6 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {([
+                    { label: "Última semana", dias: 7 as const },
+                    { label: "Últimos 14 días", dias: 14 as const },
+                    { label: "Último mes", dias: 30 as const },
+                  ]).map((opcion) => (
+                    <button
+                      key={opcion.dias}
+                      onClick={() => setRangoFecha(opcion.dias)}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        rangoFecha === opcion.dias
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {opcion.label}
+                    </button>
+                  ))}
+                </div>
+
+                <select
+                  value={filtroMarcaFecha}
+                  onChange={(e) => setFiltroMarcaFecha(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todas las marcas</option>
+                  {marcasDisponiblesFecha.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
               </div>
 
               {fechaError && (
@@ -812,6 +853,20 @@ export default function DashboardLayout() {
                       </tr>
                     ))}
                   </tbody>
+                  {fechasData.length > 0 && (
+                    <tfoot>
+                      <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800">
+                        <td className="py-4 px-4 text-left" colSpan={2}>Subtotal {filtroMarcaFecha !== "TODAS" ? `— ${filtroMarcaFecha}` : ""}</td>
+                        <td className="py-4 px-4 text-left">{fmtNum(subtotalFechaCalculado.uni)}</td>
+                        <td className="py-4 px-4 text-left">{fmtNum(subtotalFechaCalculado.pick)}</td>
+                        <td className="py-4 px-4 text-left">{fmtNum(subtotalFechaCalculado.sep)}</td>
+                        <td className="py-4 px-4 text-left text-orange-600">{fmtNum(subtotalFechaCalculado.pendPick)}</td>
+                        <td className="py-4 px-4 text-left text-red-600">{fmtNum(subtotalFechaCalculado.pendSep)}</td>
+                        <td className="py-4 px-4 text-left">{fmtPct(subtotalFechaCalculado.eficPick)}</td>
+                        <td className="py-4 px-4 text-left">{fmtPct(subtotalFechaCalculado.eficSep)}</td>
+                      </tr>
+                    </tfoot>
+                  )}
                 </table>
               </div>
             </div>
