@@ -53,10 +53,25 @@ async function upsertInBatches(
   conflictColumn: string,
   records: Record<string, unknown>[]
 ): Promise<number> {
+  // Postgres no permite que un mismo UPSERT toque la misma fila 2 veces.
+  // Si el archivo trae la misma clave repetida (ej: mismo "pedido" en 2 filas),
+  // nos quedamos con la última ocurrencia antes de mandarlo a Supabase.
+  const deduped = new Map<unknown, Record<string, unknown>>();
+  let sinClave = 0;
+  for (const record of records) {
+    const key = record[conflictColumn];
+    if (key === null || key === undefined || key === "") {
+      sinClave += 1;
+      continue;
+    }
+    deduped.set(key, record); // si se repite, la última fila pisa a la anterior
+  }
+  const uniqueRecords = Array.from(deduped.values());
+
   let totalInsertadas = 0;
 
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < uniqueRecords.length; i += BATCH_SIZE) {
+    const batch = uniqueRecords.slice(i, i + BATCH_SIZE);
     const { error, count } = await supabaseAdmin
       .from(table)
       .upsert(batch, { onConflict: conflictColumn, count: "exact" });
@@ -65,6 +80,12 @@ async function upsertInBatches(
       throw new Error(`Supabase (${table}): ${error.message}`);
     }
     totalInsertadas += count ?? batch.length;
+  }
+
+  if (sinClave > 0) {
+    console.warn(
+      `[import-maestros] ${table}: se ignoraron ${sinClave} fila(s) sin valor en "${conflictColumn}".`
+    );
   }
 
   return totalInsertadas;
