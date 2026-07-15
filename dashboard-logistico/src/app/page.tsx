@@ -23,6 +23,18 @@ interface MarcaResumen {
   reg: number;
 }
 
+interface CanalResumen {
+  name: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  eficPick: number;
+  eficSep: number;
+  reg: number;
+}
+
 interface ResumenData {
   kpis: {
     totalUni: number;
@@ -239,8 +251,47 @@ export default function DashboardLayout() {
   };
 
   const handleMarcaClick = (marca: string) => {
-    setSelectedMarca(marca === selectedMarca ? null : marca);
+    if (marca === selectedMarca) {
+      setSelectedMarca(null);
+      setCanalRows(null);
+      setCanalError(null);
+      return;
+    }
+    setSelectedMarca(marca);
     setSelectedCanal(null);
+    void cargarCanalPorMarca(marca);
+  };
+
+  // =========================================================================
+  // ESTADO: DESGLOSE POR CANAL (al hacer click en una marca)
+  // =========================================================================
+  const [canalRows, setCanalRows] = useState<CanalResumen[] | null>(null);
+  const [canalLoading, setCanalLoading] = useState(false);
+  const [canalError, setCanalError] = useState<string | null>(null);
+
+  const cargarCanalPorMarca = async (marca: string) => {
+    setCanalLoading(true);
+    setCanalError(null);
+    setCanalRows(null);
+    try {
+      const res = await fetch(`/api/resumen/canal?marca=${encodeURIComponent(marca)}`, {
+        cache: "no-store",
+      });
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+      }
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo cargar el desglose por canal.");
+      }
+      setCanalRows(data.canales);
+    } catch (err) {
+      setCanalError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setCanalLoading(false);
+    }
   };
 
   const handleCanalClick = (canal: string) => {
@@ -382,6 +433,68 @@ export default function DashboardLayout() {
                   </table>
                 </div>
               </div>
+
+              {/* DESGLOSE POR CANAL (al hacer click en una marca) */}
+              {selectedMarca && (
+                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-slate-800">
+                    Desglose por Canal — {selectedMarca}
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6">
+                    Canal de venta de cada pedido, según la tienda destino asociada.
+                  </p>
+
+                  {canalLoading && (
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                      Cargando desglose por canal...
+                    </div>
+                  )}
+
+                  {canalError && (
+                    <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      Error al cargar el desglose: {canalError}
+                    </div>
+                  )}
+
+                  {!canalLoading && !canalError && canalRows && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead className="text-slate-500 font-medium border-b border-slate-200">
+                          <tr>
+                            <th className="py-3 px-4 text-left">Canal</th>
+                            <th className="py-3 px-4 text-left">Unidades</th>
+                            <th className="py-3 px-4 text-left">Pickeadas</th>
+                            <th className="py-3 px-4 text-left">Separadas</th>
+                            <th className="py-3 px-4 text-left">Pend. Picking</th>
+                            <th className="py-3 px-4 text-left">Pend. Sep.</th>
+                            <th className="py-3 px-4 text-left">Efic. Pick.</th>
+                            <th className="py-3 px-4 text-left">Efic. Sep.</th>
+                            <th className="py-3 px-4 text-left">Registros</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {canalRows.map((canal, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="py-3 px-4 text-left flex items-center gap-3 font-semibold text-slate-800">
+                                <span className={`w-2.5 h-2.5 rounded-full ${dotForMarca(i)}`}></span>
+                                {canal.name}
+                              </td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.uni)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.pick)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.sep)}</td>
+                              <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(canal.pendPick)}</td>
+                              <td className="py-3 px-4 text-left font-semibold text-red-500">{fmtNum(canal.pendSep)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficPick)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficSep)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.reg)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 

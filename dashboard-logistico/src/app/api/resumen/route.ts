@@ -1,64 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { supabaseEnvOk } from "@/lib/supabaseClient";
+import { fetchAllGrupoPedidos, esContable, num } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
 export const revalidate = 0;
-
-// Grupos que NO cuentan para los cálculos de Status de Preparación
-// (son materiales de vidriera/empaque/packaging/promoción, no unidades de venta)
-const GRUPOS_EXCLUIDOS = ["VIDRIERA", "MATERIALES EMPAQUE", "PACKAGING", "PROMOCION"];
-
-// Pedidos con este estado tampoco cuentan para los cálculos (ya están cerrados)
-const ESTADOS_EXCLUIDOS = ["OD_TERMINADO"];
-
-interface GrupoPedidoRow {
-  pedido: string;
-  grupo: string | null;
-  seller: string | null;
-  estado_pedido: string | null;
-  uni: number | null;
-  uni_pick: number | null;
-  uni_sep: number | null;
-}
-
-// Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
-async function fetchAllGrupoPedidos(): Promise<GrupoPedidoRow[]> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const all: GrupoPedidoRow[] = [];
-
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("grupo_pedidos")
-      .select("pedido, grupo, seller, estado_pedido, uni, uni_pick, uni_sep")
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error) {
-      throw new Error(`Supabase (grupo_pedidos): ${error.message}`);
-    }
-    if (!data || data.length === 0) break;
-
-    all.push(...(data as GrupoPedidoRow[]));
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return all;
-}
-
-function esGrupoContable(grupo: string | null): boolean {
-  if (!grupo) return true;
-  return !GRUPOS_EXCLUIDOS.includes(grupo.trim().toUpperCase());
-}
-
-function esEstadoContable(estado: string | null): boolean {
-  if (!estado) return true;
-  return !ESTADOS_EXCLUIDOS.includes(estado.trim().toUpperCase());
-}
-
-const num = (v: number | null): number => Number(v) || 0;
 
 export async function GET() {
   if (!supabaseEnvOk) {
@@ -73,9 +19,7 @@ export async function GET() {
 
   try {
     const rows = await fetchAllGrupoPedidos();
-    const contables = rows.filter(
-      (r) => esGrupoContable(r.grupo) && esEstadoContable(r.estado_pedido)
-    );
+    const contables = rows.filter(esContable);
 
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
     const totalPick = contables.reduce((acc, r) => acc + num(r.uni_pick), 0);
