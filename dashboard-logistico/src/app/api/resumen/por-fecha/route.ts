@@ -52,6 +52,8 @@ export async function GET() {
         uni: g.uni,
         pick: g.pick,
         sep: g.sep,
+        pendPick: g.uni - g.pick,
+        pendSep: g.uni - g.sep,
         eficPick: g.uni > 0 ? (g.pick / g.uni) * 100 : 0,
         eficSep: g.uni > 0 ? (g.sep / g.uni) * 100 : 0,
       }))

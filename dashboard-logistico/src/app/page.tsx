@@ -41,6 +41,8 @@ interface FechaResumen {
   uni: number;
   pick: number;
   sep: number;
+  pendPick: number;
+  pendSep: number;
   eficPick: number;
   eficSep: number;
 }
@@ -301,6 +303,8 @@ export default function DashboardLayout() {
     uni: fmtNum(f.uni),
     pick: fmtNum(f.pick),
     sep: fmtNum(f.sep),
+    pendPick: fmtNum(f.pendPick),
+    pendSep: fmtNum(f.pendSep),
     eficPick: fmtPct(f.eficPick),
     eficSep: fmtPct(f.eficSep),
   }));
@@ -787,6 +791,8 @@ export default function DashboardLayout() {
                       <th className="py-4 px-4 text-left">Unidades</th>
                       <th className="py-4 px-4 text-left">Pickeadas</th>
                       <th className="py-4 px-4 text-left">Separadas</th>
+                      <th className="py-4 px-4 text-left">Pend. Picking</th>
+                      <th className="py-4 px-4 text-left">Pend. Sep.</th>
                       <th className="py-4 px-4 text-left">Efic. Pick.</th>
                       <th className="py-4 px-4 text-left">Efic. Sep.</th>
                     </tr>
@@ -799,6 +805,8 @@ export default function DashboardLayout() {
                         <td className="py-4 px-4 text-left text-slate-600">{row.uni}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.pick}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.sep}</td>
+                        <td className="py-4 px-4 text-left font-semibold text-orange-500">{row.pendPick}</td>
+                        <td className="py-4 px-4 text-left font-semibold text-red-500">{row.pendSep}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.eficPick}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.eficSep}</td>
                       </tr>
