@@ -206,6 +206,7 @@ export default function DashboardLayout() {
   const [fechaData, setFechaData] = useState<{ filas: FechaResumen[]; updatedAt: string | null } | null>(null);
   const [fechaLoading, setFechaLoading] = useState(false);
   const [fechaError, setFechaError] = useState<string | null>(null);
+  const [rangoFecha, setRangoFecha] = useState<7 | 14 | 30>(7);
 
   useEffect(() => {
     let cancelado = false;
@@ -278,7 +279,22 @@ export default function DashboardLayout() {
     { codigo: "300139", cliente: "GLUZ DEBORA RUTH", lineas: "2", uni: "2", pick: "0", sep: "0", pendPick: "2", pendSep: "2", eficPick: "0.0%", eficSep: "0.0%" }
   ];
 
-  const fechasData = (fechaData?.filas ?? []).map((f) => ({
+  const hoyISO = new Date().toISOString().slice(0, 10);
+  const limiteFechaISO = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - (rangoFecha - 1)); // incluye el día de hoy dentro del rango
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const filasConFecha = (fechaData?.filas ?? []).filter(
+    (f) => f.fecha !== "SIN FECHA" && f.fecha >= limiteFechaISO && f.fecha <= hoyISO
+  );
+  // Los pedidos sin fecha_creacion solo se muestran en el filtro "Último mes",
+  // y siempre al final de la tabla (no se pueden ubicar en el tiempo).
+  const filasSinFecha =
+    rangoFecha === 30 ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA") : [];
+
+  const fechasData = [...filasConFecha, ...filasSinFecha].map((f) => ({
     fecha: f.fecha,
     marca: f.marca,
     dot: dotForMarcaName(f.marca),
@@ -729,6 +745,26 @@ export default function DashboardLayout() {
                     Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(fechaData.updatedAt)}</span>
                   </div>
                 )}
+              </div>
+
+              <div className="flex items-center gap-2 mb-6">
+                {([
+                  { label: "Última semana", dias: 7 as const },
+                  { label: "Últimos 14 días", dias: 14 as const },
+                  { label: "Último mes", dias: 30 as const },
+                ]).map((opcion) => (
+                  <button
+                    key={opcion.dias}
+                    onClick={() => setRangoFecha(opcion.dias)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      rangoFecha === opcion.dias
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {opcion.label}
+                  </button>
+                ))}
               </div>
 
               {fechaError && (
