@@ -6,34 +6,37 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const IN_CHUNK = 200; // troceamos los .in() para no mandar cláusulas gigantes
-
 /**
- * Para una lista de pedidos, devuelve TODOS los códigos de tienda asociados
- * a cada uno (un pedido puede tener varias tiendas destino). Guardamos la
- * lista completa -no solo la primera- porque Supabase no garantiza el orden
- * de las filas sin un ORDER BY explícito, y no queremos depender de eso.
+ * Trae TODA la tabla tiendas_destino, paginada (Supabase corta en 1000 filas
+ * por default si no se pagina explícitamente -con .in() en lotes esto se
+ * podía superar y perder filas en silencio-). Devuelve un mapa
+ * pedido -> lista de códigos de tienda asociados a ese pedido.
  */
-async function fetchTiendasPorPedido(pedidos: string[]): Promise<Map<string, string[]>> {
+async function fetchTiendasPorPedido(): Promise<Map<string, string[]>> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
   const map = new Map<string, string[]>();
 
-  for (let i = 0; i < pedidos.length; i += IN_CHUNK) {
-    const chunk = pedidos.slice(i, i + IN_CHUNK);
+  while (true) {
     const { data, error } = await supabaseAdmin
       .from("tiendas_destino")
       .select("pedido, tiendas_destino")
-      .in("pedido", chunk);
+      .range(from, from + PAGE_SIZE - 1);
 
     if (error) {
       throw new Error(`Supabase (tiendas_destino): ${error.message}`);
     }
+    if (!data || data.length === 0) break;
 
-    for (const row of data ?? []) {
+    for (const row of data) {
       const codigoTienda = row.tiendas_destino as string | null;
       if (!codigoTienda) continue;
       if (!map.has(row.pedido)) map.set(row.pedido, []);
       map.get(row.pedido)!.push(codigoTienda);
     }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
   }
 
   return map;
@@ -103,9 +106,8 @@ export async function GET(request: NextRequest) {
       acc.sep += num(r.uni_sep);
     }
 
-    const pedidos = Array.from(porPedido.keys());
     const [tiendasPorPedido, canalPorCodigo] = await Promise.all([
-      fetchTiendasPorPedido(pedidos),
+      fetchTiendasPorPedido(),
       fetchCanalPorCodigoTienda(),
     ]);
 
