@@ -260,6 +260,7 @@ export default function DashboardLayout() {
   const [fechaLoading, setFechaLoading] = useState(false);
   const [fechaError, setFechaError] = useState<string | null>(null);
   const [rangoFecha, setRangoFecha] = useState<7 | 14 | 30>(7);
+  const [fechaSeleccionada, setFechaSeleccionada] = useState<string>("");
   const [filtroMarcaFecha, setFiltroMarcaFecha] = useState<string>("TODAS");
   const [filtroCanalFecha, setFiltroCanalFecha] = useState<string>("TODAS");
 
@@ -496,13 +497,17 @@ export default function DashboardLayout() {
     return d.toISOString().slice(0, 10);
   })();
 
-  const filasConFecha = (fechaData?.filas ?? []).filter(
-    (f) => f.fecha !== "SIN FECHA" && f.fecha >= limiteFechaISO && f.fecha <= hoyISO
-  );
-  // Los pedidos sin fecha_creacion solo se muestran en el filtro "Último mes",
-  // y siempre al final de la tabla (no se pueden ubicar en el tiempo).
+  const filasConFecha = (fechaData?.filas ?? []).filter((f) => {
+    if (f.fecha === "SIN FECHA") return false;
+    if (fechaSeleccionada) return f.fecha === fechaSeleccionada;
+    return f.fecha >= limiteFechaISO && f.fecha <= hoyISO;
+  });
+  // Los pedidos sin fecha_creacion solo se muestran en el filtro "Último mes"
+  // (y no cuando se eligió una fecha puntual), siempre al final de la tabla.
   const filasSinFecha =
-    rangoFecha === 30 ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA") : [];
+    rangoFecha === 30 && !fechaSeleccionada
+      ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA")
+      : [];
 
   // Lista de marcas y canales disponibles para los filtros (únicas, ordenadas)
   const marcasDisponiblesFecha = Array.from(
@@ -1015,9 +1020,12 @@ export default function DashboardLayout() {
                   ]).map((opcion) => (
                     <button
                       key={opcion.dias}
-                      onClick={() => setRangoFecha(opcion.dias)}
+                      onClick={() => {
+                        setRangoFecha(opcion.dias);
+                        setFechaSeleccionada("");
+                      }}
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        rangoFecha === opcion.dias
+                        !fechaSeleccionada && rangoFecha === opcion.dias
                           ? "bg-blue-600 text-white"
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       }`}
@@ -1026,6 +1034,16 @@ export default function DashboardLayout() {
                     </button>
                   ))}
                 </div>
+
+                <input
+                  type="date"
+                  value={fechaSeleccionada}
+                  onChange={(e) => setFechaSeleccionada(e.target.value)}
+                  max={hoyISO}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    fechaSeleccionada ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                />
 
                 <select
                   value={filtroMarcaFecha}
@@ -1052,6 +1070,7 @@ export default function DashboardLayout() {
                 <button
                   onClick={() => {
                     setRangoFecha(7);
+                    setFechaSeleccionada("");
                     setFiltroMarcaFecha("TODAS");
                     setFiltroCanalFecha("TODAS");
                   }}
