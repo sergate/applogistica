@@ -68,7 +68,11 @@ interface ResumenData {
 export default function DashboardLayout() {
   // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState("Resumen"); 
+  const [activeTab, setActiveTab] = useState("Resumen");
+
+  // Se incrementa después de un import exitoso, para que Resumen / Por fecha /
+  // Por pedidos vuelvan a pedir los datos y se vean actualizados al instante.
+  const [dataVersion, setDataVersion] = useState(0);
 
   // =========================================================================
   // ESTADO: IMPORTAR DATOS (Clientes / Grupos / Tiendas -> Supabase)
@@ -77,6 +81,7 @@ export default function DashboardLayout() {
   const [archivoGrupos, setArchivoGrupos] = useState<File | null>(null);
   const [archivoTiendas, setArchivoTiendas] = useState<File | null>(null);
   const [isProcesando, setIsProcesando] = useState(false);
+  const [progresoImport, setProgresoImport] = useState(0); // 0-100
   const [resultadosImport, setResultadosImport] = useState<ImportFileResult[] | null>(null);
   const [errorImport, setErrorImport] = useState<string | null>(null);
 
@@ -90,7 +95,8 @@ export default function DashboardLayout() {
 
   async function enviarArchivoEnLotes(
     archivo: "clientes" | "grupos" | "tiendas",
-    records: Record<string, unknown>[]
+    records: Record<string, unknown>[],
+    onProgresoRegistros: (cantidad: number) => void
   ): Promise<{ filasInsertadas: number }> {
     let totalInsertadas = 0;
 
@@ -124,6 +130,7 @@ export default function DashboardLayout() {
         throw new Error(data.error || `Error al procesar ${archivo}.`);
       }
       totalInsertadas += data.filasInsertadas ?? batch.length;
+      onProgresoRegistros(batch.length);
     }
 
     return { filasInsertadas: totalInsertadas };
@@ -133,6 +140,7 @@ export default function DashboardLayout() {
     if (!todosLosArchivosListos) return;
 
     setIsProcesando(true);
+    setProgresoImport(0);
     setErrorImport(null);
     setResultadosImport(null);
 
@@ -145,17 +153,37 @@ export default function DashboardLayout() {
     const resultados: ImportFileResult[] = [];
 
     try {
-      for (const { key, file, tipo } of archivos) {
-        try {
-          // Parseo en el navegador (no se sube el archivo entero al servidor)
-          const records = tipo === "excel" ? await parseExcelFile(file) : await parseCsvFile(file);
+      // Parseamos los 3 archivos primero para saber el total de registros
+      // y poder calcular un % de avance real sobre el conjunto completo.
+      const archivosConRegistros = await Promise.all(
+        archivos.map(async ({ key, file, tipo }) => {
+          try {
+            const records = tipo === "excel" ? await parseExcelFile(file) : await parseCsvFile(file);
+            return { key, records, errorParseo: null as string | null };
+          } catch (err) {
+            return { key, records: [] as Record<string, unknown>[], errorParseo: err instanceof Error ? err.message : "Error al leer el archivo" };
+          }
+        })
+      );
 
+      const totalRegistros = archivosConRegistros.reduce((acc, a) => acc + a.records.length, 0) || 1;
+      let registrosProcesados = 0;
+
+      for (const { key, records, errorParseo } of archivosConRegistros) {
+        if (errorParseo) {
+          resultados.push({ archivo: key, filasLeidas: 0, filasInsertadas: 0, error: errorParseo });
+          continue;
+        }
+        try {
           if (records.length === 0) {
             resultados.push({ archivo: key, filasLeidas: 0, filasInsertadas: 0, error: "El archivo no tiene filas de datos." });
             continue;
           }
 
-          const { filasInsertadas } = await enviarArchivoEnLotes(key, records);
+          const { filasInsertadas } = await enviarArchivoEnLotes(key, records, (cantidad) => {
+            registrosProcesados += cantidad;
+            setProgresoImport(Math.min(100, Math.round((registrosProcesados / totalRegistros) * 100)));
+          });
           resultados.push({ archivo: key, filasLeidas: records.length, filasInsertadas, error: null });
         } catch (err) {
           resultados.push({
@@ -167,7 +195,14 @@ export default function DashboardLayout() {
         }
       }
 
+      setProgresoImport(100);
       setResultadosImport(resultados);
+
+      // Si al menos un archivo se procesó sin error, refrescamos los datos
+      // de Resumen / Por fecha / Por pedidos para que se vean al instante.
+      if (resultados.some((r) => !r.error)) {
+        setDataVersion((v) => v + 1);
+      }
     } catch (err) {
       setErrorImport(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
@@ -195,6 +230,7 @@ export default function DashboardLayout() {
   const [resumenData, setResumenData] = useState<ResumenData | null>(null);
   const [resumenLoading, setResumenLoading] = useState(false);
   const [resumenError, setResumenError] = useState<string | null>(null);
+  const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
 
   useEffect(() => {
     let cancelado = false;
@@ -203,7 +239,13 @@ export default function DashboardLayout() {
       setResumenLoading(true);
       setResumenError(null);
       try {
-        const res = await fetch("/api/resumen", { cache: "no-store" });
+        let url = "/api/resumen";
+        if (rangoResumen) {
+          const d = new Date();
+          d.setDate(d.getDate() - (rangoResumen - 1));
+          url += `?desde=${d.toISOString().slice(0, 10)}`;
+        }
+        const res = await fetch(url, { cache: "no-store" });
         let data;
         try {
           data = await res.json();
@@ -225,7 +267,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [dataVersion, rangoResumen]);
 
   // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
   const DOT_PALETTE = [
@@ -293,7 +335,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [dataVersion]);
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos"];
 
@@ -371,7 +413,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [dataVersion]);
 
   const handleTiendaClick = async (pedido: string) => {
     if (pedidoExpandido === pedido) {
@@ -714,6 +756,32 @@ export default function DashboardLayout() {
           {/* ================= PESTAÑA: RESUMEN ================= */}
           {activeTab === "Resumen" && (
             <>
+              <div className="flex items-center gap-2 flex-wrap">
+                {([
+                  { label: "Última semana", dias: 7 as const },
+                  { label: "Últimos 14 días", dias: 14 as const },
+                  { label: "Último mes", dias: 30 as const },
+                ]).map((opcion) => (
+                  <button
+                    key={opcion.dias}
+                    onClick={() => setRangoResumen(opcion.dias)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      rangoResumen === opcion.dias
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {opcion.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setRangoResumen(null)}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+
               {resumenError && (
                 <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
                   Error al cargar el resumen: {resumenError}
@@ -965,6 +1033,22 @@ export default function DashboardLayout() {
                   Limpiar
                 </button>
               </div>
+
+              {/* --- BARRA DE PROGRESO --- */}
+              {isProcesando && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span>Procesando datos...</span>
+                    <span className="font-semibold text-slate-700">{progresoImport}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${progresoImport}%` }}
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* --- RESULTADOS --- */}
               {errorImport && (

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
 import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion } from "@/lib/resumenHelpers";
 
@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
 export const revalidate = 0;
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   if (!supabaseEnvOk) {
     return NextResponse.json(
       {
@@ -17,9 +17,16 @@ export async function GET() {
     );
   }
 
+  // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante).
+  // Sin este parámetro, se muestran todos los datos sin filtrar.
+  const desde = request.nextUrl.searchParams.get("desde");
+
   try {
     const rows = await fetchAllGrupoPedidos();
-    const contables = rows.filter(esContable);
+    let contables = rows.filter(esContable);
+    if (desde) {
+      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+    }
 
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
     const totalPick = contables.reduce((acc, r) => acc + num(r.uni_pick), 0);
