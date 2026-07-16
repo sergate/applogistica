@@ -72,6 +72,82 @@ export function ultimaActualizacion(rows: GrupoPedidoRow[]): string | null {
   return max;
 }
 
+export interface TiendaDestinoRow {
+  pedido: string;
+  tiendas_destino: string | null;
+  nombre_pedido: string | null;
+  seller: string | null;
+  estado_pedido: string | null;
+  uni: number | null;
+  uni_pick: number | null;
+  uni_sep: number | null;
+  fecha_creacion: string | null;
+}
+
+/** Trae TODA la tabla tiendas_destino con todas sus columnas de datos (paginado). */
+export async function fetchAllTiendasDestino(): Promise<TiendaDestinoRow[]> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const all: TiendaDestinoRow[] = [];
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("tiendas_destino")
+      .select("pedido, tiendas_destino, nombre_pedido, seller, estado_pedido, uni, uni_pick, uni_sep, fecha_creacion")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase (tiendas_destino): ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    all.push(...(data as TiendaDestinoRow[]));
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return all;
+}
+
+export interface ClienteInfo {
+  nombre: string;
+  canal: string;
+}
+
+/** Trae toda la tabla clientes y arma un mapa código -> {nombre, canal}. */
+export async function fetchClientesInfo(): Promise<Map<string, ClienteInfo>> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const map = new Map<string, ClienteInfo>();
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("clientes")
+      .select("codigo, nombre, canal")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase (clientes): ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      if (row.codigo) {
+        map.set(row.codigo, {
+          nombre: (row.nombre as string | null) || "SIN NOMBRE",
+          canal: (row.canal as string | null) || "SIN CANAL",
+        });
+      }
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return map;
+}
+
 /**
  * Trae TODA la tabla tiendas_destino, paginada (Supabase corta en 1000 filas
  * por default si no se pagina explícitamente -con .in() en lotes esto se
