@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { parseCsvFile, parseExcelFile } from "@/lib/fileParsers";
 
 type ImportKey = "clientes" | "grupos" | "tiendas";
 
@@ -84,6 +85,49 @@ export default function DashboardLayout() {
 
   const todosLosArchivosListos = !!archivoClientes && !!archivoGrupos && !!archivoTiendas;
 
+  const CHUNK_SIZE = 500; // registros por request, para no chocar con el límite de 4.5MB de Vercel
+
+  async function enviarArchivoEnLotes(
+    archivo: "clientes" | "grupos" | "tiendas",
+    records: Record<string, unknown>[]
+  ): Promise<{ filasInsertadas: number }> {
+    let totalInsertadas = 0;
+
+    if (records.length === 0) {
+      // igual mandamos un "lote vacío" para que corra el borrado total en full_replace
+      const res = await fetch("/api/import-maestros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivo, batch: [], esPrimerLote: true }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) throw new Error(data?.error || `Error procesando ${archivo}.`);
+      return { filasInsertadas: 0 };
+    }
+
+    for (let i = 0; i < records.length; i += CHUNK_SIZE) {
+      const batch = records.slice(i, i + CHUNK_SIZE);
+      const res = await fetch("/api/import-maestros", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivo, batch, esPrimerLote: i === 0 }),
+      });
+
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`El servidor respondió con un error inesperado (status ${res.status}) procesando ${archivo}.`);
+      }
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Error al procesar ${archivo}.`);
+      }
+      totalInsertadas += data.filasInsertadas ?? batch.length;
+    }
+
+    return { filasInsertadas: totalInsertadas };
+  }
+
   const handleProcesarDatos = async () => {
     if (!todosLosArchivosListos) return;
 
@@ -91,32 +135,38 @@ export default function DashboardLayout() {
     setErrorImport(null);
     setResultadosImport(null);
 
+    const archivos: { key: "clientes" | "grupos" | "tiendas"; file: File; tipo: "excel" | "csv" }[] = [
+      { key: "clientes", file: archivoClientes as File, tipo: "excel" },
+      { key: "grupos", file: archivoGrupos as File, tipo: "csv" },
+      { key: "tiendas", file: archivoTiendas as File, tipo: "csv" },
+    ];
+
+    const resultados: ImportFileResult[] = [];
+
     try {
-      const formData = new FormData();
-      formData.append("clientes", archivoClientes as File);
-      formData.append("grupos", archivoGrupos as File);
-      formData.append("tiendas", archivoTiendas as File);
+      for (const { key, file, tipo } of archivos) {
+        try {
+          // Parseo en el navegador (no se sube el archivo entero al servidor)
+          const records = tipo === "excel" ? await parseExcelFile(file) : await parseCsvFile(file);
 
-      const res = await fetch("/api/import-maestros", {
-        method: "POST",
-        body: formData,
-      });
+          if (records.length === 0) {
+            resultados.push({ archivo: key, filasLeidas: 0, filasInsertadas: 0, error: "El archivo no tiene filas de datos." });
+            continue;
+          }
 
-      let data;
-      try {
-        data = await res.json();
-      } catch {
-        throw new Error(
-          `El servidor respondió con un error inesperado (status ${res.status}). ` +
-            "Puede ser que alguno de los archivos sea demasiado grande, o un problema de configuración del servidor."
-        );
+          const { filasInsertadas } = await enviarArchivoEnLotes(key, records);
+          resultados.push({ archivo: key, filasLeidas: records.length, filasInsertadas, error: null });
+        } catch (err) {
+          resultados.push({
+            archivo: key,
+            filasLeidas: 0,
+            filasInsertadas: 0,
+            error: err instanceof Error ? err.message : "Error desconocido",
+          });
+        }
       }
 
-      if (!res.ok && res.status !== 207) {
-        throw new Error(data.error || "Error al procesar los archivos.");
-      }
-
-      setResultadosImport(data.resultados ?? null);
+      setResultadosImport(resultados);
     } catch (err) {
       setErrorImport(err instanceof Error ? err.message : "Error inesperado.");
     } finally {

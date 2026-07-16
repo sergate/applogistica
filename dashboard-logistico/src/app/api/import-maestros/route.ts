@@ -1,128 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
-import { parseCsvFile, parseExcelFile } from "@/lib/fileParsers";
 
-export const runtime = "nodejs"; // necesitamos Node (no Edge) por el parseo de Excel/CSV
+export const runtime = "nodejs";
 
 // -----------------------------------------------------------------------
-// Configuración de cada archivo esperado:
+// Este endpoint recibe LOTES de registros ya parseados (JSON), no el
+// archivo entero. El parseo del Excel/CSV se hace en el navegador
+// (src/lib/fileParsers.ts) y el frontend manda los datos en tandas chicas,
+// para no chocar con el límite de 4.5MB por request de las funciones
+// serverless de Vercel (ese límite es fijo, no se puede subir desde acá).
 //
-// - clientes  -> tabla "clientes"        (PK: codigo, sí es único) -> UPSERT
-// - grupos    -> tabla "grupo_pedidos"    (PK: id autogenerado;
-//                 "pedido" puede repetirse, una fila por cada "grupo")
-//                 -> REEMPLAZO TOTAL (se borra toda la tabla y se inserta de nuevo)
-// - tiendas   -> tabla "tiendas_destino"  (PK: id autogenerado;
-//                 "pedido" puede repetirse, una fila por tienda destino)
-//                 -> REEMPLAZO TOTAL
-//
-// grupos y tiendas usan reemplazo total porque cada archivo es la foto
-// completa y vigente de los pedidos activos (no algo incremental) — así
-// evitamos que queden filas viejas/de prueba mezcladas con las nuevas.
+// - clientes -> tabla "clientes"        (PK: codigo)       -> UPSERT por lote
+// - grupos   -> tabla "grupo_pedidos"   (sin clave única)   -> el primer lote
+// - tiendas  -> tabla "tiendas_destino" (sin clave única)      borra TODA la
+//                                                               tabla, después
+//                                                               todos los lotes
+//                                                               solo insertan
 // -----------------------------------------------------------------------
 const IMPORT_CONFIG = {
-  clientes: {
-    table: "clientes",
-    parser: "excel",
-    mode: "upsert",
-    conflictColumn: "codigo",
-  },
-  grupos: {
-    table: "grupo_pedidos",
-    parser: "csv",
-    mode: "full_replace",
-  },
-  tiendas: {
-    table: "tiendas_destino",
-    parser: "csv",
-    mode: "full_replace",
-  },
+  clientes: { table: "clientes", mode: "upsert", conflictColumn: "codigo" },
+  grupos: { table: "grupo_pedidos", mode: "full_replace" },
+  tiendas: { table: "tiendas_destino", mode: "full_replace" },
 } as const;
 
 type ImportKey = keyof typeof IMPORT_CONFIG;
 
-const BATCH_SIZE = 500;
-
-interface FileResult {
-  archivo: ImportKey;
-  filasLeidas: number;
-  filasInsertadas: number;
-  error: string | null;
+function esImportKey(v: unknown): v is ImportKey {
+  return v === "clientes" || v === "grupos" || v === "tiendas";
 }
 
-async function insertInBatches(
-  table: string,
-  records: Record<string, unknown>[]
-): Promise<number> {
-  let totalInsertadas = 0;
-
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE);
-    const { error, count } = await supabaseAdmin
-      .from(table)
-      .insert(batch, { count: "exact" });
-
-    if (error) {
-      throw new Error(`Supabase (${table} - insert): ${error.message}`);
-    }
-    totalInsertadas += count ?? batch.length;
+async function insertarLote(table: string, batch: Record<string, unknown>[]): Promise<number> {
+  const { error, count } = await supabaseAdmin.from(table).insert(batch, { count: "exact" });
+  if (error) {
+    throw new Error(`Supabase (${table} - insert): ${error.message}`);
   }
-
-  return totalInsertadas;
+  return count ?? batch.length;
 }
 
-/**
- * Upsert por columna única (para tablas donde sí existe una clave real,
- * como clientes.codigo). Deduplica dentro del archivo por si la misma
- * clave aparece 2 veces (Postgres no permite tocar la misma fila 2 veces
- * en un solo UPSERT).
- */
-async function upsertInBatches(
+/** Upsert deduplicando dentro del lote (Postgres no permite tocar la misma fila 2 veces en un UPSERT). */
+async function upsertLote(
   table: string,
   conflictColumn: string,
-  records: Record<string, unknown>[]
+  batch: Record<string, unknown>[]
 ): Promise<number> {
   const deduped = new Map<unknown, Record<string, unknown>>();
-  for (const record of records) {
+  for (const record of batch) {
     const key = record[conflictColumn];
     if (key === null || key === undefined || key === "") continue;
     deduped.set(key, record);
   }
   const uniqueRecords = Array.from(deduped.values());
+  if (uniqueRecords.length === 0) return 0;
 
-  let totalInsertadas = 0;
-  for (let i = 0; i < uniqueRecords.length; i += BATCH_SIZE) {
-    const batch = uniqueRecords.slice(i, i + BATCH_SIZE);
-    const { error, count } = await supabaseAdmin
-      .from(table)
-      .upsert(batch, { onConflict: conflictColumn, count: "exact" });
+  const { error, count } = await supabaseAdmin
+    .from(table)
+    .upsert(uniqueRecords, { onConflict: conflictColumn, count: "exact" });
 
-    if (error) {
-      throw new Error(`Supabase (${table}): ${error.message}`);
-    }
-    totalInsertadas += count ?? batch.length;
+  if (error) {
+    throw new Error(`Supabase (${table}): ${error.message}`);
   }
-
-  return totalInsertadas;
-}
-
-/**
- * Reemplazo total: borra TODAS las filas de la tabla y después inserta
- * el contenido completo del archivo. Usado para tablas donde no existe
- * una columna única por fila (grupo_pedidos, tiendas_destino), y donde
- * cada archivo representa la foto completa y vigente de los datos.
- */
-async function fullReplaceInBatches(
-  table: string,
-  records: Record<string, unknown>[]
-): Promise<number> {
-  // Truco para borrar TODAS las filas con el cliente de Supabase (que exige
-  // algún filtro): "id no es null" matchea siempre, ya que id es NOT NULL.
-  const { error: delError } = await supabaseAdmin.from(table).delete().not("id", "is", null);
-  if (delError) {
-    throw new Error(`Supabase (${table} - borrado total): ${delError.message}`);
-  }
-
-  return insertInBatches(table, records);
+  return count ?? uniqueRecords.length;
 }
 
 export async function POST(request: NextRequest) {
@@ -130,90 +67,54 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error:
-          "Faltan configurar SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.",
+        error: "Faltan configurar SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno del servidor.",
       },
       { status: 500 }
     );
   }
 
   try {
-    const formData = await request.formData();
+    const body = await request.json();
+    const { archivo, batch, esPrimerLote } = body as {
+      archivo: unknown;
+      batch: unknown;
+      esPrimerLote: unknown;
+    };
 
-    const entries = Object.entries(IMPORT_CONFIG) as [
-      ImportKey,
-      (typeof IMPORT_CONFIG)[ImportKey]
-    ][];
-
-    // Validamos que los 3 archivos estén presentes antes de procesar nada.
-    const files: Partial<Record<ImportKey, File>> = {};
-    for (const [key] of entries) {
-      const file = formData.get(key);
-      if (!(file instanceof File) || file.size === 0) {
-        return NextResponse.json(
-          { success: false, error: `Falta el archivo "${key}".` },
-          { status: 400 }
-        );
-      }
-      files[key] = file;
+    if (!esImportKey(archivo)) {
+      return NextResponse.json(
+        { success: false, error: `"archivo" inválido: ${String(archivo)}` },
+        { status: 400 }
+      );
+    }
+    if (!Array.isArray(batch)) {
+      return NextResponse.json({ success: false, error: '"batch" debe ser un array.' }, { status: 400 });
     }
 
-    const resultados: FileResult[] = [];
-    let huboError = false;
+    const config = IMPORT_CONFIG[archivo];
 
-    // Secuencial (no Promise.all): procesamos clientes, grupos y tiendas en orden.
-    for (const [key, config] of entries) {
-      const file = files[key]!;
-      try {
-        const records =
-          config.parser === "excel"
-            ? await parseExcelFile(file)
-            : await parseCsvFile(file);
-
-        if (records.length === 0) {
-          resultados.push({
-            archivo: key,
-            filasLeidas: 0,
-            filasInsertadas: 0,
-            error: "El archivo no tiene filas de datos.",
-          });
-          huboError = true;
-          continue;
-        }
-
-        const filasInsertadas =
-          config.mode === "upsert"
-            ? await upsertInBatches(config.table, config.conflictColumn, records)
-            : await fullReplaceInBatches(config.table, records);
-
-        resultados.push({
-          archivo: key,
-          filasLeidas: records.length,
-          filasInsertadas,
-          error: null,
-        });
-      } catch (err) {
-        huboError = true;
-        resultados.push({
-          archivo: key,
-          filasLeidas: 0,
-          filasInsertadas: 0,
-          error: err instanceof Error ? err.message : "Error desconocido",
-        });
+    // Antes del primer lote de una tabla "full_replace", borramos todo lo
+    // que había (el archivo es la foto completa y vigente de los datos).
+    if (config.mode === "full_replace" && esPrimerLote) {
+      const { error: delError } = await supabaseAdmin.from(config.table).delete().not("id", "is", null);
+      if (delError) {
+        throw new Error(`Supabase (${config.table} - borrado total): ${delError.message}`);
       }
     }
 
-    return NextResponse.json(
-      { success: !huboError, resultados },
-      { status: huboError ? 207 : 200 } // 207 = éxito parcial
-    );
+    if (batch.length === 0) {
+      return NextResponse.json({ success: true, filasInsertadas: 0 });
+    }
+
+    const filasInsertadas =
+      config.mode === "upsert"
+        ? await upsertLote(config.table, config.conflictColumn, batch as Record<string, unknown>[])
+        : await insertarLote(config.table, batch as Record<string, unknown>[]);
+
+    return NextResponse.json({ success: true, filasInsertadas });
   } catch (err) {
     return NextResponse.json(
-      {
-        success: false,
-        error:
-          err instanceof Error ? err.message : "Error inesperado en el servidor",
-      },
+      { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
       { status: 500 }
     );
   }
