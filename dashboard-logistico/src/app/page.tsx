@@ -443,7 +443,7 @@ export default function DashboardLayout() {
     const filasExport = filasFiltradasPedidos.map((f) => ({
       "Código Tienda": f.codigoTienda,
       Cliente: f.cliente,
-      "Nombre Pedido": f.nombrePedido,
+      "N° Pedido": f.pedido,
       Marca: f.marca,
       Canal: f.canal,
       Fecha: f.fecha,
@@ -1213,15 +1213,14 @@ export default function DashboardLayout() {
               {/* TARJETAS DE SUBTOTAL */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
                 {[
-                  { label: "Subtotal Unidades", value: fmtNum(subtotalPedidosCalculado.uni), color: "text-slate-800" },
-                  { label: "Subtotal Pickeado", value: fmtNum(subtotalPedidosCalculado.pick), color: "text-slate-800" },
-                  { label: "Subtotal Separado", value: fmtNum(subtotalPedidosCalculado.sep), color: "text-slate-800" },
-                  { label: "Subtotal Pend. Pick", value: fmtNum(subtotalPedidosCalculado.pendPick), color: "text-orange-600" },
-                  { label: "Subtotal Pend. Sep.", value: fmtNum(subtotalPedidosCalculado.pendSep), color: "text-red-600" },
+                  { label: "Unidades", value: fmtNum(subtotalPedidosCalculado.uni), color: "text-slate-800" },
+                  { label: "Pickeado", value: fmtNum(subtotalPedidosCalculado.pick), color: "text-slate-800" },
+                  { label: "Separado", value: fmtNum(subtotalPedidosCalculado.sep), color: "text-slate-800" },
+                  { label: "Pend. Pick", value: fmtNum(subtotalPedidosCalculado.pendPick), color: "text-orange-600" },
+                  { label: "Pend. Sep.", value: fmtNum(subtotalPedidosCalculado.pendSep), color: "text-red-600" },
                 ].map((card) => (
                   <div key={card.label} className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
-                    <p className="text-xs font-medium text-slate-500 mb-1">{card.label}</p>
-                    <p className="text-xs text-slate-400 mb-2">Según filtro</p>
+                    <p className="text-xs font-medium text-slate-500 mb-2">{card.label}</p>
                     <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
                   </div>
                 ))}
@@ -1234,7 +1233,7 @@ export default function DashboardLayout() {
                     <tr>
                       <th className="py-4 px-4 text-left">Código Tienda</th>
                       <th className="py-4 px-4 text-left">Cliente</th>
-                      <th className="py-4 px-4 text-left">Nombre Pedido</th>
+                      <th className="py-4 px-4 text-left">N° Pedido</th>
                       <th className="py-4 px-4 text-left">Unidades</th>
                       <th className="py-4 px-4 text-left">Pickeadas</th>
                       <th className="py-4 px-4 text-left">Separadas</th>
@@ -1256,7 +1255,7 @@ export default function DashboardLayout() {
                         >
                           <td className="py-4 px-4 text-left font-semibold text-slate-800">{row.codigoTienda}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.cliente}</td>
-                          <td className="py-4 px-4 text-left text-slate-600">{row.nombrePedido}</td>
+                          <td className="py-4 px-4 text-left text-slate-600">{row.pedido}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.uni)}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.pick)}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.sep)}</td>
