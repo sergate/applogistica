@@ -71,3 +71,86 @@ export function ultimaActualizacion(rows: GrupoPedidoRow[]): string | null {
   }
   return max;
 }
+
+/**
+ * Trae TODA la tabla tiendas_destino, paginada (Supabase corta en 1000 filas
+ * por default si no se pagina explícitamente -con .in() en lotes esto se
+ * podía superar y perder filas en silencio-). Devuelve un mapa
+ * pedido -> lista de códigos de tienda asociados a ese pedido.
+ */
+export async function fetchTiendasPorPedido(): Promise<Map<string, string[]>> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const map = new Map<string, string[]>();
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("tiendas_destino")
+      .select("pedido, tiendas_destino")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase (tiendas_destino): ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      const codigoTienda = row.tiendas_destino as string | null;
+      if (!codigoTienda) continue;
+      if (!map.has(row.pedido)) map.set(row.pedido, []);
+      map.get(row.pedido)!.push(codigoTienda);
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return map;
+}
+
+/** Trae toda la tabla clientes y arma un mapa código de tienda -> canal. */
+export async function fetchCanalPorCodigoTienda(): Promise<Map<string, string>> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const map = new Map<string, string>();
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("clientes")
+      .select("codigo, canal")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase (clientes): ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    for (const row of data) {
+      if (row.codigo) map.set(row.codigo, (row.canal as string | null) || "SIN CANAL");
+    }
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return map;
+}
+
+/**
+ * Dado un pedido y los mapas de tiendas/canales, prueba todos los códigos de
+ * tienda del pedido hasta encontrar uno que exista en "clientes". No asume
+ * que la primera fila devuelta sea la "correcta" (Supabase no garantiza
+ * orden sin ORDER BY explícito).
+ */
+export function resolverCanal(
+  pedido: string,
+  tiendasPorPedido: Map<string, string[]>,
+  canalPorCodigo: Map<string, string>
+): string {
+  const codigosTienda = tiendasPorPedido.get(pedido) ?? [];
+  for (const codigoTienda of codigosTienda) {
+    const match = canalPorCodigo.get(codigoTienda);
+    if (match) return match;
+  }
+  return "SIN CANAL";
+}

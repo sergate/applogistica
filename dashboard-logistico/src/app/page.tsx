@@ -38,6 +38,7 @@ interface CanalResumen {
 interface FechaResumen {
   fecha: string;
   marca: string;
+  canal: string;
   uni: number;
   pick: number;
   sep: number;
@@ -210,6 +211,7 @@ export default function DashboardLayout() {
   const [fechaError, setFechaError] = useState<string | null>(null);
   const [rangoFecha, setRangoFecha] = useState<7 | 14 | 30>(7);
   const [filtroMarcaFecha, setFiltroMarcaFecha] = useState<string>("TODAS");
+  const [filtroCanalFecha, setFiltroCanalFecha] = useState<string>("TODAS");
 
   useEffect(() => {
     let cancelado = false;
@@ -297,18 +299,24 @@ export default function DashboardLayout() {
   const filasSinFecha =
     rangoFecha === 30 ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA") : [];
 
-  // Lista de marcas disponibles para el filtro (únicas, ordenadas alfabéticamente)
+  // Lista de marcas y canales disponibles para los filtros (únicas, ordenadas)
   const marcasDisponiblesFecha = Array.from(
     new Set((fechaData?.filas ?? []).map((f) => f.marca))
   ).sort();
+  const canalesDisponiblesFecha = Array.from(
+    new Set((fechaData?.filas ?? []).map((f) => f.canal))
+  ).sort();
 
   const filasFiltradasPorMarca = [...filasConFecha, ...filasSinFecha].filter(
-    (f) => filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha
+    (f) =>
+      (filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha) &&
+      (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha)
   );
 
   const fechasData = filasFiltradasPorMarca.map((f) => ({
     fecha: f.fecha,
     marca: f.marca,
+    canal: f.canal,
     dot: dotForMarcaName(f.marca),
     uni: fmtNum(f.uni),
     pick: fmtNum(f.pick),
@@ -810,6 +818,17 @@ export default function DashboardLayout() {
                     <option key={m} value={m}>{m}</option>
                   ))}
                 </select>
+
+                <select
+                  value={filtroCanalFecha}
+                  onChange={(e) => setFiltroCanalFecha(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los canales</option>
+                  {canalesDisponiblesFecha.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
               </div>
 
               {fechaError && (
@@ -828,8 +847,10 @@ export default function DashboardLayout() {
                   <thead>
                     {fechasData.length > 0 && (
                       <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                        <td className="py-3 px-4 text-left" colSpan={2}>
-                          Subtotal {filtroMarcaFecha !== "TODAS" ? `— ${filtroMarcaFecha}` : "— Todas las marcas"}
+                        <td className="py-3 px-4 text-left" colSpan={3}>
+                          Subtotal
+                          {filtroMarcaFecha !== "TODAS" ? ` — ${filtroMarcaFecha}` : " — Todas las marcas"}
+                          {filtroCanalFecha !== "TODAS" ? ` — ${filtroCanalFecha}` : ""}
                         </td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.uni)}</td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.pick)}</td>
@@ -843,6 +864,7 @@ export default function DashboardLayout() {
                     <tr className="text-slate-500 font-medium border-b border-slate-200">
                       <th className="py-4 px-4 text-left">Fecha</th>
                       <th className="py-4 px-4 text-left">Marca</th>
+                      <th className="py-4 px-4 text-left">Canal</th>
                       <th className="py-4 px-4 text-left">Unidades</th>
                       <th className="py-4 px-4 text-left">Pickeadas</th>
                       <th className="py-4 px-4 text-left">Separadas</th>
@@ -857,6 +879,7 @@ export default function DashboardLayout() {
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                         <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
                         <td className="py-4 px-4 text-left flex items-center gap-3 font-bold text-slate-900"><span className={`w-2 h-2 rounded-full ${row.dot}`}></span>{row.marca}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.canal}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.uni}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.pick}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.sep}</td>

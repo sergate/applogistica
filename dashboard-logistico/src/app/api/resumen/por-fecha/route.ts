@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion } from "@/lib/resumenHelpers";
+import {
+  fetchAllGrupoPedidos,
+  esContable,
+  num,
+  ultimaActualizacion,
+  fetchTiendasPorPedido,
+  fetchCanalPorCodigoTienda,
+  resolverCanal,
+} from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,31 +32,58 @@ export async function GET() {
     const rows = await fetchAllGrupoPedidos();
     const contables = rows.filter(esContable);
 
-    // Agrupamos por (fecha, marca): la fecha es fecha_creacion truncada al día,
-    // la marca es la columna "seller".
-    const grupos = new Map<
+    // El canal se resuelve a nivel PEDIDO (no a nivel línea/grupo), así que
+    // primero agregamos fecha/marca/unidades por pedido.
+    const porPedido = new Map<
       string,
       { fecha: string; marca: string; uni: number; pick: number; sep: number }
     >();
 
     for (const r of contables) {
-      const fecha = soloFecha(r.fecha_creacion);
-      const marca = (r.seller || "").trim() || "SIN SELLER";
-      const key = `${fecha}__${marca}`;
-
-      if (!grupos.has(key)) {
-        grupos.set(key, { fecha, marca, uni: 0, pick: 0, sep: 0 });
+      if (!porPedido.has(r.pedido)) {
+        porPedido.set(r.pedido, {
+          fecha: soloFecha(r.fecha_creacion),
+          marca: (r.seller || "").trim() || "SIN SELLER",
+          uni: 0,
+          pick: 0,
+          sep: 0,
+        });
       }
-      const acc = grupos.get(key)!;
+      const acc = porPedido.get(r.pedido)!;
       acc.uni += num(r.uni);
       acc.pick += num(r.uni_pick);
       acc.sep += num(r.uni_sep);
+    }
+
+    const [tiendasPorPedido, canalPorCodigo] = await Promise.all([
+      fetchTiendasPorPedido(),
+      fetchCanalPorCodigoTienda(),
+    ]);
+
+    // Agrupamos por (fecha, marca, canal)
+    const grupos = new Map<
+      string,
+      { fecha: string; marca: string; canal: string; uni: number; pick: number; sep: number }
+    >();
+
+    for (const [pedido, acc] of porPedido) {
+      const canal = resolverCanal(pedido, tiendasPorPedido, canalPorCodigo);
+      const key = `${acc.fecha}__${acc.marca}__${canal}`;
+
+      if (!grupos.has(key)) {
+        grupos.set(key, { fecha: acc.fecha, marca: acc.marca, canal, uni: 0, pick: 0, sep: 0 });
+      }
+      const g = grupos.get(key)!;
+      g.uni += acc.uni;
+      g.pick += acc.pick;
+      g.sep += acc.sep;
     }
 
     const filas = Array.from(grupos.values())
       .map((g) => ({
         fecha: g.fecha,
         marca: g.marca,
+        canal: g.canal,
         uni: g.uni,
         pick: g.pick,
         sep: g.sep,
