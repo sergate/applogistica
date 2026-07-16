@@ -307,29 +307,47 @@ export default function DashboardLayout() {
     new Set((fechaData?.filas ?? []).map((f) => f.canal))
   ).sort();
 
-  const filasFiltradasPorMarca = [...filasConFecha, ...filasSinFecha].filter(
+  const filasFiltradas = [...filasConFecha, ...filasSinFecha].filter(
     (f) =>
       (filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha) &&
       (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha)
   );
 
-  const fechasData = filasFiltradasPorMarca.map((f) => ({
-    fecha: f.fecha,
-    marca: f.marca,
-    canal: f.canal,
-    dot: dotForMarcaName(f.marca),
-    uni: fmtNum(f.uni),
-    pick: fmtNum(f.pick),
-    sep: fmtNum(f.sep),
-    pendPick: fmtNum(f.pendPick),
-    pendSep: fmtNum(f.pendSep),
-    eficPick: fmtPct(f.eficPick),
-    eficSep: fmtPct(f.eficSep),
-  }));
+  // Consolidamos por (fecha, marca): el canal se usa solo para filtrar,
+  // no se muestra como columna ni se desglosa en el resultado.
+  const consolidadoPorFechaMarca = new Map<
+    string,
+    { fecha: string; marca: string; uni: number; pick: number; sep: number }
+  >();
+  for (const f of filasFiltradas) {
+    const key = `${f.fecha}__${f.marca}`;
+    if (!consolidadoPorFechaMarca.has(key)) {
+      consolidadoPorFechaMarca.set(key, { fecha: f.fecha, marca: f.marca, uni: 0, pick: 0, sep: 0 });
+    }
+    const acc = consolidadoPorFechaMarca.get(key)!;
+    acc.uni += f.uni;
+    acc.pick += f.pick;
+    acc.sep += f.sep;
+  }
 
-  // Subtotal sobre los datos ya filtrados (fecha + marca). La eficiencia se
-  // recalcula sobre los totales sumados, NO como promedio de los % de cada fila.
-  const subtotalFecha = filasFiltradasPorMarca.reduce(
+  const fechasData = Array.from(consolidadoPorFechaMarca.values())
+    .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.uni - a.uni))
+    .map((f) => ({
+      fecha: f.fecha,
+      marca: f.marca,
+      dot: dotForMarcaName(f.marca),
+      uni: fmtNum(f.uni),
+      pick: fmtNum(f.pick),
+      sep: fmtNum(f.sep),
+      pendPick: fmtNum(f.uni - f.pick),
+      pendSep: fmtNum(f.uni - f.sep),
+      eficPick: fmtPct(f.uni > 0 ? (f.pick / f.uni) * 100 : 0),
+      eficSep: fmtPct(f.uni > 0 ? (f.sep / f.uni) * 100 : 0),
+    }));
+
+  // Subtotal sobre los datos ya filtrados (fecha + marca + canal). La eficiencia
+  // se recalcula sobre los totales sumados, NO como promedio de los % de cada fila.
+  const subtotalFecha = filasFiltradas.reduce(
     (acc, f) => ({
       uni: acc.uni + f.uni,
       pick: acc.pick + f.pick,
@@ -847,7 +865,7 @@ export default function DashboardLayout() {
                   <thead>
                     {fechasData.length > 0 && (
                       <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                        <td className="py-3 px-4 text-left" colSpan={3}>
+                        <td className="py-3 px-4 text-left" colSpan={2}>
                           Subtotal
                           {filtroMarcaFecha !== "TODAS" ? ` — ${filtroMarcaFecha}` : " — Todas las marcas"}
                           {filtroCanalFecha !== "TODAS" ? ` — ${filtroCanalFecha}` : ""}
@@ -864,7 +882,6 @@ export default function DashboardLayout() {
                     <tr className="text-slate-500 font-medium border-b border-slate-200">
                       <th className="py-4 px-4 text-left">Fecha</th>
                       <th className="py-4 px-4 text-left">Marca</th>
-                      <th className="py-4 px-4 text-left">Canal</th>
                       <th className="py-4 px-4 text-left">Unidades</th>
                       <th className="py-4 px-4 text-left">Pickeadas</th>
                       <th className="py-4 px-4 text-left">Separadas</th>
@@ -879,7 +896,6 @@ export default function DashboardLayout() {
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                         <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
                         <td className="py-4 px-4 text-left flex items-center gap-3 font-bold text-slate-900"><span className={`w-2 h-2 rounded-full ${row.dot}`}></span>{row.marca}</td>
-                        <td className="py-4 px-4 text-left text-slate-600">{row.canal}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.uni}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.pick}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{row.sep}</td>
