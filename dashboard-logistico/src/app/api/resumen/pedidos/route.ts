@@ -1,15 +1,24 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
 import {
-  fetchAllTiendasDestino,
-  fetchClientesInfo,
-  esEstadoContable,
+  fetchAllGrupoPedidos,
+  esContable,
   num,
+  ultimaActualizacion,
+  fetchTiendasPorPedido,
+  fetchClientesInfo,
+  resolverTiendaCliente,
 } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+/** Se queda con la parte "YYYY-MM-DD" de un timestamp ISO. */
+function soloFecha(iso: string | null): string {
+  if (!iso) return "SIN FECHA";
+  return iso.slice(0, 10);
+}
 
 export async function GET() {
   if (!supabaseEnvOk) {
@@ -20,42 +29,62 @@ export async function GET() {
   }
 
   try {
-    const [tiendas, clientes] = await Promise.all([fetchAllTiendasDestino(), fetchClientesInfo()]);
+    const rows = await fetchAllGrupoPedidos();
+    const contables = rows.filter(esContable);
 
-    let updatedAt: string | null = null;
+    // Todos los números (unidades, pickeadas, separadas) salen de grupo_pedidos,
+    // agregados por pedido (un pedido tiene varias líneas, una por "grupo").
+    const porPedido = new Map<
+      string,
+      { fecha: string; marca: string; nombrePedido: string; uni: number; pick: number; sep: number }
+    >();
 
-    const filas = tiendas
-      .filter((t) => esEstadoContable(t.estado_pedido))
-      .map((t) => {
-        const codigoTienda = t.tiendas_destino || "SIN TIENDA";
-        const cliente = clientes.get(codigoTienda);
-        const uni = num(t.uni);
-        const pick = num(t.uni_pick);
-        const sep = num(t.uni_sep);
+    for (const r of contables) {
+      if (!porPedido.has(r.pedido)) {
+        porPedido.set(r.pedido, {
+          fecha: soloFecha(r.fecha_creacion),
+          marca: (r.seller || "").trim() || "SIN SELLER",
+          nombrePedido: r.nombre_pedido || "",
+          uni: 0,
+          pick: 0,
+          sep: 0,
+        });
+      }
+      const acc = porPedido.get(r.pedido)!;
+      acc.uni += num(r.uni);
+      acc.pick += num(r.uni_pick);
+      acc.sep += num(r.uni_sep);
+    }
 
-        if (t.fecha_creacion && (!updatedAt || t.fecha_creacion > updatedAt)) {
-          updatedAt = t.fecha_creacion;
-        }
+    // tiendas_destino + clientes se usan SOLO para resolver código de tienda,
+    // nombre de cliente y canal -- no aportan unidades.
+    const [tiendasPorPedido, clientesInfo] = await Promise.all([
+      fetchTiendasPorPedido(),
+      fetchClientesInfo(),
+    ]);
 
-        return {
-          pedido: t.pedido,
-          codigoTienda,
-          cliente: cliente?.nombre || "SIN CLIENTE",
-          nombrePedido: t.nombre_pedido || "",
-          marca: (t.seller || "").trim() || "SIN SELLER",
-          canal: cliente?.canal || "SIN CANAL",
-          fecha: t.fecha_creacion ? t.fecha_creacion.slice(0, 10) : "SIN FECHA",
-          uni,
-          pick,
-          sep,
-          pendPick: uni - pick,
-          pendSep: uni - sep,
-          eficPick: uni > 0 ? (pick / uni) * 100 : 0,
-          eficSep: uni > 0 ? (sep / uni) * 100 : 0,
-        };
-      });
+    const filas = Array.from(porPedido.entries()).map(([pedido, acc]) => {
+      const { codigoTienda, nombre, canal } = resolverTiendaCliente(pedido, tiendasPorPedido, clientesInfo);
 
-    return NextResponse.json({ success: true, filas, updatedAt });
+      return {
+        pedido,
+        codigoTienda,
+        cliente: nombre,
+        nombrePedido: acc.nombrePedido,
+        marca: acc.marca,
+        canal,
+        fecha: acc.fecha,
+        uni: acc.uni,
+        pick: acc.pick,
+        sep: acc.sep,
+        pendPick: acc.uni - acc.pick,
+        pendSep: acc.uni - acc.sep,
+        eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
+        eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
+      };
+    });
+
+    return NextResponse.json({ success: true, filas, updatedAt: ultimaActualizacion(rows) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

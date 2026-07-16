@@ -12,6 +12,7 @@ export interface GrupoPedidoRow {
   grupo: string | null;
   seller: string | null;
   estado_pedido: string | null;
+  nombre_pedido: string | null;
   uni: number | null;
   uni_pick: number | null;
   uni_sep: number | null;
@@ -28,7 +29,7 @@ export async function fetchAllGrupoPedidos(): Promise<GrupoPedidoRow[]> {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("grupo_pedidos")
-      .select("pedido, grupo, seller, estado_pedido, uni, uni_pick, uni_sep, fecha_creacion, updated_at")
+      .select("pedido, grupo, seller, estado_pedido, nombre_pedido, uni, uni_pick, uni_sep, fecha_creacion, updated_at")
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) {
@@ -210,6 +211,29 @@ export async function fetchCanalPorCodigoTienda(): Promise<Map<string, string>> 
   }
 
   return map;
+}
+
+/**
+ * Dado un pedido, prueba todos sus códigos de tienda hasta encontrar uno
+ * que exista en "clientes", y devuelve el código de tienda + nombre + canal
+ * juntos. No asume que la primera fila devuelta por Supabase sea la
+ * "correcta" (no hay ORDER BY garantizado).
+ */
+export function resolverTiendaCliente(
+  pedido: string,
+  tiendasPorPedido: Map<string, string[]>,
+  clientesInfo: Map<string, ClienteInfo>
+): { codigoTienda: string; nombre: string; canal: string } {
+  const codigos = tiendasPorPedido.get(pedido) ?? [];
+  for (const codigo of codigos) {
+    const info = clientesInfo.get(codigo);
+    if (info) return { codigoTienda: codigo, nombre: info.nombre, canal: info.canal };
+  }
+  return {
+    codigoTienda: codigos[0] || "SIN TIENDA",
+    nombre: "SIN CLIENTE",
+    canal: "SIN CANAL",
+  };
 }
 
 /**
