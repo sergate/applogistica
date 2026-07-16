@@ -1048,6 +1048,17 @@ export default function DashboardLayout() {
                     <option key={c} value={c}>{c}</option>
                   ))}
                 </select>
+
+                <button
+                  onClick={() => {
+                    setRangoFecha(7);
+                    setFiltroMarcaFecha("TODAS");
+                    setFiltroCanalFecha("TODAS");
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
               </div>
 
               {fechaError && (
@@ -1197,6 +1208,18 @@ export default function DashboardLayout() {
                     {opcion.label}
                   </button>
                 ))}
+
+                <button
+                  onClick={() => {
+                    setRangoFechaPedidos(7);
+                    setFiltroMarcaPedidos("TODAS");
+                    setFiltroCanalPedidos("TODAS");
+                    setBusquedaPedidos("");
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
               </div>
 
               {pedidosError && (
