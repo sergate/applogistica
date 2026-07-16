@@ -825,8 +825,22 @@ export default function DashboardLayout() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
-                  <thead className="text-slate-500 font-medium border-b border-slate-200">
-                    <tr>
+                  <thead>
+                    {fechasData.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                        <td className="py-3 px-4 text-left" colSpan={2}>
+                          Subtotal {filtroMarcaFecha !== "TODAS" ? `— ${filtroMarcaFecha}` : "— Todas las marcas"}
+                        </td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.uni)}</td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.pick)}</td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.sep)}</td>
+                        <td className="py-3 px-4 text-left text-orange-600">{fmtNum(subtotalFechaCalculado.pendPick)}</td>
+                        <td className="py-3 px-4 text-left text-red-600">{fmtNum(subtotalFechaCalculado.pendSep)}</td>
+                        <td className="py-3 px-4 text-left">{fmtPct(subtotalFechaCalculado.eficPick)}</td>
+                        <td className="py-3 px-4 text-left">{fmtPct(subtotalFechaCalculado.eficSep)}</td>
+                      </tr>
+                    )}
+                    <tr className="text-slate-500 font-medium border-b border-slate-200">
                       <th className="py-4 px-4 text-left">Fecha</th>
                       <th className="py-4 px-4 text-left">Marca</th>
                       <th className="py-4 px-4 text-left">Unidades</th>
@@ -853,20 +867,6 @@ export default function DashboardLayout() {
                       </tr>
                     ))}
                   </tbody>
-                  {fechasData.length > 0 && (
-                    <tfoot>
-                      <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold text-slate-800">
-                        <td className="py-4 px-4 text-left" colSpan={2}>Subtotal {filtroMarcaFecha !== "TODAS" ? `— ${filtroMarcaFecha}` : ""}</td>
-                        <td className="py-4 px-4 text-left">{fmtNum(subtotalFechaCalculado.uni)}</td>
-                        <td className="py-4 px-4 text-left">{fmtNum(subtotalFechaCalculado.pick)}</td>
-                        <td className="py-4 px-4 text-left">{fmtNum(subtotalFechaCalculado.sep)}</td>
-                        <td className="py-4 px-4 text-left text-orange-600">{fmtNum(subtotalFechaCalculado.pendPick)}</td>
-                        <td className="py-4 px-4 text-left text-red-600">{fmtNum(subtotalFechaCalculado.pendSep)}</td>
-                        <td className="py-4 px-4 text-left">{fmtPct(subtotalFechaCalculado.eficPick)}</td>
-                        <td className="py-4 px-4 text-left">{fmtPct(subtotalFechaCalculado.eficSep)}</td>
-                      </tr>
-                    </tfoot>
-                  )}
                 </table>
               </div>
             </div>
