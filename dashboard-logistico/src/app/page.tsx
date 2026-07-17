@@ -41,6 +41,7 @@ interface FechaResumen {
   fecha: string;
   marca: string;
   canal: string;
+  grupo: string;
   uni: number;
   pick: number;
   sep: number;
@@ -305,6 +306,7 @@ export default function DashboardLayout() {
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>("");
   const [filtroMarcaFecha, setFiltroMarcaFecha] = useState<string>("TODAS");
   const [filtroCanalFecha, setFiltroCanalFecha] = useState<string>("TODAS");
+  const [filtroGrupoFecha, setFiltroGrupoFecha] = useState<string>("TODAS");
 
   useEffect(() => {
     let cancelado = false;
@@ -344,6 +346,7 @@ export default function DashboardLayout() {
   // =========================================================================
   interface PedidoResumen {
     pedido: string;
+    grupo: string;
     codigoTienda: string;
     cliente: string;
     nombrePedido: string;
@@ -366,6 +369,7 @@ export default function DashboardLayout() {
   const [busquedaPedidos, setBusquedaPedidos] = useState("");
   const [filtroMarcaPedidos, setFiltroMarcaPedidos] = useState("TODAS");
   const [filtroCanalPedidos, setFiltroCanalPedidos] = useState("TODAS");
+  const [filtroGrupoPedidos, setFiltroGrupoPedidos] = useState("TODAS");
   const [rangoFechaPedidos, setRangoFechaPedidos] = useState<7 | 14 | 30>(7);
 
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
@@ -454,14 +458,17 @@ export default function DashboardLayout() {
 
   const marcasDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.marca))).sort();
   const canalesDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.canal))).sort();
+  const gruposDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.grupo))).sort();
 
   const busquedaNormalizada = busquedaPedidos.trim().toLowerCase();
 
-  const filasFiltradasPedidos = (pedidosData?.filas ?? []).filter((f) => {
+  // Filtrado a nivel (pedido, grupo) -- todavía sin consolidar.
+  const filasCrudasPedidos = (pedidosData?.filas ?? []).filter((f) => {
     const enRango = f.fecha !== "SIN FECHA" && f.fecha >= limitePedidosISO && f.fecha <= hoyPedidosISO;
     if (!enRango) return false;
     if (filtroMarcaPedidos !== "TODAS" && f.marca !== filtroMarcaPedidos) return false;
     if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
+    if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
     if (busquedaNormalizada) {
       const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
       const matchCodigo = f.codigoTienda.toLowerCase().includes(busquedaNormalizada);
@@ -469,6 +476,28 @@ export default function DashboardLayout() {
     }
     return true;
   });
+
+  // Consolidamos por pedido: el filtro de grupo ya se aplicó arriba, así que
+  // acá solo sumamos lo que haya quedado (si es "Todos los grupos", suma
+  // todas las líneas del pedido; si es un grupo puntual, solo esa porción).
+  const consolidadoPorPedido = new Map<string, PedidoResumen>();
+  for (const f of filasCrudasPedidos) {
+    const existente = consolidadoPorPedido.get(f.pedido);
+    if (!existente) {
+      consolidadoPorPedido.set(f.pedido, { ...f });
+    } else {
+      existente.uni += f.uni;
+      existente.pick += f.pick;
+      existente.sep += f.sep;
+    }
+  }
+  const filasFiltradasPedidos = Array.from(consolidadoPorPedido.values()).map((f) => ({
+    ...f,
+    pendPick: f.uni - f.pick,
+    pendSep: f.uni - f.sep,
+    eficPick: f.uni > 0 ? (f.pick / f.uni) * 100 : 0,
+    eficSep: f.uni > 0 ? (f.sep / f.uni) * 100 : 0,
+  }));
 
   const subtotalPedidos = filasFiltradasPedidos.reduce(
     (acc, f) => ({ uni: acc.uni + f.uni, pick: acc.pick + f.pick, sep: acc.sep + f.sep }),
@@ -551,18 +580,22 @@ export default function DashboardLayout() {
       ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA")
       : [];
 
-  // Lista de marcas y canales disponibles para los filtros (únicas, ordenadas)
+  // Lista de marcas, canales y grupos disponibles para los filtros (únicas, ordenadas)
   const marcasDisponiblesFecha = Array.from(
     new Set((fechaData?.filas ?? []).map((f) => f.marca))
   ).sort();
   const canalesDisponiblesFecha = Array.from(
     new Set((fechaData?.filas ?? []).map((f) => f.canal))
   ).sort();
+  const gruposDisponiblesFecha = Array.from(
+    new Set((fechaData?.filas ?? []).map((f) => f.grupo))
+  ).sort();
 
   const filasFiltradas = [...filasConFecha, ...filasSinFecha].filter(
     (f) =>
       (filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha) &&
-      (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha)
+      (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha) &&
+      (filtroGrupoFecha === "TODAS" || f.grupo === filtroGrupoFecha)
   );
 
   // Consolidamos por (fecha, marca): el canal se usa solo para filtrar,
@@ -1151,12 +1184,24 @@ export default function DashboardLayout() {
                   ))}
                 </select>
 
+                <select
+                  value={filtroGrupoFecha}
+                  onChange={(e) => setFiltroGrupoFecha(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los grupos</option>
+                  {gruposDisponiblesFecha.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+
                 <button
                   onClick={() => {
                     setRangoFecha(7);
                     setFechaSeleccionada("");
                     setFiltroMarcaFecha("TODAS");
                     setFiltroCanalFecha("TODAS");
+                    setFiltroGrupoFecha("TODAS");
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
@@ -1184,6 +1229,7 @@ export default function DashboardLayout() {
                           Subtotal
                           {filtroMarcaFecha !== "TODAS" ? ` — ${filtroMarcaFecha}` : " — Todas las marcas"}
                           {filtroCanalFecha !== "TODAS" ? ` — ${filtroCanalFecha}` : ""}
+                          {filtroGrupoFecha !== "TODAS" ? ` — ${filtroGrupoFecha}` : ""}
                         </td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.uni)}</td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.pick)}</td>
@@ -1274,6 +1320,17 @@ export default function DashboardLayout() {
                   ))}
                 </select>
 
+                <select
+                  value={filtroGrupoPedidos}
+                  onChange={(e) => setFiltroGrupoPedidos(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los grupos</option>
+                  {gruposDisponiblesPedidos.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+
                 <button
                   onClick={exportarPedidosAExcel}
                   disabled={filasFiltradasPedidos.length === 0}
@@ -1317,6 +1374,7 @@ export default function DashboardLayout() {
                     setRangoFechaPedidos(7);
                     setFiltroMarcaPedidos("TODAS");
                     setFiltroCanalPedidos("TODAS");
+                    setFiltroGrupoPedidos("TODAS");
                     setBusquedaPedidos("");
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"

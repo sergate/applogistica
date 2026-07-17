@@ -32,28 +32,17 @@ export async function GET() {
     const rows = await fetchAllGrupoPedidos();
     const contables = rows.filter(esContable);
 
-    // Todos los números (unidades, pickeadas, separadas) salen de grupo_pedidos,
-    // agregados por pedido (un pedido tiene varias líneas, una por "grupo").
-    const porPedido = new Map<
-      string,
-      { fecha: string; marca: string; nombrePedido: string; uni: number; pick: number; sep: number }
-    >();
-
+    // Fecha, marca y nombre de pedido son consistentes dentro de un mismo
+    // pedido (todas sus líneas comparten esos valores).
+    const metaPorPedido = new Map<string, { fecha: string; marca: string; nombrePedido: string }>();
     for (const r of contables) {
-      if (!porPedido.has(r.pedido)) {
-        porPedido.set(r.pedido, {
+      if (!metaPorPedido.has(r.pedido)) {
+        metaPorPedido.set(r.pedido, {
           fecha: soloFecha(r.fecha_creacion),
           marca: (r.seller || "").trim() || "SIN SELLER",
           nombrePedido: r.nombre_pedido || "",
-          uni: 0,
-          pick: 0,
-          sep: 0,
         });
       }
-      const acc = porPedido.get(r.pedido)!;
-      acc.uni += num(r.uni);
-      acc.pick += num(r.uni_pick);
-      acc.sep += num(r.uni_sep);
     }
 
     // tiendas_destino + clientes se usan SOLO para resolver código de tienda,
@@ -63,24 +52,46 @@ export async function GET() {
       fetchClientesInfo(),
     ]);
 
-    const filas = Array.from(porPedido.entries()).map(([pedido, acc]) => {
-      const { codigoTienda, nombre, canal } = resolverTiendaCliente(pedido, tiendasPorPedido, clientesInfo);
+    // Agregamos por (pedido, grupo) -- mantenemos "grupo" para poder filtrar
+    // por él en el frontend sin perder precisión (la lista se sigue mostrando
+    // consolidada por pedido, pero el filtro de grupo actúa sobre este detalle).
+    const porPedidoGrupo = new Map<
+      string,
+      { pedido: string; grupo: string; uni: number; pick: number; sep: number }
+    >();
+
+    for (const r of contables) {
+      const grupoNombre = (r.grupo || "").trim() || "SIN GRUPO";
+      const key = `${r.pedido}__${grupoNombre}`;
+      if (!porPedidoGrupo.has(key)) {
+        porPedidoGrupo.set(key, { pedido: r.pedido, grupo: grupoNombre, uni: 0, pick: 0, sep: 0 });
+      }
+      const acc = porPedidoGrupo.get(key)!;
+      acc.uni += num(r.uni);
+      acc.pick += num(r.uni_pick);
+      acc.sep += num(r.uni_sep);
+    }
+
+    const filas = Array.from(porPedidoGrupo.values()).map((g) => {
+      const meta = metaPorPedido.get(g.pedido)!;
+      const { codigoTienda, nombre, canal } = resolverTiendaCliente(g.pedido, tiendasPorPedido, clientesInfo);
 
       return {
-        pedido,
+        pedido: g.pedido,
+        grupo: g.grupo,
         codigoTienda,
         cliente: nombre,
-        nombrePedido: acc.nombrePedido,
-        marca: acc.marca,
+        nombrePedido: meta.nombrePedido,
+        marca: meta.marca,
         canal,
-        fecha: acc.fecha,
-        uni: acc.uni,
-        pick: acc.pick,
-        sep: acc.sep,
-        pendPick: acc.uni - acc.pick,
-        pendSep: acc.uni - acc.sep,
-        eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
-        eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
+        fecha: meta.fecha,
+        uni: g.uni,
+        pick: g.pick,
+        sep: g.sep,
+        pendPick: g.uni - g.pick,
+        pendSep: g.uni - g.sep,
+        eficPick: g.uni > 0 ? (g.pick / g.uni) * 100 : 0,
+        eficSep: g.uni > 0 ? (g.sep / g.uni) * 100 : 0,
       };
     });
 

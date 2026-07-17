@@ -32,27 +32,16 @@ export async function GET() {
     const rows = await fetchAllGrupoPedidos();
     const contables = rows.filter(esContable);
 
-    // El canal se resuelve a nivel PEDIDO (no a nivel línea/grupo), así que
-    // primero agregamos fecha/marca/unidades por pedido.
-    const porPedido = new Map<
-      string,
-      { fecha: string; marca: string; uni: number; pick: number; sep: number }
-    >();
-
+    // Fecha y marca son consistentes dentro de un mismo pedido (todas sus
+    // líneas comparten esos valores), así que armamos un mapa auxiliar.
+    const metaPorPedido = new Map<string, { fecha: string; marca: string }>();
     for (const r of contables) {
-      if (!porPedido.has(r.pedido)) {
-        porPedido.set(r.pedido, {
+      if (!metaPorPedido.has(r.pedido)) {
+        metaPorPedido.set(r.pedido, {
           fecha: soloFecha(r.fecha_creacion),
           marca: (r.seller || "").trim() || "SIN SELLER",
-          uni: 0,
-          pick: 0,
-          sep: 0,
         });
       }
-      const acc = porPedido.get(r.pedido)!;
-      acc.uni += num(r.uni);
-      acc.pick += num(r.uni_pick);
-      acc.sep += num(r.uni_sep);
     }
 
     const [tiendasPorPedido, canalPorCodigo] = await Promise.all([
@@ -60,23 +49,36 @@ export async function GET() {
       fetchCanalPorCodigoTienda(),
     ]);
 
-    // Agrupamos por (fecha, marca, canal)
+    // El canal se resuelve por pedido; lo cacheamos para no recalcularlo en
+    // cada línea (un pedido tiene varias líneas, una por grupo).
+    const canalPorPedido = new Map<string, string>();
+    const getCanal = (pedido: string) => {
+      if (!canalPorPedido.has(pedido)) {
+        canalPorPedido.set(pedido, resolverCanal(pedido, tiendasPorPedido, canalPorCodigo));
+      }
+      return canalPorPedido.get(pedido)!;
+    };
+
+    // Agrupamos por (fecha, marca, canal, grupo) -- mantenemos "grupo" para
+    // poder filtrar por él en el frontend sin perder precisión.
     const grupos = new Map<
       string,
-      { fecha: string; marca: string; canal: string; uni: number; pick: number; sep: number }
+      { fecha: string; marca: string; canal: string; grupo: string; uni: number; pick: number; sep: number }
     >();
 
-    for (const [pedido, acc] of porPedido) {
-      const canal = resolverCanal(pedido, tiendasPorPedido, canalPorCodigo);
-      const key = `${acc.fecha}__${acc.marca}__${canal}`;
+    for (const r of contables) {
+      const meta = metaPorPedido.get(r.pedido)!;
+      const canal = getCanal(r.pedido);
+      const grupoNombre = (r.grupo || "").trim() || "SIN GRUPO";
+      const key = `${meta.fecha}__${meta.marca}__${canal}__${grupoNombre}`;
 
       if (!grupos.has(key)) {
-        grupos.set(key, { fecha: acc.fecha, marca: acc.marca, canal, uni: 0, pick: 0, sep: 0 });
+        grupos.set(key, { fecha: meta.fecha, marca: meta.marca, canal, grupo: grupoNombre, uni: 0, pick: 0, sep: 0 });
       }
       const g = grupos.get(key)!;
-      g.uni += acc.uni;
-      g.pick += acc.pick;
-      g.sep += acc.sep;
+      g.uni += num(r.uni);
+      g.pick += num(r.uni_pick);
+      g.sep += num(r.uni_sep);
     }
 
     const filas = Array.from(grupos.values())
@@ -84,6 +86,7 @@ export async function GET() {
         fecha: g.fecha,
         marca: g.marca,
         canal: g.canal,
+        grupo: g.grupo,
         uni: g.uni,
         pick: g.pick,
         sep: g.sep,
