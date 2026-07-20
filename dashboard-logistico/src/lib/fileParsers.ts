@@ -24,6 +24,13 @@ const CAMPOS_NUMERICOS = new Set([
   "uni_sep",
   "uni_plan",
   "uni_pend",
+  "pedidas",
+  "distribuidas",
+  "pendientes",
+  "stock_sp",
+  "stock",
+  "reservado",
+  "stock_total",
 ]);
 
 function normalizeRecordKeys(

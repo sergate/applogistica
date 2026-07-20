@@ -69,6 +69,7 @@ interface ResumenData {
 export default function DashboardLayout() {
   // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
+  const [isCargaInicialOpen, setIsCargaInicialOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("Resumen");
 
   // Se incrementa después de un import exitoso, para que Resumen / Por fecha /
@@ -340,6 +341,151 @@ export default function DashboardLayout() {
   }, [dataVersion]);
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos"];
+
+  const cargaInicialSubSections = [
+    { key: "CI-Importar", label: "Importar Datos" },
+    { key: "CI-Resumen", label: "Resumen" },
+  ];
+
+  // =========================================================================
+  // ESTADO: STATUS CARGA INICIAL - IMPORTAR DATOS (varios .csv -> carga_inicial)
+  // =========================================================================
+  const [archivosCargaInicial, setArchivosCargaInicial] = useState<File[]>([]);
+  const [isProcesandoCargaInicial, setIsProcesandoCargaInicial] = useState(false);
+  const [progresoCargaInicial, setProgresoCargaInicial] = useState(0);
+  const [errorCargaInicial, setErrorCargaInicial] = useState<string | null>(null);
+  const [resultadoCargaInicial, setResultadoCargaInicial] = useState<{ filasInsertadas: number } | null>(null);
+
+  const inputCargaInicialRef = useRef<HTMLInputElement>(null);
+
+  const CI_CHUNK_SIZE = 500;
+
+  const handleProcesarCargaInicial = async () => {
+    if (archivosCargaInicial.length === 0) return;
+
+    setIsProcesandoCargaInicial(true);
+    setProgresoCargaInicial(0);
+    setErrorCargaInicial(null);
+    setResultadoCargaInicial(null);
+
+    try {
+      // Parseamos todos los archivos seleccionados (misma estructura, se combinan)
+      const listasDeRegistros = await Promise.all(
+        archivosCargaInicial.map((file) => parseCsvFile(file))
+      );
+      const records = listasDeRegistros.flat();
+
+      if (records.length === 0) {
+        throw new Error("Los archivos seleccionados no tienen filas de datos.");
+      }
+
+      const numerosUnicos = Array.from(
+        new Set(records.map((r) => r.numero).filter((v) => v !== null && v !== undefined && v !== ""))
+      );
+
+      const total = records.length;
+      let procesados = 0;
+      let filasInsertadasTotal = 0;
+
+      for (let i = 0; i < records.length; i += CI_CHUNK_SIZE) {
+        const batch = records.slice(i, i + CI_CHUNK_SIZE);
+        const res = await fetch("/api/carga-inicial/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch,
+            numerosAEliminar: i === 0 ? numerosUnicos : null,
+            esPrimerLote: i === 0,
+          }),
+        });
+
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Error al procesar el archivo.");
+        }
+
+        filasInsertadasTotal += data.filasInsertadas ?? batch.length;
+        procesados += batch.length;
+        setProgresoCargaInicial(Math.min(100, Math.round((procesados / total) * 100)));
+      }
+
+      setResultadoCargaInicial({ filasInsertadas: filasInsertadasTotal });
+      setProgresoCargaInicial(100);
+
+      // Refresh completo de la app para que todo se vea actualizado.
+      setTimeout(() => {
+        window.location.reload();
+      }, 800);
+    } catch (err) {
+      setErrorCargaInicial(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setIsProcesandoCargaInicial(false);
+    }
+  };
+
+  const resetCargaInicial = () => {
+    setArchivosCargaInicial([]);
+    setResultadoCargaInicial(null);
+    setErrorCargaInicial(null);
+    setProgresoCargaInicial(0);
+    if (inputCargaInicialRef.current) inputCargaInicialRef.current.value = "";
+  };
+
+  // =========================================================================
+  // ESTADO: STATUS CARGA INICIAL - RESUMEN
+  // =========================================================================
+  interface CargaInicialKpis {
+    pedidas: number;
+    distribuidas: number;
+    pendientes: number;
+    stockSp: number;
+    stock: number;
+    reservado: number;
+    stockTotal: number;
+  }
+  const [cargaInicialResumen, setCargaInicialResumen] = useState<{
+    kpis: CargaInicialKpis;
+    totalRegistros: number;
+    updatedAt: string | null;
+  } | null>(null);
+  const [cargaInicialResumenLoading, setCargaInicialResumenLoading] = useState(false);
+  const [cargaInicialResumenError, setCargaInicialResumenError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarResumenCargaInicial() {
+      setCargaInicialResumenLoading(true);
+      setCargaInicialResumenError(null);
+      try {
+        const res = await fetch("/api/carga-inicial/resumen", { cache: "no-store" });
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "No se pudo cargar el resumen.");
+        }
+        if (!cancelado) setCargaInicialResumen(data);
+      } catch (err) {
+        if (!cancelado) setCargaInicialResumenError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setCargaInicialResumenLoading(false);
+      }
+    }
+
+    cargarResumenCargaInicial();
+    return () => {
+      cancelado = true;
+    };
+  }, [dataVersion]);
 
   // =========================================================================
   // ESTADO: POR PEDIDOS (datos reales desde tiendas_destino vía /api/resumen/pedidos)
@@ -659,13 +805,6 @@ export default function DashboardLayout() {
     { id: '5', proceso: 'Despacho', unidades: "3.100", horas: 9.0, prod: 344, remanentes: 0 },
   ];
 
-  const cargaInicialData = [
-    { id: '1', plan: 'PLN-202610-01', ruta: 'Ruta Norte', meta: "500", preparado: "480", pendiente: "20", avance: 96.0 },
-    { id: '2', plan: 'PLN-202610-02', ruta: 'Ruta Sur', meta: "750", preparado: "300", pendiente: "450", avance: 40.0 },
-    { id: '3', plan: 'PLN-202610-03', ruta: 'AMBA', meta: "1.200", preparado: "1.150", pendiente: "50", avance: 95.8 },
-    { id: '4', plan: 'PLN-202610-04', ruta: 'Interior Centro', meta: "400", preparado: "150", pendiente: "250", avance: 37.5 },
-  ];
-
   const getThemeClasses = (theme: string) => {
     switch (theme) {
       case "blue": return { text: "text-sky-500", bgIcon: "bg-sky-100", textIcon: "text-sky-500", blob: "bg-sky-50" };
@@ -756,10 +895,25 @@ export default function DashboardLayout() {
             )}
           </div>
 
-          <button onClick={() => setActiveTab("Status carga inicial")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Status carga inicial" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
-            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-            Status carga inicial
-          </button>
+          <div className="pt-2">
+            <button onClick={() => setIsCargaInicialOpen(!isCargaInicialOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                Status carga inicial
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isCargaInicialOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isCargaInicialOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {cargaInicialSubSections.map((sub) => (
+                  <button key={sub.key} onClick={() => setActiveTab(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           <button onClick={() => setActiveTab("Status remanentes")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Status remanentes" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
             <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" /></svg>
@@ -780,7 +934,9 @@ export default function DashboardLayout() {
             {activeTab === "Resumen" ? "Status de Preparación - Resumen" : 
              activeTab === "Por fecha" ? "Status de Preparación - Por Fecha" :
              activeTab === "Por pedidos" ? "Status de Preparación - Por Pedidos" :
-             activeTab === "Importar datos" ? "Status de Preparación - Importar Datos" : activeTab}
+             activeTab === "Importar datos" ? "Status de Preparación - Importar Datos" :
+             activeTab === "CI-Importar" ? "Status Carga Inicial - Importar Datos" :
+             activeTab === "CI-Resumen" ? "Status Carga Inicial - Resumen" : activeTab}
           </h1>
         </header>
 
@@ -1538,41 +1694,136 @@ export default function DashboardLayout() {
             </div>
           )}
 
-          {/* ================= PESTAÑA: STATUS CARGA INICIAL ================= */}
-          {activeTab === "Status carga inicial" && (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
-              <h2 className="text-xl font-bold text-slate-800 mb-6">Planes de Picking y Rutas</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left whitespace-nowrap">
-                  <thead className="text-slate-500 font-medium border-b border-slate-200">
-                    <tr>
-                      <th className="py-4 px-4 text-left">Plan / Ruta</th>
-                      <th className="py-4 px-4 text-left">Carga Inicial (Meta)</th>
-                      <th className="py-4 px-4 text-left">Preparado</th>
-                      <th className="py-4 px-4 text-left">Pendiente</th>
-                      <th className="py-4 px-4 text-left">% Avance</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {cargaInicialData.map((row) => (
-                      <tr key={row.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="py-4 px-4 text-left">
-                          <div className="font-bold text-slate-900">{row.plan}</div>
-                          <div className="text-xs text-slate-500">{row.ruta}</div>
-                        </td>
-                        <td className="py-4 px-4 text-left text-slate-600">{row.meta}</td>
-                        <td className="py-4 px-4 text-left text-slate-600">{row.preparado}</td>
-                        <td className="py-4 px-4 text-left font-medium text-orange-500">{row.pendiente}</td>
-                        <td className="py-4 px-4 text-left">
-                          <span className={`px-2 py-1 rounded text-xs font-bold ${row.avance < 50 ? 'text-red-700 bg-red-100' : 'text-emerald-700 bg-emerald-100'}`}>
-                            {row.avance}%
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {/* ================= PESTAÑA: CARGA INICIAL - IMPORTAR DATOS ================= */}
+          {activeTab === "CI-Importar" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Carga Inicial</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Subí uno o varios archivos .csv (misma estructura). Al procesar, se busca cada
+                &quot;Numero&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
+              </p>
+
+              <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
+                <input
+                  ref={inputCargaInicialRef}
+                  type="file"
+                  accept=".csv"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => setArchivosCargaInicial(Array.from(e.target.files ?? []))}
+                />
+                <button
+                  onClick={() => inputCargaInicialRef.current?.click()}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                >
+                  Seleccionar archivos .csv
+                </button>
+                {archivosCargaInicial.length > 0 && (
+                  <p className="text-sm text-emerald-600 font-medium mt-3">
+                    {archivosCargaInicial.length === 1
+                      ? "1 archivo adjuntado"
+                      : `${archivosCargaInicial.length} archivos adjuntados`}
+                  </p>
+                )}
               </div>
+
+              <div className="flex items-center gap-3 mt-6">
+                <button
+                  onClick={handleProcesarCargaInicial}
+                  disabled={archivosCargaInicial.length === 0 || isProcesandoCargaInicial}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    archivosCargaInicial.length === 0 || isProcesandoCargaInicial
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {isProcesandoCargaInicial ? "Procesando..." : "Procesar"}
+                </button>
+                <button
+                  onClick={resetCargaInicial}
+                  disabled={isProcesandoCargaInicial}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Limpiar
+                </button>
+              </div>
+
+              {/* --- BARRA DE PROGRESO --- */}
+              {isProcesandoCargaInicial && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span>Procesando datos...</span>
+                    <span className="font-semibold text-slate-700">{progresoCargaInicial}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${progresoCargaInicial}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {errorCargaInicial && (
+                <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {errorCargaInicial}
+                </div>
+              )}
+
+              {resultadoCargaInicial && !errorCargaInicial && (
+                <div className="mt-6 p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                  {resultadoCargaInicial.filasInsertadas} filas cargadas correctamente. Actualizando la app...
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: CARGA INICIAL - RESUMEN ================= */}
+          {activeTab === "CI-Resumen" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-800">Resumen — Carga Inicial</h2>
+                {cargaInicialResumen && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(cargaInicialResumen.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              {cargaInicialResumenError && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el resumen: {cargaInicialResumenError}
+                </div>
+              )}
+              {cargaInicialResumenLoading && !cargaInicialResumen && (
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando datos de carga_inicial...
+                </div>
+              )}
+
+              {cargaInicialResumen && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[
+                    { label: "Pedidas", value: fmtNum(cargaInicialResumen.kpis.pedidas), color: "text-slate-800" },
+                    { label: "Distribuidas", value: fmtNum(cargaInicialResumen.kpis.distribuidas), color: "text-slate-800" },
+                    { label: "Pendientes", value: fmtNum(cargaInicialResumen.kpis.pendientes), color: "text-orange-600" },
+                    { label: "Stock SP", value: fmtNum(cargaInicialResumen.kpis.stockSp), color: "text-slate-800" },
+                    { label: "Stock", value: fmtNum(cargaInicialResumen.kpis.stock), color: "text-slate-800" },
+                    { label: "Reservado", value: fmtNum(cargaInicialResumen.kpis.reservado), color: "text-slate-800" },
+                    { label: "Stock Total", value: fmtNum(cargaInicialResumen.kpis.stockTotal), color: "text-slate-800" },
+                    { label: "Total Registros", value: fmtNum(cargaInicialResumen.totalRegistros), color: "text-blue-600" },
+                  ].map((card) => (
+                    <div key={card.label} className="bg-white border border-slate-200 rounded-xl p-5">
+                      <p className="text-xs font-medium text-slate-500 mb-2">{card.label}</p>
+                      <p className={`text-2xl font-bold ${card.color}`}>{card.value}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -1612,7 +1863,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
