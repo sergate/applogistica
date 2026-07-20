@@ -249,7 +249,6 @@ export default function DashboardLayout() {
   const [resumenLoading, setResumenLoading] = useState(false);
   const [resumenError, setResumenError] = useState<string | null>(null);
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
-  const [semanaResumen, setSemanaResumen] = useState<{ desde: string; hasta: string } | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -259,9 +258,7 @@ export default function DashboardLayout() {
       setResumenError(null);
       try {
         let url = "/api/resumen";
-        if (semanaResumen) {
-          url += `?desde=${semanaResumen.desde}&hasta=${semanaResumen.hasta}`;
-        } else if (rangoResumen) {
+        if (rangoResumen) {
           const d = new Date();
           d.setDate(d.getDate() - (rangoResumen - 1));
           url += `?desde=${d.toISOString().slice(0, 10)}`;
@@ -288,7 +285,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion, rangoResumen, semanaResumen]);
+  }, [dataVersion, rangoResumen]);
 
   // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
   const DOT_PALETTE = [
@@ -1130,12 +1127,9 @@ export default function DashboardLayout() {
                 ]).map((opcion) => (
                   <button
                     key={opcion.dias}
-                    onClick={() => {
-                      setRangoResumen(opcion.dias);
-                      setSemanaResumen(null);
-                    }}
+                    onClick={() => setRangoResumen(opcion.dias)}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      !semanaResumen && rangoResumen === opcion.dias
+                      rangoResumen === opcion.dias
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -1144,30 +1138,8 @@ export default function DashboardLayout() {
                   </button>
                 ))}
 
-                <select
-                  value={semanaResumen ? semanaResumen.desde : ""}
-                  onChange={(e) => {
-                    const semana = semanasConDatos.find((s) => s.desde === e.target.value);
-                    if (semana) {
-                      setSemanaResumen({ desde: semana.desde, hasta: semana.hasta });
-                      setRangoResumen(null);
-                    }
-                  }}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
-                    semanaResumen ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
-                  }`}
-                >
-                  <option value="">Semana del año...</option>
-                  {semanasConDatos.map((s) => (
-                    <option key={s.desde} value={s.desde}>{s.label}</option>
-                  ))}
-                </select>
-
                 <button
-                  onClick={() => {
-                    setRangoResumen(null);
-                    setSemanaResumen(null);
-                  }}
+                  onClick={() => setRangoResumen(null)}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Limpiar filtros
