@@ -69,12 +69,26 @@ interface ResumenData {
 export default function DashboardLayout() {
   // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
-  const [isCargaInicialOpen, setIsCargaInicialOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("Resumen");
+
+  // Si un import anterior guardó una pestaña de destino antes de recargar la
+  // página (window.location.reload), arrancamos ya posicionados ahí.
+  const [isCargaInicialOpen, setIsCargaInicialOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("CI-");
+  });
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window === "undefined") return "Resumen";
+    return sessionStorage.getItem("tabDespuesDeRefresh") || "Resumen";
+  });
 
   // Se incrementa después de un import exitoso, para que Resumen / Por fecha /
   // Por pedidos vuelvan a pedir los datos y se vean actualizados al instante.
   const [dataVersion, setDataVersion] = useState(0);
+
+  // Limpiamos la marca de "pestaña pendiente" una vez consumida en el estado inicial.
+  useEffect(() => {
+    sessionStorage.removeItem("tabDespuesDeRefresh");
+  }, []);
 
   // =========================================================================
   // ESTADO: IMPORTAR DATOS (Clientes / Grupos / Tiendas -> Supabase)
@@ -201,9 +215,11 @@ export default function DashboardLayout() {
       setResultadosImport(resultados);
 
       // Si al menos un archivo se procesó sin error, refrescamos los datos
-      // de Resumen / Por fecha / Por pedidos para que se vean al instante.
+      // de Resumen / Por fecha / Por pedidos para que se vean al instante,
+      // y llevamos la vista al Resumen de esta misma sección.
       if (resultados.some((r) => !r.error)) {
         setDataVersion((v) => v + 1);
+        setTimeout(() => setActiveTab("Resumen"), 800);
       }
     } catch (err) {
       setErrorImport(err instanceof Error ? err.message : "Error inesperado.");
@@ -417,7 +433,9 @@ export default function DashboardLayout() {
       setResultadoCargaInicial({ filasInsertadas: filasInsertadasTotal });
       setProgresoCargaInicial(100);
 
-      // Refresh completo de la app para que todo se vea actualizado.
+      // Refresh completo de la app para que todo se vea actualizado. Guardamos
+      // en sessionStorage a qué pestaña volver, ya que el reload reinicia el estado de React.
+      sessionStorage.setItem("tabDespuesDeRefresh", "CI-Resumen");
       setTimeout(() => {
         window.location.reload();
       }, 800);
