@@ -488,6 +488,143 @@ export default function DashboardLayout() {
   }, [dataVersion]);
 
   // =========================================================================
+  // ESTADO: STATUS CARGA INICIAL - TABLA DE DETALLE (marca/curva/grupo)
+  // =========================================================================
+  interface CIDetalleFila {
+    marca: string;
+    curva: string;
+    grupo: string;
+    temporada: string;
+    pedidas: number;
+    distribuidas: number;
+    aRepartir: number;
+  }
+
+  const [ciDetalleData, setCiDetalleData] = useState<{ filas: CIDetalleFila[]; updatedAt: string | null } | null>(null);
+  const [ciDetalleLoading, setCiDetalleLoading] = useState(false);
+  const [ciDetalleError, setCiDetalleError] = useState<string | null>(null);
+
+  const [filtroMarcaCI, setFiltroMarcaCI] = useState("TODAS");
+  const [filtroTemporadaCI, setFiltroTemporadaCI] = useState("TODAS");
+  const [filtroGrupoCI, setFiltroGrupoCI] = useState("TODAS");
+  const [marcaExpandidaCI, setMarcaExpandidaCI] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarDetalleCI() {
+      setCiDetalleLoading(true);
+      setCiDetalleError(null);
+      try {
+        const res = await fetch("/api/carga-inicial/detalle", { cache: "no-store" });
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "No se pudo cargar el detalle.");
+        }
+        if (!cancelado) setCiDetalleData({ filas: data.filas, updatedAt: data.updatedAt });
+      } catch (err) {
+        if (!cancelado) setCiDetalleError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setCiDetalleLoading(false);
+      }
+    }
+
+    cargarDetalleCI();
+    return () => {
+      cancelado = true;
+    };
+  }, [dataVersion]);
+
+  // Orden fijo de curvas: ADELANTO, 1RA ETAPA, SEGUNDA ETAPA, y las que sigan
+  // (desconocidas van al final, ordenadas alfabéticamente entre sí).
+  const ORDEN_CURVAS = ["ADELANTO", "1RA ETAPA", "SEGUNDA ETAPA"];
+  const rankCurva = (curva: string) => {
+    const idx = ORDEN_CURVAS.indexOf(curva);
+    return idx === -1 ? 100 : idx;
+  };
+
+  const marcasDisponiblesCI = Array.from(new Set((ciDetalleData?.filas ?? []).map((f) => f.marca))).sort();
+  const temporadasDisponiblesCI = Array.from(new Set((ciDetalleData?.filas ?? []).map((f) => f.temporada))).sort();
+  const gruposDisponiblesCI = Array.from(new Set((ciDetalleData?.filas ?? []).map((f) => f.grupo))).sort();
+
+  const filasFiltradasCI = (ciDetalleData?.filas ?? []).filter(
+    (f) =>
+      (filtroMarcaCI === "TODAS" || f.marca === filtroMarcaCI) &&
+      (filtroTemporadaCI === "TODAS" || f.temporada === filtroTemporadaCI) &&
+      (filtroGrupoCI === "TODAS" || f.grupo === filtroGrupoCI)
+  );
+
+  // Consolidamos por (marca, curva) para la tabla principal
+  const consolidadoMarcaCurva = new Map<string, { marca: string; curva: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+  for (const f of filasFiltradasCI) {
+    const key = `${f.marca}__${f.curva}`;
+    if (!consolidadoMarcaCurva.has(key)) {
+      consolidadoMarcaCurva.set(key, { marca: f.marca, curva: f.curva, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+    }
+    const acc = consolidadoMarcaCurva.get(key)!;
+    acc.pedidas += f.pedidas;
+    acc.distribuidas += f.distribuidas;
+    acc.aRepartir += f.aRepartir;
+  }
+
+  // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
+  const totalPedidasPorMarca = new Map<string, number>();
+  for (const acc of consolidadoMarcaCurva.values()) {
+    totalPedidasPorMarca.set(acc.marca, (totalPedidasPorMarca.get(acc.marca) || 0) + acc.pedidas);
+  }
+
+  const filasTablaCI = Array.from(consolidadoMarcaCurva.values())
+    .map((acc) => ({
+      ...acc,
+      completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0,
+    }))
+    .sort((a, b) => {
+      const totalA = totalPedidasPorMarca.get(a.marca) || 0;
+      const totalB = totalPedidasPorMarca.get(b.marca) || 0;
+      if (a.marca !== b.marca) return totalB - totalA;
+      return rankCurva(a.curva) - rankCurva(b.curva);
+    });
+
+  // Subtotal general sobre los datos filtrados
+  const subtotalCI = filasFiltradasCI.reduce(
+    (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
+    { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+  );
+  const subtotalCICalculado = {
+    ...subtotalCI,
+    completitud: subtotalCI.pedidas > 0 ? (subtotalCI.distribuidas / subtotalCI.pedidas) * 100 : 0,
+  };
+
+  // Desglose por grupo de la marca expandida (se calcula sobre los mismos
+  // datos ya filtrados por temporada/grupo/marca)
+  const desgloseGrupoCI = (() => {
+    if (!marcaExpandidaCI) return [];
+    const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    for (const f of filasFiltradasCI) {
+      if (f.marca !== marcaExpandidaCI) continue;
+      if (!porGrupo.has(f.grupo)) {
+        porGrupo.set(f.grupo, { grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+      }
+      const acc = porGrupo.get(f.grupo)!;
+      acc.pedidas += f.pedidas;
+      acc.distribuidas += f.distribuidas;
+      acc.aRepartir += f.aRepartir;
+    }
+    return Array.from(porGrupo.values())
+      .map((acc) => ({ ...acc, completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0 }))
+      .sort((a, b) => b.pedidas - a.pedidas);
+  })();
+
+  const handleMarcaClickCI = (marca: string) => {
+    setMarcaExpandidaCI(marca === marcaExpandidaCI ? null : marca);
+  };
+
+  // =========================================================================
   // ESTADO: POR PEDIDOS (datos reales desde tiendas_destino vía /api/resumen/pedidos)
   // =========================================================================
   interface PedidoResumen {
@@ -1824,10 +1961,160 @@ export default function DashboardLayout() {
                   ))}
                 </div>
               )}
+
+              {/* --- TABLA DE DETALLE POR MARCA / CURVA --- */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Detalle por Marca / Curva</h2>
+                <p className="text-sm text-slate-500 mb-4">Hacé click en una marca para ver el desglose por grupo</p>
+
+                {/* FILTROS */}
+                <div className="flex items-center gap-3 mb-6 flex-wrap">
+                  <select
+                    value={filtroMarcaCI}
+                    onChange={(e) => setFiltroMarcaCI(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODAS">Todas las marcas</option>
+                    {marcasDisponiblesCI.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filtroTemporadaCI}
+                    onChange={(e) => setFiltroTemporadaCI(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODAS">Todas las temporadas</option>
+                    {temporadasDisponiblesCI.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filtroGrupoCI}
+                    onChange={(e) => setFiltroGrupoCI(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODAS">Todos los grupos</option>
+                    {gruposDisponiblesCI.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      setFiltroMarcaCI("TODAS");
+                      setFiltroTemporadaCI("TODAS");
+                      setFiltroGrupoCI("TODAS");
+                    }}
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+
+                {ciDetalleError && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    Error al cargar el detalle: {ciDetalleError}
+                  </div>
+                )}
+                {ciDetalleLoading && !ciDetalleData && (
+                  <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                    Cargando datos de carga_inicial...
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead>
+                      {filasTablaCI.length > 0 && (
+                        <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                          <td className="py-3 px-4 text-left" colSpan={2}>
+                            Subtotal
+                            {filtroMarcaCI !== "TODAS" ? ` — ${filtroMarcaCI}` : " — Todas las marcas"}
+                            {filtroTemporadaCI !== "TODAS" ? ` — ${filtroTemporadaCI}` : ""}
+                            {filtroGrupoCI !== "TODAS" ? ` — ${filtroGrupoCI}` : ""}
+                          </td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalCICalculado.pedidas)}</td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalCICalculado.distribuidas)}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalCICalculado.aRepartir)}</td>
+                          <td className="py-3 px-4 text-left">{fmtPct(subtotalCICalculado.completitud)}</td>
+                        </tr>
+                      )}
+                      <tr className="text-slate-500 font-medium border-b border-slate-200">
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">Curva</th>
+                        <th className="py-3 px-4 text-left">Unidades Pedidas</th>
+                        <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
+                        <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                        <th className="py-3 px-4 text-left">% Completitud</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filasTablaCI.map((row, i) => {
+                        const esUltimaFilaDeLaMarca =
+                          i === filasTablaCI.length - 1 || filasTablaCI[i + 1].marca !== row.marca;
+                        return (
+                        <>
+                          <tr
+                            key={`${row.marca}-${row.curva}-${i}`}
+                            onClick={() => handleMarcaClickCI(row.marca)}
+                            className={`cursor-pointer transition-colors ${
+                              marcaExpandidaCI === row.marca ? "bg-slate-100" : "hover:bg-slate-50"
+                            }`}
+                          >
+                            <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{row.curva}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
+                            <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
+                          </tr>
+
+                          {marcaExpandidaCI === row.marca && esUltimaFilaDeLaMarca && (
+                              <tr>
+                                <td colSpan={6} className="bg-slate-50 px-4 py-4">
+                                  <p className="text-xs font-semibold text-slate-500 mb-2">
+                                    Desglose por grupo — {row.marca}
+                                  </p>
+                                  <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
+                                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                      <tr>
+                                        <th className="py-2 px-3 text-left">Grupo</th>
+                                        <th className="py-2 px-3 text-left">Unidades Pedidas</th>
+                                        <th className="py-2 px-3 text-left">Unidades Distribuidas</th>
+                                        <th className="py-2 px-3 text-left">Unidades a Repartir</th>
+                                        <th className="py-2 px-3 text-left">% Completitud</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {desgloseGrupoCI.map((g, gi) => (
+                                        <tr key={gi}>
+                                          <td className="py-2 px-3 text-left font-medium text-slate-700">{g.grupo}</td>
+                                          <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.pedidas)}</td>
+                                          <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.distribuidas)}</td>
+                                          <td className="py-2 px-3 text-left font-semibold text-orange-500">{fmtNum(g.aRepartir)}</td>
+                                          <td className="py-2 px-3 text-left text-slate-600">{fmtPct(g.completitud)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
+                            )}
+                        </>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {filasTablaCI.length === 0 && !ciDetalleLoading && (
+                    <p className="text-sm text-slate-400 text-center py-8">No hay datos que coincidan con los filtros aplicados.</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
-
-          {/* ================= PESTAÑA: STATUS REMANENTES ================= */}
           {activeTab === "Status remanentes" && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
               <h2 className="text-xl font-bold text-slate-800 mb-6">Remanentes por Proceso</h2>
