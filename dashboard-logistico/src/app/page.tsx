@@ -249,6 +249,7 @@ export default function DashboardLayout() {
   const [resumenLoading, setResumenLoading] = useState(false);
   const [resumenError, setResumenError] = useState<string | null>(null);
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
+  const [semanaResumen, setSemanaResumen] = useState<{ desde: string; hasta: string } | null>(null);
 
   useEffect(() => {
     let cancelado = false;
@@ -258,7 +259,9 @@ export default function DashboardLayout() {
       setResumenError(null);
       try {
         let url = "/api/resumen";
-        if (rangoResumen) {
+        if (semanaResumen) {
+          url += `?desde=${semanaResumen.desde}&hasta=${semanaResumen.hasta}`;
+        } else if (rangoResumen) {
           const d = new Date();
           d.setDate(d.getDate() - (rangoResumen - 1));
           url += `?desde=${d.toISOString().slice(0, 10)}`;
@@ -285,7 +288,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion, rangoResumen]);
+  }, [dataVersion, rangoResumen, semanaResumen]);
 
   // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
   const DOT_PALETTE = [
@@ -313,6 +316,48 @@ export default function DashboardLayout() {
         })
       : "—";
 
+  // Semanas del mes (domingo a sábado). La semana 1 es la que contiene el
+  // día 1 del mes, aunque empiece en el mes anterior; la última es la que
+  // contiene el último día, aunque termine en el mes siguiente.
+  interface SemanaDelMes {
+    numero: number;
+    desde: string; // ISO YYYY-MM-DD
+    hasta: string; // ISO YYYY-MM-DD
+    label: string;
+  }
+  const fmtFechaCorta = (d: Date) =>
+    d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+  const toISODate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+  // Semanas del CALENDARIO ANUAL LABORAL: numeradas de forma continua a lo
+  // largo de todo el año (no se reinician cada mes). La Semana 1 es la que
+  // contiene el 1° de enero (domingo a sábado).
+  function semanasDelAnio(year: number): SemanaDelMes[] {
+    const primerDia = new Date(year, 0, 1);
+    const ultimoDia = new Date(year, 11, 31);
+    const semanas: SemanaDelMes[] = [];
+    const cursor = new Date(primerDia);
+    cursor.setDate(cursor.getDate() - cursor.getDay()); // retrocede al domingo
+    let n = 1;
+    while (cursor <= ultimoDia) {
+      const desde = new Date(cursor);
+      const hasta = new Date(cursor);
+      hasta.setDate(hasta.getDate() + 6);
+      semanas.push({
+        numero: n,
+        desde: toISODate(desde),
+        hasta: toISODate(hasta),
+        label: `Semana ${n} • ${year} (${fmtFechaCorta(desde)} - ${fmtFechaCorta(hasta)})`,
+      });
+      cursor.setDate(cursor.getDate() + 7);
+      n++;
+    }
+    return semanas;
+  }
   // =========================================================================
   // ESTADO: POR FECHA (datos reales desde grupo_pedidos vía /api/resumen/por-fecha)
   // =========================================================================
@@ -321,6 +366,7 @@ export default function DashboardLayout() {
   const [fechaError, setFechaError] = useState<string | null>(null);
   const [rangoFecha, setRangoFecha] = useState<7 | 14 | 30>(7);
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>("");
+  const [semanaFecha, setSemanaFecha] = useState<{ desde: string; hasta: string } | null>(null);
   const [filtroMarcaFecha, setFiltroMarcaFecha] = useState<string>("TODAS");
   const [filtroCanalFecha, setFiltroCanalFecha] = useState<string>("TODAS");
   const [filtroGrupoFecha, setFiltroGrupoFecha] = useState<string>("TODAS");
@@ -355,6 +401,27 @@ export default function DashboardLayout() {
       cancelado = true;
     };
   }, [dataVersion]);
+
+  // Solo mostramos en el desplegable las semanas que efectivamente tienen
+  // datos cargados (según el rango real de fechas en grupo_pedidos), en vez
+  // de generar las ~52 semanas de todo el año.
+  const semanasConDatos = (() => {
+    const fechas = (fechaData?.filas ?? [])
+      .map((f) => f.fecha)
+      .filter((f) => f !== "SIN FECHA");
+    if (fechas.length === 0) return [] as SemanaDelMes[];
+
+    const minFecha = fechas.reduce((a, b) => (a < b ? a : b));
+    const maxFecha = fechas.reduce((a, b) => (a > b ? a : b));
+    const anioMin = Number(minFecha.slice(0, 4));
+    const anioMax = Number(maxFecha.slice(0, 4));
+
+    let todas: SemanaDelMes[] = [];
+    for (let y = anioMin; y <= anioMax; y++) {
+      todas = todas.concat(semanasDelAnio(y));
+    }
+    return todas.filter((s) => s.hasta >= minFecha && s.desde <= maxFecha);
+  })();
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos"];
 
@@ -623,6 +690,7 @@ export default function DashboardLayout() {
   const [filtroCanalPedidos, setFiltroCanalPedidos] = useState("TODAS");
   const [filtroGrupoPedidos, setFiltroGrupoPedidos] = useState("TODAS");
   const [rangoFechaPedidos, setRangoFechaPedidos] = useState<7 | 14 | 30>(7);
+  const [semanaPedidos, setSemanaPedidos] = useState<{ desde: string; hasta: string } | null>(null);
 
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
   interface GrupoDetalle {
@@ -716,7 +784,9 @@ export default function DashboardLayout() {
 
   // Filtrado a nivel (pedido, grupo) -- todavía sin consolidar.
   const filasCrudasPedidos = (pedidosData?.filas ?? []).filter((f) => {
-    const enRango = f.fecha !== "SIN FECHA" && f.fecha >= limitePedidosISO && f.fecha <= hoyPedidosISO;
+    const enRango = semanaPedidos
+      ? f.fecha !== "SIN FECHA" && f.fecha >= semanaPedidos.desde && f.fecha <= semanaPedidos.hasta
+      : f.fecha !== "SIN FECHA" && f.fecha >= limitePedidosISO && f.fecha <= hoyPedidosISO;
     if (!enRango) return false;
     if (filtroMarcaPedidos !== "TODAS" && f.marca !== filtroMarcaPedidos) return false;
     if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
@@ -822,13 +892,14 @@ export default function DashboardLayout() {
 
   const filasConFecha = (fechaData?.filas ?? []).filter((f) => {
     if (f.fecha === "SIN FECHA") return false;
+    if (semanaFecha) return f.fecha >= semanaFecha.desde && f.fecha <= semanaFecha.hasta;
     if (fechaSeleccionada) return f.fecha === fechaSeleccionada;
     return f.fecha >= limiteFechaISO && f.fecha <= hoyISO;
   });
   // Los pedidos sin fecha_creacion solo se muestran en el filtro "Último mes"
-  // (y no cuando se eligió una fecha puntual), siempre al final de la tabla.
+  // (y no cuando se eligió una fecha puntual o una semana), siempre al final de la tabla.
   const filasSinFecha =
-    rangoFecha === 30 && !fechaSeleccionada
+    rangoFecha === 30 && !fechaSeleccionada && !semanaFecha
       ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA")
       : [];
 
@@ -1059,9 +1130,12 @@ export default function DashboardLayout() {
                 ]).map((opcion) => (
                   <button
                     key={opcion.dias}
-                    onClick={() => setRangoResumen(opcion.dias)}
+                    onClick={() => {
+                      setRangoResumen(opcion.dias);
+                      setSemanaResumen(null);
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      rangoResumen === opcion.dias
+                      !semanaResumen && rangoResumen === opcion.dias
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -1069,8 +1143,31 @@ export default function DashboardLayout() {
                     {opcion.label}
                   </button>
                 ))}
+
+                <select
+                  value={semanaResumen ? semanaResumen.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatos.find((s) => s.desde === e.target.value);
+                    if (semana) {
+                      setSemanaResumen({ desde: semana.desde, hasta: semana.hasta });
+                      setRangoResumen(null);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaResumen ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatos.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
+
                 <button
-                  onClick={() => setRangoResumen(null)}
+                  onClick={() => {
+                    setRangoResumen(null);
+                    setSemanaResumen(null);
+                  }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Limpiar filtros
@@ -1402,9 +1499,10 @@ export default function DashboardLayout() {
                       onClick={() => {
                         setRangoFecha(opcion.dias);
                         setFechaSeleccionada("");
+                        setSemanaFecha(null);
                       }}
                       className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                        !fechaSeleccionada && rangoFecha === opcion.dias
+                        !fechaSeleccionada && !semanaFecha && rangoFecha === opcion.dias
                           ? "bg-blue-600 text-white"
                           : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                       }`}
@@ -1417,12 +1515,34 @@ export default function DashboardLayout() {
                 <input
                   type="date"
                   value={fechaSeleccionada}
-                  onChange={(e) => setFechaSeleccionada(e.target.value)}
+                  onChange={(e) => {
+                    setFechaSeleccionada(e.target.value);
+                    setSemanaFecha(null);
+                  }}
                   max={hoyISO}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
                     fechaSeleccionada ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
                   }`}
                 />
+
+                <select
+                  value={semanaFecha ? semanaFecha.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatos.find((s) => s.desde === e.target.value);
+                    if (semana) {
+                      setSemanaFecha({ desde: semana.desde, hasta: semana.hasta });
+                      setFechaSeleccionada("");
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaFecha ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatos.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
 
                 <select
                   value={filtroMarcaFecha}
@@ -1461,6 +1581,7 @@ export default function DashboardLayout() {
                   onClick={() => {
                     setRangoFecha(7);
                     setFechaSeleccionada("");
+                    setSemanaFecha(null);
                     setFiltroMarcaFecha("TODAS");
                     setFiltroCanalFecha("TODAS");
                     setFiltroGrupoFecha("TODAS");
@@ -1612,7 +1733,7 @@ export default function DashboardLayout() {
               </div>
 
               {/* BOTONES DE RANGO DE FECHA */}
-              <div className="flex items-center gap-2 mb-6">
+              <div className="flex items-center gap-2 mb-6 flex-wrap">
                 {([
                   { label: "Última semana", dias: 7 as const },
                   { label: "Últimos 14 días", dias: 14 as const },
@@ -1620,9 +1741,12 @@ export default function DashboardLayout() {
                 ]).map((opcion) => (
                   <button
                     key={opcion.dias}
-                    onClick={() => setRangoFechaPedidos(opcion.dias)}
+                    onClick={() => {
+                      setRangoFechaPedidos(opcion.dias);
+                      setSemanaPedidos(null);
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      rangoFechaPedidos === opcion.dias
+                      !semanaPedidos && rangoFechaPedidos === opcion.dias
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -1631,9 +1755,26 @@ export default function DashboardLayout() {
                   </button>
                 ))}
 
+                <select
+                  value={semanaPedidos ? semanaPedidos.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatos.find((s) => s.desde === e.target.value);
+                    if (semana) setSemanaPedidos({ desde: semana.desde, hasta: semana.hasta });
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaPedidos ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatos.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
+
                 <button
                   onClick={() => {
                     setRangoFechaPedidos(7);
+                    setSemanaPedidos(null);
                     setFiltroMarcaPedidos("TODAS");
                     setFiltroCanalPedidos("TODAS");
                     setFiltroGrupoPedidos("TODAS");
