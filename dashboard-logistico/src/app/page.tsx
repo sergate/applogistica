@@ -945,9 +945,21 @@ export default function DashboardLayout() {
         throw new Error("Los archivos seleccionados no tienen filas de datos.");
       }
 
-      const fechasUnicas = Array.from(
-        new Set(records.map((r) => r.fecha).filter((v) => v !== null && v !== undefined && v !== ""))
-      );
+      // Para cada fecha presente en el archivo, juntamos los tipos de proceso
+      // que trae -- solo esas combinaciones exactas (fecha + tipo_proceso) se
+      // reemplazan; el resto de los procesos de esa misma fecha no se tocan.
+      const tiposPorFecha = new Map<string, Set<string>>();
+      for (const r of records) {
+        const fecha = typeof r.fecha === "string" ? r.fecha : "";
+        const tipo = typeof r.tipo_proceso === "string" ? r.tipo_proceso : "";
+        if (!fecha || !tipo) continue;
+        if (!tiposPorFecha.has(fecha)) tiposPorFecha.set(fecha, new Set());
+        tiposPorFecha.get(fecha)!.add(tipo);
+      }
+      const combinacionesAEliminar = Array.from(tiposPorFecha.entries()).map(([fecha, tipos]) => ({
+        fecha,
+        tipos: Array.from(tipos),
+      }));
 
       const total = records.length;
       let procesados = 0;
@@ -960,7 +972,7 @@ export default function DashboardLayout() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             batch,
-            fechasAEliminar: i === 0 ? fechasUnicas : null,
+            combinacionesAEliminar: i === 0 ? combinacionesAEliminar : null,
             esPrimerLote: i === 0,
           }),
         });
