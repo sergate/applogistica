@@ -31,6 +31,7 @@ const CAMPOS_NUMERICOS = new Set([
   "stock",
   "reservado",
   "stock_total",
+  "cantidad",
 ]);
 
 function normalizeRecordKeys(
