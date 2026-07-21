@@ -1048,6 +1048,43 @@ export default function DashboardLayout() {
     };
   }, [dataVersion]);
 
+  // --- Filtros de la tabla de Productividad ---
+  const [rangoProductividad, setRangoProductividad] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
+  const [fechaSeleccionadaProductividad, setFechaSeleccionadaProductividad] = useState<string>("");
+  const [filtroTipoProcesoProductividad, setFiltroTipoProcesoProductividad] = useState<string>("TODOS");
+
+  const hoyProductividadISO = new Date().toISOString().slice(0, 10);
+
+  // Grupos de tipo de proceso para el filtro: elegir "ECOM" muestra tanto
+  // PICKING ECOM como FINISHING ECOM (sin sumarlos en una sola fila); ídem REPO.
+  const GRUPOS_PROCESO_PRODUCTIVIDAD: Record<string, string[]> = {
+    "CARGA INICIAL": ["CARGA INICIAL"],
+    GUARDADO: ["GUARDADO"],
+    REMANENTES: ["REMANENTES"],
+    ECOM: ["PICKING ECOM", "FINISHING ECOM"],
+    REPO: ["PICKING REPO", "FINISHING REPO"],
+  };
+
+  const filasProductividadFiltradas = (productividadResumen?.filas ?? []).filter((f) => {
+    // Filtro de fecha: fecha puntual tiene prioridad sobre el rango de días.
+    if (fechaSeleccionadaProductividad) {
+      if (f.fecha !== fechaSeleccionadaProductividad) return false;
+    } else if (rangoProductividad) {
+      const d = new Date();
+      d.setDate(d.getDate() - (rangoProductividad - 1));
+      const limiteISO = d.toISOString().slice(0, 10);
+      if (f.fecha < limiteISO || f.fecha > hoyProductividadISO) return false;
+    }
+
+    // Filtro de tipo de proceso (agrupado)
+    if (filtroTipoProcesoProductividad !== "TODOS") {
+      const permitidos = GRUPOS_PROCESO_PRODUCTIVIDAD[filtroTipoProcesoProductividad] || [];
+      if (!permitidos.includes(f.tipoProceso)) return false;
+    }
+
+    return true;
+  });
+
   // =========================================================================
   // ESTADO: POR PEDIDOS (datos reales desde tiendas_destino vía /api/resumen/pedidos)
   // =========================================================================
@@ -1428,11 +1465,6 @@ export default function DashboardLayout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          <button onClick={() => setActiveTab("Producción por proceso")} className={`w-full flex items-center px-3 py-2.5 rounded-lg transition-colors text-sm font-medium ${activeTab === "Producción por proceso" ? "bg-blue-600 text-white" : "hover:bg-slate-800 hover:text-white"}`}>
-            <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" /></svg>
-            Producción por proceso
-          </button>
-
           <div className="pt-2">
             <button onClick={() => setIsPrepOpen(!isPrepOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
               <div className="flex items-center">
@@ -1497,7 +1529,7 @@ export default function DashboardLayout() {
             <button onClick={() => setIsProductividadOpen(!isProductividadOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
               <div className="flex items-center">
                 <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                Productividad por proceso
+                Producción por proceso
               </div>
               <svg className={`w-4 h-4 transition-transform duration-200 ${isProductividadOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
             </button>
@@ -1527,8 +1559,8 @@ export default function DashboardLayout() {
              activeTab === "CI-Resumen" ? "Status Carga Inicial - Resumen" :
              activeTab === "REM-Importar" ? "Status Remanentes - Importar Datos" :
              activeTab === "REM-Resumen" ? "Status Remanentes - Resumen" :
-             activeTab === "PROD-Importar" ? "Productividad por Proceso - Importar Datos" :
-             activeTab === "PROD-Resumen" ? "Productividad por Proceso - Resumen" : activeTab}
+             activeTab === "PROD-Importar" ? "Producción por Proceso - Importar Datos" :
+             activeTab === "PROD-Resumen" ? "Producción por Proceso - Resumen" : activeTab}
           </h1>
         </header>
 
@@ -2302,7 +2334,7 @@ export default function DashboardLayout() {
           {/* ================= PESTAÑA: PRODUCTIVIDAD - IMPORTAR DATOS ================= */}
           {activeTab === "PROD-Importar" && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
-              <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Productividad</h2>
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Producción</h2>
               <p className="text-sm text-slate-500 mb-6">
                 Subí uno o varios archivos .xlsx (misma estructura). Al procesar, se busca cada
                 &quot;Fecha&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
@@ -2387,7 +2419,7 @@ export default function DashboardLayout() {
           {activeTab === "PROD-Resumen" && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
               <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
-                <h2 className="text-xl font-bold text-slate-800">Productividad por Proceso</h2>
+                <h2 className="text-xl font-bold text-slate-800">Producción por Proceso</h2>
                 {productividadResumen && (
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -2410,6 +2442,69 @@ export default function DashboardLayout() {
                 </div>
               )}
 
+              {/* FILTROS */}
+              <div className="flex items-center gap-3 mb-6 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {([
+                    { label: "Última semana", dias: 7 as const },
+                    { label: "Últimos 14 días", dias: 14 as const },
+                    { label: "Último mes", dias: 30 as const },
+                  ]).map((opcion) => (
+                    <button
+                      key={opcion.dias}
+                      onClick={() => {
+                        setRangoProductividad(opcion.dias);
+                        setFechaSeleccionadaProductividad("");
+                      }}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        !fechaSeleccionadaProductividad && rangoProductividad === opcion.dias
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {opcion.label}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="date"
+                  value={fechaSeleccionadaProductividad}
+                  onChange={(e) => {
+                    setFechaSeleccionadaProductividad(e.target.value);
+                    setRangoProductividad(null);
+                  }}
+                  max={hoyProductividadISO}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    fechaSeleccionadaProductividad ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                />
+
+                <select
+                  value={filtroTipoProcesoProductividad}
+                  onChange={(e) => setFiltroTipoProcesoProductividad(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los procesos</option>
+                  <option value="CARGA INICIAL">Carga Inicial</option>
+                  <option value="GUARDADO">Guardado</option>
+                  <option value="REMANENTES">Remanentes</option>
+                  <option value="ECOM">Ecom (Picking + Finishing)</option>
+                  <option value="REPO">Repo (Picking + Finishing)</option>
+                </select>
+
+                <button
+                  onClick={() => {
+                    setRangoProductividad(null);
+                    setFechaSeleccionadaProductividad("");
+                    setFiltroTipoProcesoProductividad("TODOS");
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-slate-500 font-medium border-b border-slate-200">
@@ -2420,7 +2515,7 @@ export default function DashboardLayout() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {(productividadResumen?.filas ?? []).map((row, i) => (
+                    {filasProductividadFiltradas.map((row, i) => (
                       <tr key={i} className="hover:bg-slate-50 transition-colors">
                         <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
                         <td className="py-4 px-4 text-left font-semibold text-slate-900">{row.tipoProceso}</td>
@@ -2429,8 +2524,8 @@ export default function DashboardLayout() {
                     ))}
                   </tbody>
                 </table>
-                {(productividadResumen?.filas ?? []).length === 0 && !productividadResumenLoading && (
-                  <p className="text-sm text-slate-400 text-center py-8">No hay datos cargados todavía.</p>
+                {filasProductividadFiltradas.length === 0 && !productividadResumenLoading && (
+                  <p className="text-sm text-slate-400 text-center py-8">No hay datos que coincidan con los filtros aplicados.</p>
                 )}
               </div>
             </div>
@@ -2940,7 +3035,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen", "Productividad por proceso", "Status carga inicial", "Status remanentes"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
