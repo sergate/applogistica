@@ -509,7 +509,10 @@ export default function DashboardLayout() {
     for (let y = anioMin; y <= anioMax; y++) {
       todas = todas.concat(semanasDelAnio(y));
     }
-    return todas.filter((s) => s.hasta >= minFecha && s.desde <= maxFecha);
+    // No alcanza con que la semana esté dentro del rango [minFecha, maxFecha]:
+    // puede haber semanas sin ningún dato en el medio (huecos). Solo mostramos
+    // las que tienen al menos una fecha real cargada dentro de su rango.
+    return todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
   })();
 
   const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos"];
