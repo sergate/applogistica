@@ -1979,6 +1979,7 @@ export default function DashboardLayout() {
     avanceIdeal: number;
     avanceReal: number;
     pctAvance: number;
+    unidadesPendientes: number;
   }
 
   const [avancePlanData, setAvancePlanData] = useState<{
@@ -3510,16 +3511,16 @@ export default function DashboardLayout() {
                       <p>¹ Días hábiles entre la fecha inicio y la fecha fin de plan.</p>
                       <p>² Para procesar a partir del inicio de plan / Días hábiles.</p>
                       <p>
-                        ³ Promedio de los datos de carga inicial del reporte de producción por proceso, entre la fecha inicio y la fecha
-                        fin de plan. Solo se promedia sobre los días hábiles del rango; los datos cargados en un día no hábil no se
-                        consideran para este cálculo.
+                        ³ Promedio de los datos de carga inicial del reporte de producción por proceso, desde la fecha inicio de plan
+                        hasta hoy (o hasta la fecha fin de plan si ya finalizó). Solo se promedia sobre los días hábiles ya
+                        transcurridos; los datos cargados en un día no hábil no se consideran para este cálculo.
                       </p>
                       <p>⁴ Diferencia entre la necesidad por día y la producción actual.</p>
                     </div>
                   </div>
 
                   {/* --- TARJETAS DE SEGUIMIENTO --- */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
                     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                       <p className="text-xs font-medium text-slate-400 mb-2">Fecha inicio / fin de plan</p>
                       <p className="text-lg font-bold text-slate-800">
@@ -3541,6 +3542,16 @@ export default function DashboardLayout() {
                     <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
                       <p className="text-xs font-medium text-slate-400 mb-2">% Avance real</p>
                       <p className="text-2xl font-bold text-blue-600">{fmtPct(avancePlanData.tarjetas.pctAvance)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Unidades pendientes</p>
+                      <p
+                        className={`text-2xl font-bold ${
+                          avancePlanData.tarjetas.unidadesPendientes > 0 ? "text-red-600" : "text-emerald-600"
+                        }`}
+                      >
+                        {fmtNum(avancePlanData.tarjetas.unidadesPendientes)}
+                      </p>
                     </div>
                   </div>
                 </>

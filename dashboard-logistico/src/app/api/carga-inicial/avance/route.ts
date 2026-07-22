@@ -69,18 +69,25 @@ export async function GET() {
     const diasHabilesPlan = diasHabilesEntre(plan.fecha_inicio, plan.fecha_fin, feriados);
     const necesidadPorDia = diasHabilesPlan > 0 ? paraProcesar / diasHabilesPlan : 0;
 
-    // Producción actual: promedio de la carga inicial registrada dentro del
-    // rango del plan, descartando lo que haya caído en un día no hábil.
+    const diasHabilesTranscurridos = diasHabilesEntre(plan.fecha_inicio, hoyISO, feriados);
+
+    // Producción actual: promedio de la carga inicial registrada en los días
+    // hábiles YA TRANSCURRIDOS del plan (inicio -> hoy, o inicio -> fin si el
+    // plan ya terminó). Si se promediara sobre todo el rango del plan
+    // (incluyendo días futuros sin datos todavía) el número queda diluido y
+    // deja de reflejar el ritmo real de producción.
+    const hastaParaProduccion = hoyISO < plan.fecha_fin ? hoyISO : plan.fecha_fin;
+    const diasHabilesTranscurridosParaProduccion = diasHabilesEntre(plan.fecha_inicio, hastaParaProduccion, feriados);
     let sumaProduccionHabil = 0;
     for (const [fecha, cantidad] of cargaInicialPorFecha) {
-      if (fecha < plan.fecha_inicio || fecha > plan.fecha_fin) continue;
+      if (fecha < plan.fecha_inicio || fecha > hastaParaProduccion) continue;
       if (!esDiaHabil(fecha, feriados)) continue;
       sumaProduccionHabil += cantidad;
     }
-    const produccionActual = diasHabilesPlan > 0 ? sumaProduccionHabil / diasHabilesPlan : 0;
+    const produccionActual =
+      diasHabilesTranscurridosParaProduccion > 0 ? sumaProduccionHabil / diasHabilesTranscurridosParaProduccion : 0;
     const diferencia = necesidadPorDia - produccionActual;
 
-    const diasHabilesTranscurridos = diasHabilesEntre(plan.fecha_inicio, hoyISO, feriados);
     const avanceIdeal = diasHabilesTranscurridos * necesidadPorDia;
 
     let avanceReal = 0;
@@ -89,6 +96,7 @@ export async function GET() {
       avanceReal += cantidad;
     }
     const pctAvance = totalAProcesar > 0 ? (avanceReal / totalAProcesar) * 100 : 0;
+    const unidadesPendientes = avanceIdeal - avanceReal;
 
     return NextResponse.json({
       success: true,
@@ -109,6 +117,7 @@ export async function GET() {
         avanceIdeal,
         avanceReal,
         pctAvance,
+        unidadesPendientes,
       },
     });
   } catch (err) {
