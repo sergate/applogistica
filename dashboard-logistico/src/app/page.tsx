@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { parseCsvFile, parseExcelFile } from "@/lib/fileParsers";
 import * as XLSX from "xlsx";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
+import { REGISTRO_SECCIONES } from "@/lib/secciones";
 
 type ImportKey = "clientes" | "grupos" | "tiendas";
 
@@ -1548,6 +1549,240 @@ export default function DashboardLayout() {
     }
   };
 
+  // =========================================================================
+  // ESTADO: ADMINISTRACIÓN - PERFILES
+  // =========================================================================
+  interface PerfilAdmin {
+    id: string;
+    nombre: string;
+    permisos: string[];
+  }
+  const [perfilesAdmin, setPerfilesAdmin] = useState<PerfilAdmin[]>([]);
+  const [perfilesAdminLoading, setPerfilesAdminLoading] = useState(false);
+  const [perfilesAdminError, setPerfilesAdminError] = useState<string | null>(null);
+  const [perfilSeleccionadoId, setPerfilSeleccionadoId] = useState<string | null>(null);
+  const [formPerfilNombre, setFormPerfilNombre] = useState("");
+  const [formPerfilPermisos, setFormPerfilPermisos] = useState<string[]>([]);
+  const [guardandoPerfil, setGuardandoPerfil] = useState(false);
+
+  const cargarPerfilesAdmin = async () => {
+    setPerfilesAdminLoading(true);
+    setPerfilesAdminError(null);
+    try {
+      const res = await fetch("/api/admin/perfiles", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los perfiles.");
+      setPerfilesAdmin(data.perfiles);
+    } catch (err) {
+      setPerfilesAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setPerfilesAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarPerfilesAdmin();
+  }, [dataVersion]);
+
+  const seleccionarPerfil = (perfil: PerfilAdmin | null) => {
+    if (perfil) {
+      setPerfilSeleccionadoId(perfil.id);
+      setFormPerfilNombre(perfil.nombre);
+      setFormPerfilPermisos(perfil.permisos);
+    } else {
+      setPerfilSeleccionadoId(null);
+      setFormPerfilNombre("");
+      setFormPerfilPermisos([]);
+    }
+  };
+
+  const toggleFormPermiso = (key: string) => {
+    setFormPerfilPermisos((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  };
+
+  const guardarPerfil = async () => {
+    if (!formPerfilNombre.trim()) return;
+    setGuardandoPerfil(true);
+    setPerfilesAdminError(null);
+    try {
+      const esNuevo = !perfilSeleccionadoId;
+      const res = await fetch(
+        esNuevo ? "/api/admin/perfiles" : `/api/admin/perfiles/${perfilSeleccionadoId}`,
+        {
+          method: esNuevo ? "POST" : "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ nombre: formPerfilNombre.trim(), permisos: formPerfilPermisos }),
+        }
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar el perfil.");
+      await cargarPerfilesAdmin();
+      seleccionarPerfil(null);
+    } catch (err) {
+      setPerfilesAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setGuardandoPerfil(false);
+    }
+  };
+
+  const eliminarPerfil = async (id: string) => {
+    if (!confirm("¿Seguro que querés eliminar este perfil?")) return;
+    setPerfilesAdminError(null);
+    try {
+      const res = await fetch(`/api/admin/perfiles/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo eliminar el perfil.");
+      await cargarPerfilesAdmin();
+      if (perfilSeleccionadoId === id) seleccionarPerfil(null);
+    } catch (err) {
+      setPerfilesAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  // =========================================================================
+  // ESTADO: ADMINISTRACIÓN - USUARIOS
+  // =========================================================================
+  interface UsuarioAdmin {
+    id: string;
+    email: string;
+    nombre: string | null;
+    perfilId: string | null;
+    perfilNombre: string;
+  }
+  const [usuariosAdmin, setUsuariosAdmin] = useState<UsuarioAdmin[]>([]);
+  const [usuariosAdminLoading, setUsuariosAdminLoading] = useState(false);
+  const [usuariosAdminError, setUsuariosAdminError] = useState<string | null>(null);
+
+  const [formUsuarioEmail, setFormUsuarioEmail] = useState("");
+  const [formUsuarioPassword, setFormUsuarioPassword] = useState("");
+  const [formUsuarioNombre, setFormUsuarioNombre] = useState("");
+  const [formUsuarioPerfilId, setFormUsuarioPerfilId] = useState("");
+  const [creandoUsuario, setCreandoUsuario] = useState(false);
+
+  const cargarUsuariosAdmin = async () => {
+    setUsuariosAdminLoading(true);
+    setUsuariosAdminError(null);
+    try {
+      const res = await fetch("/api/admin/usuarios", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los usuarios.");
+      setUsuariosAdmin(data.usuarios);
+    } catch (err) {
+      setUsuariosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setUsuariosAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarUsuariosAdmin();
+  }, [dataVersion]);
+
+  const crearUsuario = async () => {
+    if (!formUsuarioEmail.trim() || !formUsuarioPassword) return;
+    setCreandoUsuario(true);
+    setUsuariosAdminError(null);
+    try {
+      const res = await fetch("/api/admin/usuarios", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: formUsuarioEmail.trim(),
+          password: formUsuarioPassword,
+          nombre: formUsuarioNombre.trim(),
+          perfilId: formUsuarioPerfilId || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo crear el usuario.");
+      setFormUsuarioEmail("");
+      setFormUsuarioPassword("");
+      setFormUsuarioNombre("");
+      setFormUsuarioPerfilId("");
+      await cargarUsuariosAdmin();
+    } catch (err) {
+      setUsuariosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setCreandoUsuario(false);
+    }
+  };
+
+  const cambiarPerfilUsuario = async (usuarioId: string, perfilId: string) => {
+    setUsuariosAdminError(null);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${usuarioId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ perfilId: perfilId || null }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo actualizar el usuario.");
+      await cargarUsuariosAdmin();
+    } catch (err) {
+      setUsuariosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  const eliminarUsuario = async (id: string) => {
+    if (!confirm("¿Seguro que querés eliminar este usuario? Perderá el acceso a la app.")) return;
+    setUsuariosAdminError(null);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo eliminar el usuario.");
+      await cargarUsuariosAdmin();
+    } catch (err) {
+      setUsuariosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  // =========================================================================
+  // ESTADO: ADMINISTRACIÓN - ACCESOS
+  // =========================================================================
+  interface AccesoAdmin {
+    id: string;
+    subseccionKey: string;
+    fechaHora: string;
+    usuarioEmail: string;
+    usuarioNombre: string | null;
+  }
+  const [accesosAdmin, setAccesosAdmin] = useState<AccesoAdmin[]>([]);
+  const [accesosAdminLoading, setAccesosAdminLoading] = useState(false);
+  const [accesosAdminError, setAccesosAdminError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    async function cargarAccesos() {
+      setAccesosAdminLoading(true);
+      setAccesosAdminError(null);
+      try {
+        const res = await fetch("/api/admin/accesos", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el log de accesos.");
+        if (!cancelado) setAccesosAdmin(data.accesos);
+      } catch (err) {
+        if (!cancelado) setAccesosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setAccesosAdminLoading(false);
+      }
+    }
+    cargarAccesos();
+    return () => {
+      cancelado = true;
+    };
+  }, [dataVersion]);
+
+  // Etiqueta legible para una subseccion_key (ej: "CI-Resumen" -> "Status Carga Inicial / Resumen")
+  const labelSubseccion = (key: string) => {
+    for (const seccion of REGISTRO_SECCIONES) {
+      const sub = seccion.subsecciones.find((s) => s.key === key);
+      if (sub) return `${seccion.nombre} / ${sub.label}`;
+    }
+    return key;
+  };
+
   if (permisos === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f8f9fc]">
@@ -1743,7 +1978,10 @@ export default function DashboardLayout() {
              activeTab === "REM-Importar" ? "Status Remanentes - Importar Datos" :
              activeTab === "REM-Resumen" ? "Status Remanentes - Resumen" :
              activeTab === "PROD-Importar" ? "Producción por Proceso - Importar Datos" :
-             activeTab === "PROD-Resumen" ? "Producción por Proceso - Resumen" : activeTab}
+             activeTab === "PROD-Resumen" ? "Producción por Proceso - Resumen" :
+             activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
+             activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
+             activeTab === "ADMIN-Accesos" ? "Administración - Accesos" : activeTab}
           </h1>
         </header>
 
@@ -3217,8 +3455,240 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: ADMIN - PERFILES ================= */}
+          {activeTab === "ADMIN-Perfiles" && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-1 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Perfiles</h2>
+                {perfilesAdminError && (
+                  <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{perfilesAdminError}</div>
+                )}
+                {perfilesAdminLoading && perfilesAdmin.length === 0 && (
+                  <p className="text-sm text-slate-400">Cargando...</p>
+                )}
+                <div className="space-y-1 mb-4">
+                  {perfilesAdmin.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => seleccionarPerfil(p)}
+                      className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                        perfilSeleccionadoId === p.id ? "bg-blue-50 text-blue-700 font-semibold border border-blue-200" : "hover:bg-slate-50 text-slate-700"
+                      }`}
+                    >
+                      {p.nombre}
+                      <span className="block text-xs text-slate-400">{p.permisos.length} subsecciones habilitadas</span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => seleccionarPerfil(null)}
+                  className="w-full px-3 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                >
+                  + Nuevo perfil
+                </button>
+              </div>
+
+              <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">
+                  {perfilSeleccionadoId ? "Editar perfil" : "Nuevo perfil"}
+                </h2>
+
+                <label className="block text-sm font-medium text-slate-600 mb-1">Nombre</label>
+                <input
+                  type="text"
+                  value={formPerfilNombre}
+                  onChange={(e) => setFormPerfilNombre(e.target.value)}
+                  placeholder="Ej: Supervisor Logística"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm mb-6 focus:ring-2 focus:ring-blue-500 outline-none"
+                />
+
+                <p className="text-sm font-medium text-slate-600 mb-3">Secciones y subsecciones habilitadas</p>
+                <div className="space-y-4 mb-6">
+                  {REGISTRO_SECCIONES.map((seccion) => (
+                    <div key={seccion.nombre}>
+                      <p className="text-xs font-semibold text-slate-500 uppercase mb-2">{seccion.nombre}</p>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {seccion.subsecciones.map((sub) => (
+                          <label key={sub.key} className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={formPerfilPermisos.includes(sub.key)}
+                              onChange={() => toggleFormPermiso(sub.key)}
+                              className="rounded border-slate-300"
+                            />
+                            {sub.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={guardarPerfil}
+                    disabled={!formPerfilNombre.trim() || guardandoPerfil}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                      !formPerfilNombre.trim() || guardandoPerfil
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {guardandoPerfil ? "Guardando..." : perfilSeleccionadoId ? "Guardar cambios" : "Crear perfil"}
+                  </button>
+                  {perfilSeleccionadoId && (
+                    <button
+                      onClick={() => eliminarPerfil(perfilSeleccionadoId)}
+                      className="px-5 py-2.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      Eliminar perfil
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: ADMIN - USUARIOS ================= */}
+          {activeTab === "ADMIN-Usuarios" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Nuevo usuario</h2>
+                {usuariosAdminError && (
+                  <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{usuariosAdminError}</div>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                  <input
+                    type="email"
+                    placeholder="Email"
+                    value={formUsuarioEmail}
+                    onChange={(e) => setFormUsuarioEmail(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Contraseña"
+                    value={formUsuarioPassword}
+                    onChange={(e) => setFormUsuarioPassword(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Nombre (opcional)"
+                    value={formUsuarioNombre}
+                    onChange={(e) => setFormUsuarioNombre(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                  <select
+                    value={formUsuarioPerfilId}
+                    onChange={(e) => setFormUsuarioPerfilId(e.target.value)}
+                    className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  >
+                    <option value="">Sin perfil</option>
+                    {perfilesAdmin.map((p) => (
+                      <option key={p.id} value={p.id}>{p.nombre}</option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={crearUsuario}
+                  disabled={!formUsuarioEmail.trim() || !formUsuarioPassword || creandoUsuario}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    !formUsuarioEmail.trim() || !formUsuarioPassword || creandoUsuario
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {creandoUsuario ? "Creando..." : "Crear usuario"}
+                </button>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Usuarios</h2>
+                {usuariosAdminLoading && usuariosAdmin.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Email</th>
+                        <th className="py-3 px-4 text-left">Nombre</th>
+                        <th className="py-3 px-4 text-left">Perfil</th>
+                        <th className="py-3 px-4 text-left">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {usuariosAdmin.map((u) => (
+                        <tr key={u.id}>
+                          <td className="py-3 px-4 text-left text-slate-800 font-medium">{u.email}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{u.nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">
+                            <select
+                              value={u.perfilId || ""}
+                              onChange={(e) => cambiarPerfilUsuario(u.id, e.target.value)}
+                              className="px-2 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                            >
+                              <option value="">Sin perfil</option>
+                              {perfilesAdmin.map((p) => (
+                                <option key={p.id} value={p.id}>{p.nombre}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="py-3 px-4 text-left">
+                            <button
+                              onClick={() => eliminarUsuario(u.id)}
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {usuariosAdmin.length === 0 && !usuariosAdminLoading && (
+                    <p className="text-sm text-slate-400 text-center py-8">No hay usuarios cargados todavía.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: ADMIN - ACCESOS ================= */}
+          {activeTab === "ADMIN-Accesos" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-800 mb-4">Log de Accesos</h2>
+              {accesosAdminError && (
+                <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{accesosAdminError}</div>
+              )}
+              {accesosAdminLoading && accesosAdmin.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4 text-left">Fecha y hora</th>
+                      <th className="py-3 px-4 text-left">Usuario</th>
+                      <th className="py-3 px-4 text-left">Sección / Subsección</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {accesosAdmin.map((a) => (
+                      <tr key={a.id}>
+                        <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(a.fechaHora)}</td>
+                        <td className="py-3 px-4 text-left text-slate-800 font-medium">{a.usuarioNombre || a.usuarioEmail}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{labelSubseccion(a.subseccionKey)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {accesosAdmin.length === 0 && !accesosAdminLoading && (
+                  <p className="text-sm text-slate-400 text-center py-8">Todavía no hay accesos registrados.</p>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
