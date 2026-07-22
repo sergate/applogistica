@@ -1,16 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { supabaseEnvOk } from "@/lib/supabaseClient";
+import { fetchAllProductividad, mapearTipoProceso } from "@/lib/productividadHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-interface ProductividadRow {
-  fecha: string;
-  tipo_proceso: string | null;
-  cantidad: number | null;
-  created_at: string | null;
-}
 
 const num = (v: number | null): number => Number(v) || 0;
 
@@ -25,38 +19,6 @@ const ORDEN_PROCESOS = [
   "PICKING REPO",
   "FINISHING REPO",
 ];
-
-function mapearTipoProceso(tipo: string): string | null {
-  const t = tipo.trim().toUpperCase();
-  if (t === "INGRESO") return null; // se excluye por completo
-  if (t === "DEVOLUCIONES" || t === "SEPARACION") return "REMANENTES";
-  return t;
-}
-
-async function fetchAllProductividad(): Promise<ProductividadRow[]> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const all: ProductividadRow[] = [];
-
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("productividad")
-      .select("fecha, tipo_proceso, cantidad, created_at")
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error) {
-      throw new Error(`Supabase (productividad): ${error.message}`);
-    }
-    if (!data || data.length === 0) break;
-
-    all.push(...(data as ProductividadRow[]));
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return all;
-}
 
 export async function GET() {
   if (!supabaseEnvOk) {

@@ -28,6 +28,8 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     subsecciones: [
       { key: "CI-Importar", label: "Importar Datos" },
       { key: "CI-Resumen", label: "Resumen" },
+      { key: "CI-Avance", label: "Avance Plan" },
+      { key: "CI-Carga", label: "Carga Datos" },
     ],
   },
   {

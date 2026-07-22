@@ -397,6 +397,13 @@ export default function DashboardLayout() {
           minute: "2-digit",
         })
       : "—";
+  // Para fechas "solas" (YYYY-MM-DD, sin hora) -- evita el corrimiento de
+  // huso horario que da `new Date("YYYY-MM-DD")` al pasar por toLocaleString.
+  const fmtSoloFecha = (iso: string | null) => {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return `${d}/${m}/${y}`;
+  };
 
   // Semanas del mes (domingo a sábado). La semana 1 es la que contiene el
   // día 1 del mes, aunque empiece en el mes anterior; la última es la que
@@ -510,6 +517,8 @@ export default function DashboardLayout() {
   const cargaInicialSubSections = [
     { key: "CI-Importar", label: "Importar Datos" },
     { key: "CI-Resumen", label: "Resumen" },
+    { key: "CI-Avance", label: "Avance Plan" },
+    { key: "CI-Carga", label: "Carga Datos" },
   ];
 
   const remanentesSubSections = [
@@ -1854,6 +1863,156 @@ export default function DashboardLayout() {
     }
   };
 
+  // =========================================================================
+  // ESTADO: STATUS CARGA INICIAL - CARGA DATOS (plan vigente, un único registro)
+  // =========================================================================
+  interface PlanCargaInicial {
+    id: number;
+    fecha_inicio: string;
+    fecha_fin: string;
+    total_a_procesar: number;
+    proceso_inicial: number;
+    updated_at: string;
+  }
+
+  const [planCargaInicial, setPlanCargaInicial] = useState<PlanCargaInicial | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [editandoPlan, setEditandoPlan] = useState(false);
+  const [guardandoPlan, setGuardandoPlan] = useState(false);
+  const [formPlanFechaInicio, setFormPlanFechaInicio] = useState("");
+  const [formPlanFechaFin, setFormPlanFechaFin] = useState("");
+  const [formPlanTotalAProcesar, setFormPlanTotalAProcesar] = useState("");
+  const [formPlanProcesoInicial, setFormPlanProcesoInicial] = useState("");
+
+  const cargarPlanCargaInicial = async () => {
+    setPlanLoading(true);
+    setPlanError(null);
+    try {
+      const res = await fetch("/api/carga-inicial/plan", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el plan.");
+      setPlanCargaInicial(data.plan);
+      if (data.plan) {
+        setFormPlanFechaInicio(data.plan.fecha_inicio);
+        setFormPlanFechaFin(data.plan.fecha_fin);
+        setFormPlanTotalAProcesar(String(data.plan.total_a_procesar));
+        setFormPlanProcesoInicial(String(data.plan.proceso_inicial));
+      }
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setPlanLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarPlanCargaInicial();
+  }, [dataVersion]);
+
+  const planFormValido =
+    !!formPlanFechaInicio &&
+    !!formPlanFechaFin &&
+    formPlanFechaFin >= formPlanFechaInicio &&
+    formPlanTotalAProcesar !== "" &&
+    Number.isFinite(Number(formPlanTotalAProcesar)) &&
+    Number(formPlanTotalAProcesar) >= 0 &&
+    formPlanProcesoInicial !== "" &&
+    Number.isFinite(Number(formPlanProcesoInicial)) &&
+    Number(formPlanProcesoInicial) >= 0;
+
+  const guardarPlanCargaInicial = async () => {
+    if (!planFormValido) return;
+    setGuardandoPlan(true);
+    setPlanError(null);
+    try {
+      const res = await fetch("/api/carga-inicial/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fechaInicio: formPlanFechaInicio,
+          fechaFin: formPlanFechaFin,
+          totalAProcesar: Number(formPlanTotalAProcesar),
+          procesoInicial: Number(formPlanProcesoInicial),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar el plan.");
+      setPlanCargaInicial(data.plan);
+      setEditandoPlan(false);
+      setDataVersion((v) => v + 1); // refresca también el cálculo de Avance Plan
+    } catch (err) {
+      setPlanError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setGuardandoPlan(false);
+    }
+  };
+
+  const cancelarEdicionPlan = () => {
+    setEditandoPlan(false);
+    setPlanError(null);
+    if (planCargaInicial) {
+      setFormPlanFechaInicio(planCargaInicial.fecha_inicio);
+      setFormPlanFechaFin(planCargaInicial.fecha_fin);
+      setFormPlanTotalAProcesar(String(planCargaInicial.total_a_procesar));
+      setFormPlanProcesoInicial(String(planCargaInicial.proceso_inicial));
+    }
+  };
+
+  // =========================================================================
+  // ESTADO: STATUS CARGA INICIAL - AVANCE PLAN
+  // =========================================================================
+  interface AvancePlanTabla {
+    totalAProcesar: number;
+    procesoInicial: number;
+    paraProcesar: number;
+    diasHabilesPlan: number;
+    necesidadPorDia: number;
+    produccionActual: number;
+    diferencia: number;
+  }
+  interface AvancePlanTarjetas {
+    fechaInicio: string;
+    fechaFin: string;
+    diasHabilesTranscurridos: number;
+    avanceIdeal: number;
+    avanceReal: number;
+    pctAvance: number;
+  }
+
+  const [avancePlanData, setAvancePlanData] = useState<{
+    plan: PlanCargaInicial | null;
+    tabla: AvancePlanTabla | null;
+    tarjetas: AvancePlanTarjetas | null;
+  } | null>(null);
+  const [avancePlanLoading, setAvancePlanLoading] = useState(false);
+  const [avancePlanError, setAvancePlanError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarAvancePlan() {
+      setAvancePlanLoading(true);
+      setAvancePlanError(null);
+      try {
+        const res = await fetch("/api/carga-inicial/avance", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el avance del plan.");
+        if (!cancelado) setAvancePlanData({ plan: data.plan, tabla: data.tabla, tarjetas: data.tarjetas });
+      } catch (err) {
+        if (!cancelado) setAvancePlanError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setAvancePlanLoading(false);
+      }
+    }
+
+    cargarAvancePlan();
+    return () => {
+      cancelado = true;
+    };
+  }, [dataVersion]);
+
   if (permisos === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f8f9fc]">
@@ -2046,6 +2205,8 @@ export default function DashboardLayout() {
              activeTab === "Importar datos" ? "Status de Preparación - Importar Datos" :
              activeTab === "CI-Importar" ? "Status Carga Inicial - Importar Datos" :
              activeTab === "CI-Resumen" ? "Status Carga Inicial - Resumen" :
+             activeTab === "CI-Avance" ? "Status Carga Inicial - Avance Plan" :
+             activeTab === "CI-Carga" ? "Status Carga Inicial - Carga Datos" :
              activeTab === "REM-Importar" ? "Status Remanentes - Importar Datos" :
              activeTab === "REM-Resumen" ? "Status Remanentes - Resumen" :
              activeTab === "PROD-Importar" ? "Producción por Proceso - Importar Datos" :
@@ -3275,6 +3436,228 @@ export default function DashboardLayout() {
               </div>
             </div>
           )}
+
+          {/* ================= PESTAÑA: CARGA INICIAL - AVANCE PLAN ================= */}
+          {activeTab === "CI-Avance" && (
+            <div className="space-y-6">
+              {avancePlanError && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el avance del plan: {avancePlanError}
+                </div>
+              )}
+              {avancePlanLoading && !avancePlanData && (
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando avance del plan...
+                </div>
+              )}
+
+              {!avancePlanLoading && avancePlanData && !avancePlanData.plan && (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl text-center">
+                  <p className="text-sm text-slate-500 mb-4">
+                    Todavía no se cargó el plan de carga inicial. Cargalo en la subsección &quot;Carga Datos&quot; para ver el avance acá.
+                  </p>
+                  <button
+                    onClick={() => irA("CI-Carga")}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                  >
+                    Ir a Carga Datos
+                  </button>
+                </div>
+              )}
+
+              {avancePlanData?.plan && avancePlanData.tabla && avancePlanData.tarjetas && (
+                <>
+                  {/* --- TABLA: DETALLE DEL PLAN --- */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h2 className="text-lg font-bold text-slate-800 mb-4">Detalle del plan</h2>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left whitespace-nowrap">
+                        <thead>
+                          <tr className="text-slate-500 font-medium border-b border-slate-200">
+                            <th className="py-3 px-4 text-left">
+                              Total a procesar al {fmtSoloFecha(avancePlanData.tarjetas.fechaFin)}
+                            </th>
+                            <th className="py-3 px-4 text-left">Proceso inicial</th>
+                            <th className="py-3 px-4 text-left">
+                              Para procesar a partir del {fmtSoloFecha(avancePlanData.tarjetas.fechaInicio)}
+                            </th>
+                            <th className="py-3 px-4 text-left">Días hábiles¹</th>
+                            <th className="py-3 px-4 text-left">Necesidad por día²</th>
+                            <th className="py-3 px-4 text-left">Producción actual³</th>
+                            <th className="py-3 px-4 text-left">Diferencia⁴</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          <tr>
+                            <td className="py-3 px-4 text-left font-semibold text-slate-900">{fmtNum(avancePlanData.tabla.totalAProcesar)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanData.tabla.procesoInicial)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanData.tabla.paraProcesar)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanData.tabla.diasHabilesPlan)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanData.tabla.necesidadPorDia)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanData.tabla.produccionActual)}</td>
+                            <td
+                              className={`py-3 px-4 text-left font-semibold ${
+                                avancePlanData.tabla.diferencia >= 0 ? "text-emerald-600" : "text-red-600"
+                              }`}
+                            >
+                              {fmtNum(avancePlanData.tabla.diferencia)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-4 space-y-1 text-xs text-slate-400">
+                      <p>¹ Días hábiles entre la fecha inicio y la fecha fin de plan.</p>
+                      <p>² Para procesar a partir del inicio de plan / Días hábiles.</p>
+                      <p>
+                        ³ Promedio de los datos de carga inicial del reporte de producción por proceso, entre la fecha inicio y la fecha
+                        fin de plan. Solo se promedia sobre los días hábiles del rango; los datos cargados en un día no hábil no se
+                        consideran para este cálculo.
+                      </p>
+                      <p>⁴ Diferencia entre la necesidad por día y la producción actual.</p>
+                    </div>
+                  </div>
+
+                  {/* --- TARJETAS DE SEGUIMIENTO --- */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Fecha inicio / fin de plan</p>
+                      <p className="text-lg font-bold text-slate-800">
+                        {fmtSoloFecha(avancePlanData.tarjetas.fechaInicio)} — {fmtSoloFecha(avancePlanData.tarjetas.fechaFin)}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Días hábiles transcurridos</p>
+                      <p className="text-2xl font-bold text-slate-800">{fmtNum(avancePlanData.tarjetas.diasHabilesTranscurridos)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Avance ideal</p>
+                      <p className="text-2xl font-bold text-slate-800">{fmtNum(avancePlanData.tarjetas.avanceIdeal)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Avance real</p>
+                      <p className="text-2xl font-bold text-slate-800">{fmtNum(avancePlanData.tarjetas.avanceReal)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">% Avance real</p>
+                      <p className="text-2xl font-bold text-blue-600">{fmtPct(avancePlanData.tarjetas.pctAvance)}</p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: CARGA INICIAL - CARGA DATOS ================= */}
+          {activeTab === "CI-Carga" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Carga Datos — Plan de Carga Inicial</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Estos datos alimentan el cálculo de la subsección &quot;Avance Plan&quot;.
+              </p>
+
+              {planError && (
+                <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{planError}</div>
+              )}
+              {planLoading && !planCargaInicial && (
+                <div className="mb-6 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">Cargando plan...</div>
+              )}
+
+              {(!planCargaInicial || editandoPlan) ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Fecha inicio de plan</label>
+                    <input
+                      type="date"
+                      value={formPlanFechaInicio}
+                      onChange={(e) => setFormPlanFechaInicio(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Fecha fin de plan</label>
+                    <input
+                      type="date"
+                      value={formPlanFechaFin}
+                      onChange={(e) => setFormPlanFechaFin(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Total a procesar</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formPlanTotalAProcesar}
+                      onChange={(e) => setFormPlanTotalAProcesar(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Proceso inicial</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formPlanProcesoInicial}
+                      onChange={(e) => setFormPlanProcesoInicial(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={guardarPlanCargaInicial}
+                      disabled={!planFormValido || guardandoPlan}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                        !planFormValido || guardandoPlan
+                          ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      {guardandoPlan ? "Guardando..." : "Confirmar datos"}
+                    </button>
+                    {planCargaInicial && (
+                      <button
+                        onClick={cancelarEdicionPlan}
+                        disabled={guardandoPlan}
+                        className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Fecha inicio de plan</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtSoloFecha(planCargaInicial.fecha_inicio)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Fecha fin de plan</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtSoloFecha(planCargaInicial.fecha_fin)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Total a procesar</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtNum(planCargaInicial.total_a_procesar)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Proceso inicial</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtNum(planCargaInicial.proceso_inicial)}</dd>
+                    </div>
+                  </dl>
+                  <button
+                    onClick={() => setEditandoPlan(true)}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                  >
+                    Modificar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ================= PESTAÑA: REMANENTES - IMPORTAR DATOS ================= */}
           {activeTab === "REM-Importar" && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
@@ -3832,7 +4215,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
