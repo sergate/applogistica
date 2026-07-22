@@ -50,6 +50,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "ADMIN-Perfiles", label: "Perfiles" },
       { key: "ADMIN-Usuarios", label: "Usuarios" },
       { key: "ADMIN-Accesos", label: "Accesos" },
+      { key: "ADMIN-Feriados", label: "Feriados" },
     ],
   },
 ];
