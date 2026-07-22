@@ -24,3 +24,12 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* La app usa fondos claros fijos (tarjetas blancas, inputs blancos) sin
+   adaptarse a modo oscuro -- si el navegador/SO tiene tema oscuro, el texto
+   heredaba el "foreground" claro de arriba y quedaba ilegible sobre blanco. */
+input,
+textarea,
+select {
+  color: #1e293b; /* slate-800 */
+}
