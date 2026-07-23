@@ -2501,6 +2501,22 @@ export default function DashboardLayout() {
     (f) => !filtroLegajoEnCd.trim() || String(f.legajo).includes(filtroLegajoEnCd.trim())
   );
 
+  // Subtotal de "Por arribar al CD" sobre lo ya filtrado. Bultos/CBM son
+  // texto (a veces "A CONFIRMAR") -- solo se suman los valores numéricos.
+  const subtotalPendientesInbound = (() => {
+    let unidades = 0;
+    let bultos = 0;
+    let cbm = 0;
+    for (const f of pendientesFiltradosInbound) {
+      unidades += f.unidades ?? 0;
+      const b = Number(f.bultos);
+      if (Number.isFinite(b)) bultos += b;
+      const c = Number(f.cbm);
+      if (Number.isFinite(c)) cbm += c;
+    }
+    return { legajos: pendientesFiltradosInbound.length, unidades, bultos, cbm };
+  })();
+
   // --- Edición de ARRIBO CD + botón "marcar arribado" (solo INB-EditarArribo) ---
   const [editandoArriboLegajo, setEditandoArriboLegajo] = useState<number | null>(null);
   const [valorArriboEdit, setValorArriboEdit] = useState("");
@@ -4042,6 +4058,20 @@ export default function DashboardLayout() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead>
+                      {pendientesFiltradosInbound.length > 0 && (
+                        <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                          <td className="py-3 px-4 text-left" colSpan={3}>
+                            Subtotal — {subtotalPendientesInbound.legajos} legajo{subtotalPendientesInbound.legajos === 1 ? "" : "s"}
+                          </td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalPendientesInbound.unidades)}</td>
+                          <td className="py-3 px-4 text-left"></td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalPendientesInbound.bultos)}</td>
+                          <td className="py-3 px-4 text-left">
+                            {subtotalPendientesInbound.cbm.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </td>
+                          <td colSpan={tienePermiso("INB-EditarArribo") ? 5 : 4}></td>
+                        </tr>
+                      )}
                       <tr className="text-slate-500 font-medium border-b border-slate-200">
                         <th className="py-3 px-4 text-left">Legajo</th>
                         <th className="py-3 px-4 text-left">Etapa</th>
@@ -4149,19 +4179,19 @@ export default function DashboardLayout() {
                                     <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
                                       <thead className="text-slate-500 font-medium border-b border-slate-200">
                                         <tr>
-                                          <th className="py-2 px-3 text-left">Master</th>
-                                          <th className="py-2 px-3 text-left">Descripción</th>
                                           <th className="py-2 px-3 text-left">Marca</th>
                                           <th className="py-2 px-3 text-left">Grupo</th>
+                                          <th className="py-2 px-3 text-left">Master</th>
+                                          <th className="py-2 px-3 text-left">Descripción</th>
                                         </tr>
                                       </thead>
                                       <tbody className="divide-y divide-slate-100">
                                         {(productosPorLegajo.get(f.legajo) ?? []).map((p, pi) => (
                                           <tr key={pi}>
-                                            <td className="py-2 px-3 text-left font-medium text-slate-700">{p.master || "—"}</td>
-                                            <td className="py-2 px-3 text-left text-slate-600">{p.descripcion || "—"}</td>
-                                            <td className="py-2 px-3 text-left text-slate-600">{p.marca || "—"}</td>
+                                            <td className="py-2 px-3 text-left font-medium text-slate-700">{p.marca || "—"}</td>
                                             <td className="py-2 px-3 text-left text-slate-600">{p.grupo || "—"}</td>
+                                            <td className="py-2 px-3 text-left text-slate-600">{p.master || "—"}</td>
+                                            <td className="py-2 px-3 text-left text-slate-600">{p.descripcion || "—"}</td>
                                           </tr>
                                         ))}
                                       </tbody>
