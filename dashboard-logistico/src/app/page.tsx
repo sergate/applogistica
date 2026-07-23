@@ -2327,6 +2327,85 @@ export default function DashboardLayout() {
   };
 
   // =========================================================================
+  // ESTADO: INBOUND - IMPORTAR DETALLE DE PRODUCTOS (independiente del import
+  // principal -- mismo menú, archivo y tabla aparte, no se actualiza siempre)
+  // =========================================================================
+  const [archivosInboundProductos, setArchivosInboundProductos] = useState<File[]>([]);
+  const [isProcesandoInboundProductos, setIsProcesandoInboundProductos] = useState(false);
+  const [progresoInboundProductos, setProgresoInboundProductos] = useState(0);
+  const [errorInboundProductos, setErrorInboundProductos] = useState<string | null>(null);
+  const [resultadoInboundProductos, setResultadoInboundProductos] = useState<{ filasInsertadas: number } | null>(null);
+
+  const inputInboundProductosRef = useRef<HTMLInputElement>(null);
+  const INB_PROD_CHUNK_SIZE = 500;
+
+  const handleProcesarInboundProductos = async () => {
+    if (archivosInboundProductos.length === 0) return;
+
+    setIsProcesandoInboundProductos(true);
+    setProgresoInboundProductos(0);
+    setErrorInboundProductos(null);
+    setResultadoInboundProductos(null);
+
+    try {
+      const listasDeRegistros = await Promise.all(archivosInboundProductos.map((file) => parseExcelFile(file)));
+      const registros = listasDeRegistros.flat().filter((r) => Number.isFinite(Number(r.legajo)));
+
+      if (registros.length === 0) {
+        throw new Error("Los archivos seleccionados no tienen filas con LEGAJO válido.");
+      }
+
+      const legajosUnicos = Array.from(new Set(registros.map((r) => Number(r.legajo))));
+
+      const total = registros.length;
+      let procesados = 0;
+      let filasInsertadasTotal = 0;
+
+      for (let i = 0; i < registros.length; i += INB_PROD_CHUNK_SIZE) {
+        const batch = registros.slice(i, i + INB_PROD_CHUNK_SIZE);
+        const res = await fetch("/api/inbound/productos/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            batch,
+            legajosAEliminar: i === 0 ? legajosUnicos : null,
+            esPrimerLote: i === 0,
+          }),
+        });
+
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) {
+          throw new Error(data.error || "Error al procesar el archivo.");
+        }
+
+        filasInsertadasTotal += data.filasInsertadas ?? batch.length;
+        procesados += batch.length;
+        setProgresoInboundProductos(Math.min(100, Math.round((procesados / total) * 100)));
+      }
+
+      setResultadoInboundProductos({ filasInsertadas: filasInsertadasTotal });
+      setProgresoInboundProductos(100);
+    } catch (err) {
+      setErrorInboundProductos(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setIsProcesandoInboundProductos(false);
+    }
+  };
+
+  const resetInboundProductos = () => {
+    setArchivosInboundProductos([]);
+    setResultadoInboundProductos(null);
+    setErrorInboundProductos(null);
+    setProgresoInboundProductos(0);
+    if (inputInboundProductosRef.current) inputInboundProductosRef.current.value = "";
+  };
+
+  // =========================================================================
   // ESTADO: INBOUND - RESUMEN (por arribar al CD / en CD)
   // =========================================================================
   interface InboundFila {
@@ -2491,6 +2570,42 @@ export default function DashboardLayout() {
       });
     } catch (err) {
       setAccionInboundError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  // --- Detalle de productos por legajo (desplegable al hacer click en el LEGAJO) ---
+  interface InboundProductoFila {
+    master: string | null;
+    descripcion: string | null;
+    marca: string | null;
+    grupo: string | null;
+  }
+
+  const [legajoExpandidoInbound, setLegajoExpandidoInbound] = useState<number | null>(null);
+  const [productosPorLegajo, setProductosPorLegajo] = useState<Map<number, InboundProductoFila[]>>(new Map());
+  const [legajoProductosLoading, setLegajoProductosLoading] = useState<number | null>(null);
+  const [legajoProductosError, setLegajoProductosError] = useState<string | null>(null);
+
+  const toggleLegajoInbound = async (legajo: number) => {
+    if (legajoExpandidoInbound === legajo) {
+      setLegajoExpandidoInbound(null);
+      return;
+    }
+    setLegajoExpandidoInbound(legajo);
+    setLegajoProductosError(null);
+
+    if (productosPorLegajo.has(legajo)) return; // ya lo teníamos en caché
+
+    setLegajoProductosLoading(legajo);
+    try {
+      const res = await fetch(`/api/inbound/productos?legajo=${legajo}`, { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el detalle de productos.");
+      setProductosPorLegajo((prev) => new Map(prev).set(legajo, data.productos));
+    } catch (err) {
+      setLegajoProductosError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setLegajoProductosLoading(null);
     }
   };
 
@@ -3775,6 +3890,90 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: INBOUND - IMPORTAR DETALLE DE PRODUCTOS ================= */}
+          {activeTab === "INB-Importar" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl mt-6">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Detalle de Productos</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Importación independiente de la anterior -- no hace falta actualizarla siempre. Subí uno o varios
+                archivos .xlsx con columnas LEGAJO, ETAPA, MASTER, DESCRIPCION, MARCA, GRUPO. Al procesar, se busca
+                cada LEGAJO en la base y se reemplaza todo su detalle de productos por el del archivo nuevo.
+              </p>
+
+              <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
+                <input
+                  ref={inputInboundProductosRef}
+                  type="file"
+                  accept=".xlsx,.xls"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => setArchivosInboundProductos(Array.from(e.target.files ?? []))}
+                />
+                <button
+                  onClick={() => inputInboundProductosRef.current?.click()}
+                  className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                >
+                  Seleccionar archivos .xlsx
+                </button>
+                {archivosInboundProductos.length > 0 && (
+                  <p className="text-sm text-emerald-600 font-medium mt-3">
+                    {archivosInboundProductos.length === 1
+                      ? "1 archivo adjuntado"
+                      : `${archivosInboundProductos.length} archivos adjuntados`}
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 mt-6">
+                <button
+                  onClick={handleProcesarInboundProductos}
+                  disabled={archivosInboundProductos.length === 0 || isProcesandoInboundProductos}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    archivosInboundProductos.length === 0 || isProcesandoInboundProductos
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {isProcesandoInboundProductos ? "Procesando..." : "Procesar"}
+                </button>
+                <button
+                  onClick={resetInboundProductos}
+                  disabled={isProcesandoInboundProductos}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Limpiar
+                </button>
+              </div>
+
+              {isProcesandoInboundProductos && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span>Procesando datos...</span>
+                    <span className="font-semibold text-slate-700">{progresoInboundProductos}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${progresoInboundProductos}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {errorInboundProductos && (
+                <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {errorInboundProductos}
+                </div>
+              )}
+
+              {resultadoInboundProductos && !errorInboundProductos && (
+                <div className="mt-6 p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                  {resultadoInboundProductos.filasInsertadas} filas cargadas correctamente.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ================= PESTAÑA: INBOUND - RESUMEN ================= */}
           {activeTab === "INB-Resumen" && (
             <div className="space-y-6">
@@ -3860,8 +4059,17 @@ export default function DashboardLayout() {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {pendientesFiltradosInbound.map((f) => (
+                        <>
                         <tr key={f.legajo} className="hover:bg-slate-50">
-                          <td className="py-3 px-4 text-left font-bold text-slate-900">{f.legajo}</td>
+                          <td className="py-3 px-4 text-left">
+                            <button
+                              onClick={() => toggleLegajoInbound(f.legajo)}
+                              className="font-bold text-blue-600 hover:underline"
+                              title="Ver detalle de productos"
+                            >
+                              {f.legajo}
+                            </button>
+                          </td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.etapa || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(f.unidades ?? 0)}</td>
@@ -3918,6 +4126,53 @@ export default function DashboardLayout() {
                             </td>
                           )}
                         </tr>
+
+                        {legajoExpandidoInbound === f.legajo && (
+                          <tr>
+                            <td colSpan={tienePermiso("INB-EditarArribo") ? 12 : 11} className="bg-slate-50 px-4 py-4">
+                              <p className="text-xs font-semibold text-slate-500 mb-2">
+                                Detalle de productos — Legajo {f.legajo}
+                              </p>
+                              {legajoProductosError && (
+                                <p className="text-sm text-red-600 mb-2">{legajoProductosError}</p>
+                              )}
+                              {legajoProductosLoading === f.legajo && (
+                                <p className="text-sm text-slate-400">Cargando detalle...</p>
+                              )}
+                              {legajoProductosLoading !== f.legajo && (
+                                <>
+                                  {(productosPorLegajo.get(f.legajo) ?? []).length === 0 ? (
+                                    <p className="text-sm text-slate-400">
+                                      No hay detalle de productos importado para este legajo.
+                                    </p>
+                                  ) : (
+                                    <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
+                                      <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                        <tr>
+                                          <th className="py-2 px-3 text-left">Master</th>
+                                          <th className="py-2 px-3 text-left">Descripción</th>
+                                          <th className="py-2 px-3 text-left">Marca</th>
+                                          <th className="py-2 px-3 text-left">Grupo</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {(productosPorLegajo.get(f.legajo) ?? []).map((p, pi) => (
+                                          <tr key={pi}>
+                                            <td className="py-2 px-3 text-left font-medium text-slate-700">{p.master || "—"}</td>
+                                            <td className="py-2 px-3 text-left text-slate-600">{p.descripcion || "—"}</td>
+                                            <td className="py-2 px-3 text-left text-slate-600">{p.marca || "—"}</td>
+                                            <td className="py-2 px-3 text-left text-slate-600">{p.grupo || "—"}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                        </>
                       ))}
                     </tbody>
                   </table>
