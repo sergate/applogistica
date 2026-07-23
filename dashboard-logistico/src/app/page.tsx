@@ -3853,13 +3853,9 @@ export default function DashboardLayout() {
                     <thead>
                       <tr className="text-slate-500 font-medium border-b border-slate-200">
                         <th className="py-3 px-4 text-left">Legajo</th>
-                        <th className="py-3 px-4 text-left">Proveedor</th>
                         <th className="py-3 px-4 text-left">Etapa</th>
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">Unidades</th>
-                        <th className="py-3 px-4 text-left">FOB Total (USD)</th>
-                        <th className="py-3 px-4 text-left">Transporte</th>
-                        <th className="py-3 px-4 text-left">Tipo Carga</th>
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">CBM</th>
                         <th className="py-3 px-4 text-left">ETD</th>
@@ -3873,13 +3869,9 @@ export default function DashboardLayout() {
                       {pendientesFiltradosInbound.map((f) => (
                         <tr key={f.legajo} className="hover:bg-slate-50">
                           <td className="py-3 px-4 text-left font-bold text-slate-900">{f.legajo}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{f.proveedor || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.etapa || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(f.unidades ?? 0)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">${fmtNum(f.fob_total_usd ?? 0)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{f.transporte || "—"}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{f.tipo_carga || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.bultos || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.cbm || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtSoloFecha(f.etd)}</td>
@@ -3967,13 +3959,9 @@ export default function DashboardLayout() {
                     <thead>
                       <tr className="text-slate-500 font-medium border-b border-slate-200">
                         <th className="py-3 px-4 text-left">Legajo</th>
-                        <th className="py-3 px-4 text-left">Proveedor</th>
                         <th className="py-3 px-4 text-left">Etapa</th>
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">Unidades</th>
-                        <th className="py-3 px-4 text-left">FOB Total (USD)</th>
-                        <th className="py-3 px-4 text-left">Transporte</th>
-                        <th className="py-3 px-4 text-left">Tipo Carga</th>
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">CBM</th>
                         <th className="py-3 px-4 text-left">ETD</th>
@@ -3985,13 +3973,9 @@ export default function DashboardLayout() {
                       {enCdFiltradosInbound.map((f) => (
                         <tr key={f.legajo} className="hover:bg-slate-50">
                           <td className="py-3 px-4 text-left font-bold text-slate-900">{f.legajo}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{f.proveedor || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.etapa || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(f.unidades ?? 0)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">${fmtNum(f.fob_total_usd ?? 0)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{f.transporte || "—"}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{f.tipo_carga || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.bultos || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.cbm || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtSoloFecha(f.etd)}</td>
