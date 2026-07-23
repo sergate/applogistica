@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAdminPermission } from "@/lib/adminAuth";
 import { fetchAllProductividad, mapearTipoProceso } from "@/lib/productividadHelpers";
+import { fetchAllRemanentes, parseNumeroRemanente } from "@/lib/remanentesHelpers";
 import { diasHabilesEntre, esDiaHabil } from "@/lib/diasHabiles";
 
 export const runtime = "nodejs";
@@ -13,7 +14,6 @@ interface PlanRemanentesRow {
   id: number;
   fecha_inicio: string;
   fecha_fin: string;
-  total_a_procesar: number;
   proceso_inicial: number;
   target: number;
   updated_at: string;
@@ -36,7 +36,7 @@ export async function GET() {
   try {
     const { data: planData, error: planError } = await supabaseAdmin
       .from("plan_remanentes")
-      .select("id, fecha_inicio, fecha_fin, total_a_procesar, proceso_inicial, target, updated_at")
+      .select("id, fecha_inicio, fecha_fin, proceso_inicial, target, updated_at")
       .eq("id", 1)
       .maybeSingle();
 
@@ -63,12 +63,22 @@ export async function GET() {
 
     const hoyISO = new Date().toISOString().slice(0, 10);
 
-    const totalAProcesarInput = num(plan.total_a_procesar);
     const target = num(plan.target);
     const procesoInicial = num(plan.proceso_inicial);
-    // El "Total a procesar" de la tabla de detalle no es el valor cargado
-    // directo -- se pondera por el Target (%) cargado en Carga Datos.
-    const totalAProcesar = totalAProcesarInput * (target / 100);
+
+    // "Total a procesar" = suma de Unidades Target (Unidades Pedidas x Target%)
+    // de TODOS los grupos y marcas cargados en Remanentes -- mismo dato que
+    // se ve desglosado en la tabla de Resumen por Marca / Grupo. Sumar el
+    // target de cada fila da lo mismo que sumar todas las "pedidas" que
+    // cuentan como remanente y aplicar el target una sola vez al final.
+    const remanentesRows = await fetchAllRemanentes();
+    let totalPedidasRemanentes = 0;
+    for (const r of remanentesRows) {
+      const { esRemanente } = parseNumeroRemanente(r.numero);
+      if (!esRemanente) continue;
+      totalPedidasRemanentes += num(r.pedidas);
+    }
+    const totalAProcesar = totalPedidasRemanentes * (target / 100);
     const paraProcesar = totalAProcesar - procesoInicial;
 
     const diasHabilesPlan = diasHabilesEntre(plan.fecha_inicio, plan.fecha_fin, feriados);

@@ -2026,7 +2026,6 @@ export default function DashboardLayout() {
     id: number;
     fecha_inicio: string;
     fecha_fin: string;
-    total_a_procesar: number;
     proceso_inicial: number;
     target: number;
     updated_at: string;
@@ -2039,7 +2038,6 @@ export default function DashboardLayout() {
   const [guardandoPlanRemanentes, setGuardandoPlanRemanentes] = useState(false);
   const [formPlanRemFechaInicio, setFormPlanRemFechaInicio] = useState("");
   const [formPlanRemFechaFin, setFormPlanRemFechaFin] = useState("");
-  const [formPlanRemTotalAProcesar, setFormPlanRemTotalAProcesar] = useState("");
   const [formPlanRemProcesoInicial, setFormPlanRemProcesoInicial] = useState("");
   const [formPlanRemTarget, setFormPlanRemTarget] = useState("");
 
@@ -2054,7 +2052,6 @@ export default function DashboardLayout() {
       if (data.plan) {
         setFormPlanRemFechaInicio(data.plan.fecha_inicio);
         setFormPlanRemFechaFin(data.plan.fecha_fin);
-        setFormPlanRemTotalAProcesar(String(data.plan.total_a_procesar));
         setFormPlanRemProcesoInicial(String(data.plan.proceso_inicial));
         setFormPlanRemTarget(String(data.plan.target));
       }
@@ -2074,9 +2071,6 @@ export default function DashboardLayout() {
     !!formPlanRemFechaInicio &&
     !!formPlanRemFechaFin &&
     formPlanRemFechaFin >= formPlanRemFechaInicio &&
-    formPlanRemTotalAProcesar !== "" &&
-    Number.isFinite(Number(formPlanRemTotalAProcesar)) &&
-    Number(formPlanRemTotalAProcesar) >= 0 &&
     formPlanRemProcesoInicial !== "" &&
     Number.isFinite(Number(formPlanRemProcesoInicial)) &&
     Number(formPlanRemProcesoInicial) >= 0 &&
@@ -2095,7 +2089,6 @@ export default function DashboardLayout() {
         body: JSON.stringify({
           fechaInicio: formPlanRemFechaInicio,
           fechaFin: formPlanRemFechaFin,
-          totalAProcesar: Number(formPlanRemTotalAProcesar),
           procesoInicial: Number(formPlanRemProcesoInicial),
           target: Number(formPlanRemTarget),
         }),
@@ -2118,7 +2111,6 @@ export default function DashboardLayout() {
     if (planRemanentes) {
       setFormPlanRemFechaInicio(planRemanentes.fecha_inicio);
       setFormPlanRemFechaFin(planRemanentes.fecha_fin);
-      setFormPlanRemTotalAProcesar(String(planRemanentes.total_a_procesar));
       setFormPlanRemProcesoInicial(String(planRemanentes.proceso_inicial));
       setFormPlanRemTarget(String(planRemanentes.target));
     }
@@ -2158,6 +2150,64 @@ export default function DashboardLayout() {
       cancelado = true;
     };
   }, [dataVersion]);
+
+  // =========================================================================
+  // ESTADO: STATUS REMANENTES - RESUMEN POR MARCA / GRUPO (con Unidades Target)
+  // =========================================================================
+  const [filtroMarcaResumenREM, setFiltroMarcaResumenREM] = useState("TODAS");
+  const [filtroGrupoResumenREM, setFiltroGrupoResumenREM] = useState("TODAS");
+
+  const filasFiltradasResumenREM = (remDetalleData?.filas ?? []).filter(
+    (f) =>
+      (filtroMarcaResumenREM === "TODAS" || f.marca === filtroMarcaResumenREM) &&
+      (filtroGrupoResumenREM === "TODAS" || f.grupo === filtroGrupoResumenREM)
+  );
+
+  const targetPctREM = planRemanentes ? planRemanentes.target : 0;
+
+  // Consolidamos por (marca, grupo) sumando todos los archivos/temporadas
+  const consolidadoMarcaGrupoREM = new Map<
+    string,
+    { marca: string; grupo: string; pedidas: number; distribuidas: number; aRepartir: number }
+  >();
+  for (const f of filasFiltradasResumenREM) {
+    const key = `${f.marca}__${f.grupo}`;
+    if (!consolidadoMarcaGrupoREM.has(key)) {
+      consolidadoMarcaGrupoREM.set(key, { marca: f.marca, grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+    }
+    const acc = consolidadoMarcaGrupoREM.get(key)!;
+    acc.pedidas += f.pedidas;
+    acc.distribuidas += f.distribuidas;
+    acc.aRepartir += f.aRepartir;
+  }
+
+  const filasTablaResumenMarcaGrupoREM = Array.from(consolidadoMarcaGrupoREM.values())
+    .map((acc) => {
+      const unidadesTarget = acc.pedidas * (targetPctREM / 100);
+      return {
+        ...acc,
+        unidadesTarget,
+        pctAvance: unidadesTarget > 0 ? (acc.distribuidas / unidadesTarget) * 100 : 0,
+      };
+    })
+    .sort((a, b) => (a.marca !== b.marca ? a.marca.localeCompare(b.marca) : a.grupo.localeCompare(b.grupo)));
+
+  const subtotalResumenMarcaGrupoREM = filasFiltradasResumenREM.reduce(
+    (acc, f) => ({
+      pedidas: acc.pedidas + f.pedidas,
+      distribuidas: acc.distribuidas + f.distribuidas,
+      aRepartir: acc.aRepartir + f.aRepartir,
+    }),
+    { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+  );
+  const subtotalResumenMarcaGrupoREMCalculado = (() => {
+    const unidadesTarget = subtotalResumenMarcaGrupoREM.pedidas * (targetPctREM / 100);
+    return {
+      ...subtotalResumenMarcaGrupoREM,
+      unidadesTarget,
+      pctAvance: unidadesTarget > 0 ? (subtotalResumenMarcaGrupoREM.distribuidas / unidadesTarget) * 100 : 0,
+    };
+  })();
 
   if (permisos === null) {
     return (
@@ -4065,6 +4115,96 @@ export default function DashboardLayout() {
                   )}
                 </div>
               </div>
+
+              {/* --- TABLA DE RESUMEN POR MARCA / GRUPO (con Unidades Target) --- */}
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Resumen por Marca / Grupo</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Unidades Target = Unidades Pedidas x Target ({fmtPct(targetPctREM)}) cargado en Carga Datos.
+                  {!planRemanentes && " Todavía no hay un plan cargado -- el Target se toma como 0%."}
+                </p>
+
+                {/* FILTROS */}
+                <div className="flex items-center gap-3 mb-6 flex-wrap">
+                  <select
+                    value={filtroMarcaResumenREM}
+                    onChange={(e) => setFiltroMarcaResumenREM(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODAS">Todas las marcas</option>
+                    {marcasDisponiblesREM.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={filtroGrupoResumenREM}
+                    onChange={(e) => setFiltroGrupoResumenREM(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODAS">Todos los grupos</option>
+                    {gruposDisponiblesREM.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    onClick={() => {
+                      setFiltroMarcaResumenREM("TODAS");
+                      setFiltroGrupoResumenREM("TODAS");
+                    }}
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead>
+                      {filasTablaResumenMarcaGrupoREM.length > 0 && (
+                        <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                          <td className="py-3 px-4 text-left" colSpan={2}>
+                            Subtotal
+                            {filtroMarcaResumenREM !== "TODAS" ? ` — ${filtroMarcaResumenREM}` : " — Todas las marcas"}
+                            {filtroGrupoResumenREM !== "TODAS" ? ` — ${filtroGrupoResumenREM}` : ""}
+                          </td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.pedidas)}</td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.unidadesTarget)}</td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.distribuidas)}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.aRepartir)}</td>
+                          <td className="py-3 px-4 text-left">{fmtPct(subtotalResumenMarcaGrupoREMCalculado.pctAvance)}</td>
+                        </tr>
+                      )}
+                      <tr className="text-slate-500 font-medium border-b border-slate-200">
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">Grupo</th>
+                        <th className="py-3 px-4 text-left">Unidades Pedidas</th>
+                        <th className="py-3 px-4 text-left">Unidades Target</th>
+                        <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
+                        <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                        <th className="py-3 px-4 text-left">% Avance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filasTablaResumenMarcaGrupoREM.map((row, i) => (
+                        <tr key={`${row.marca}-${row.grupo}-${i}`} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.grupo}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.unidadesTarget)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.pctAvance)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {filasTablaResumenMarcaGrupoREM.length === 0 && !remDetalleLoading && (
+                    <p className="text-sm text-slate-400 text-center py-8">No hay datos que coincidan con los filtros aplicados.</p>
+                  )}
+                </div>
+              </div>
             </div>
           )}
 
@@ -4146,7 +4286,10 @@ export default function DashboardLayout() {
                         datos cargados en un día no hábil no se consideran para este cálculo.
                       </p>
                       <p>⁴ Diferencia entre la necesidad por día y la producción actual.</p>
-                      <p>El &quot;Total a procesar&quot; es el Total a procesar cargado en Carga Datos multiplicado por el Target (%).</p>
+                      <p>
+                        El &quot;Total a procesar&quot; es la suma de Unidades Target (Unidades Pedidas x Target %) de todas las
+                        marcas y grupos cargados en Remanentes (ver subsección Resumen).
+                      </p>
                     </div>
                   </div>
 
@@ -4195,7 +4338,9 @@ export default function DashboardLayout() {
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl">
               <h2 className="text-xl font-bold text-slate-800 mb-1">Carga Datos — Plan de Remanentes</h2>
               <p className="text-sm text-slate-500 mb-6">
-                Estos datos alimentan el cálculo de la subsección &quot;Avance Plan&quot;.
+                Estos datos alimentan el cálculo de la subsección &quot;Avance Plan&quot;. El &quot;Total a procesar&quot; ya no se
+                carga a mano: se calcula automáticamente en base a los datos de la subsección &quot;Resumen&quot; (Unidades Pedidas x
+                Target de cada marca y grupo).
               </p>
 
               {planRemanentesError && (
@@ -4222,16 +4367,6 @@ export default function DashboardLayout() {
                       type="date"
                       value={formPlanRemFechaFin}
                       onChange={(e) => setFormPlanRemFechaFin(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-slate-600 mb-1">Total a procesar</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={formPlanRemTotalAProcesar}
-                      onChange={(e) => setFormPlanRemTotalAProcesar(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                     />
                   </div>
@@ -4290,10 +4425,6 @@ export default function DashboardLayout() {
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                       <dt className="text-xs font-medium text-slate-400 mb-1">Fecha fin de plan</dt>
                       <dd className="text-sm font-semibold text-slate-800">{fmtSoloFecha(planRemanentes.fecha_fin)}</dd>
-                    </div>
-                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
-                      <dt className="text-xs font-medium text-slate-400 mb-1">Total a procesar</dt>
-                      <dd className="text-sm font-semibold text-slate-800">{fmtNum(planRemanentes.total_a_procesar)}</dd>
                     </div>
                     <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
                       <dt className="text-xs font-medium text-slate-400 mb-1">Target</dt>
