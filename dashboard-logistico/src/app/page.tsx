@@ -4115,96 +4115,6 @@ export default function DashboardLayout() {
                   )}
                 </div>
               </div>
-
-              {/* --- TABLA DE RESUMEN POR MARCA / GRUPO (con Unidades Target) --- */}
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-slate-800 mb-1">Resumen por Marca / Grupo</h2>
-                <p className="text-sm text-slate-500 mb-4">
-                  Unidades Target = Unidades Pedidas x Target ({fmtPct(targetPctREM)}) cargado en Carga Datos.
-                  {!planRemanentes && " Todavía no hay un plan cargado -- el Target se toma como 0%."}
-                </p>
-
-                {/* FILTROS */}
-                <div className="flex items-center gap-3 mb-6 flex-wrap">
-                  <select
-                    value={filtroMarcaResumenREM}
-                    onChange={(e) => setFiltroMarcaResumenREM(e.target.value)}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    <option value="TODAS">Todas las marcas</option>
-                    {marcasDisponiblesREM.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-
-                  <select
-                    value={filtroGrupoResumenREM}
-                    onChange={(e) => setFiltroGrupoResumenREM(e.target.value)}
-                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                  >
-                    <option value="TODAS">Todos los grupos</option>
-                    {gruposDisponiblesREM.map((g) => (
-                      <option key={g} value={g}>{g}</option>
-                    ))}
-                  </select>
-
-                  <button
-                    onClick={() => {
-                      setFiltroMarcaResumenREM("TODAS");
-                      setFiltroGrupoResumenREM("TODAS");
-                    }}
-                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                  >
-                    Limpiar filtros
-                  </button>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm text-left whitespace-nowrap">
-                    <thead>
-                      {filasTablaResumenMarcaGrupoREM.length > 0 && (
-                        <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                          <td className="py-3 px-4 text-left" colSpan={2}>
-                            Subtotal
-                            {filtroMarcaResumenREM !== "TODAS" ? ` — ${filtroMarcaResumenREM}` : " — Todas las marcas"}
-                            {filtroGrupoResumenREM !== "TODAS" ? ` — ${filtroGrupoResumenREM}` : ""}
-                          </td>
-                          <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.pedidas)}</td>
-                          <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.unidadesTarget)}</td>
-                          <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.distribuidas)}</td>
-                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.aRepartir)}</td>
-                          <td className="py-3 px-4 text-left">{fmtPct(subtotalResumenMarcaGrupoREMCalculado.pctAvance)}</td>
-                        </tr>
-                      )}
-                      <tr className="text-slate-500 font-medium border-b border-slate-200">
-                        <th className="py-3 px-4 text-left">Marca</th>
-                        <th className="py-3 px-4 text-left">Grupo</th>
-                        <th className="py-3 px-4 text-left">Unidades Pedidas</th>
-                        <th className="py-3 px-4 text-left">Unidades Target</th>
-                        <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
-                        <th className="py-3 px-4 text-left">Unidades a Repartir</th>
-                        <th className="py-3 px-4 text-left">% Avance</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filasTablaResumenMarcaGrupoREM.map((row, i) => (
-                        <tr key={`${row.marca}-${row.grupo}-${i}`} className="hover:bg-slate-50">
-                          <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{row.grupo}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.unidadesTarget)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
-                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.pctAvance)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {filasTablaResumenMarcaGrupoREM.length === 0 && !remDetalleLoading && (
-                    <p className="text-sm text-slate-400 text-center py-8">No hay datos que coincidan con los filtros aplicados.</p>
-                  )}
-                </div>
-              </div>
             </div>
           )}
 
@@ -4326,6 +4236,95 @@ export default function DashboardLayout() {
                       >
                         {fmtNum(avancePlanRemData.tarjetas.unidadesPendientes)}
                       </p>
+                    </div>
+                  </div>
+
+                  {/* --- TABLA DE RESUMEN POR MARCA / GRUPO (con Unidades Target) --- */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h2 className="text-lg font-bold text-slate-800 mb-1">Resumen por Marca / Grupo</h2>
+                    <p className="text-sm text-slate-500 mb-4">
+                      Unidades Target = Unidades Pedidas x Target ({fmtPct(targetPctREM)}) cargado en Carga Datos.
+                    </p>
+
+                    {/* FILTROS */}
+                    <div className="flex items-center gap-3 mb-6 flex-wrap">
+                      <select
+                        value={filtroMarcaResumenREM}
+                        onChange={(e) => setFiltroMarcaResumenREM(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      >
+                        <option value="TODAS">Todas las marcas</option>
+                        {marcasDisponiblesREM.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+
+                      <select
+                        value={filtroGrupoResumenREM}
+                        onChange={(e) => setFiltroGrupoResumenREM(e.target.value)}
+                        className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                      >
+                        <option value="TODAS">Todos los grupos</option>
+                        {gruposDisponiblesREM.map((g) => (
+                          <option key={g} value={g}>{g}</option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={() => {
+                          setFiltroMarcaResumenREM("TODAS");
+                          setFiltroGrupoResumenREM("TODAS");
+                        }}
+                        className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        Limpiar filtros
+                      </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left whitespace-nowrap">
+                        <thead>
+                          {filasTablaResumenMarcaGrupoREM.length > 0 && (
+                            <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                              <td className="py-3 px-4 text-left" colSpan={2}>
+                                Subtotal
+                                {filtroMarcaResumenREM !== "TODAS" ? ` — ${filtroMarcaResumenREM}` : " — Todas las marcas"}
+                                {filtroGrupoResumenREM !== "TODAS" ? ` — ${filtroGrupoResumenREM}` : ""}
+                              </td>
+                              <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.pedidas)}</td>
+                              <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.unidadesTarget)}</td>
+                              <td className="py-3 px-4 text-left">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.distribuidas)}</td>
+                              <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalResumenMarcaGrupoREMCalculado.aRepartir)}</td>
+                              <td className="py-3 px-4 text-left">{fmtPct(subtotalResumenMarcaGrupoREMCalculado.pctAvance)}</td>
+                            </tr>
+                          )}
+                          <tr className="text-slate-500 font-medium border-b border-slate-200">
+                            <th className="py-3 px-4 text-left">Marca</th>
+                            <th className="py-3 px-4 text-left">Grupo</th>
+                            <th className="py-3 px-4 text-left">Unidades Pedidas</th>
+                            <th className="py-3 px-4 text-left">Unidades Target</th>
+                            <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
+                            <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                            <th className="py-3 px-4 text-left">% Avance</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filasTablaResumenMarcaGrupoREM.map((row, i) => (
+                            <tr key={`${row.marca}-${row.grupo}-${i}`} className="hover:bg-slate-50">
+                              <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{row.grupo}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.unidadesTarget)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
+                              <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.pctAvance)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {filasTablaResumenMarcaGrupoREM.length === 0 && !remDetalleLoading && (
+                        <p className="text-sm text-slate-400 text-center py-8">No hay datos que coincidan con los filtros aplicados.</p>
+                      )}
                     </div>
                   </div>
                 </>
