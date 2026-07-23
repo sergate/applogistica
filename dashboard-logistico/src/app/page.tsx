@@ -3856,6 +3856,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Etapa</th>
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">Unidades</th>
+                        <th className="py-3 px-4 text-left">Tipo Carga</th>
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">CBM</th>
                         <th className="py-3 px-4 text-left">ETD</th>
@@ -3872,6 +3873,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left text-slate-600">{f.etapa || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(f.unidades ?? 0)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{f.tipo_carga || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.bultos || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.cbm || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtSoloFecha(f.etd)}</td>
@@ -3962,6 +3964,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Etapa</th>
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">Unidades</th>
+                        <th className="py-3 px-4 text-left">Tipo Carga</th>
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">CBM</th>
                         <th className="py-3 px-4 text-left">ETD</th>
@@ -3976,6 +3979,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left text-slate-600">{f.etapa || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(f.unidades ?? 0)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{f.tipo_carga || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.bultos || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{f.cbm || "—"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtSoloFecha(f.etd)}</td>
