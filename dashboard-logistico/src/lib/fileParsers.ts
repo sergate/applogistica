@@ -32,6 +32,9 @@ const CAMPOS_NUMERICOS = new Set([
   "reservado",
   "stock_total",
   "cantidad",
+  "legajo",
+  "unidades",
+  "fob_total_usd",
 ]);
 
 function normalizeRecordKeys(

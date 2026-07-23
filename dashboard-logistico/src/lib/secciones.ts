@@ -49,6 +49,14 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     ],
   },
   {
+    nombre: "Inbound",
+    subsecciones: [
+      { key: "INB-Importar", label: "Importar Datos" },
+      { key: "INB-Resumen", label: "Resumen" },
+      { key: "INB-EditarArribo", label: "Editar Arribo CD (en Resumen)" },
+    ],
+  },
+  {
     nombre: "Administración",
     subsecciones: [
       { key: "ADMIN-Perfiles", label: "Perfiles" },
