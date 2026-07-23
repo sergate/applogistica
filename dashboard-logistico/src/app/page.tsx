@@ -527,6 +527,8 @@ export default function DashboardLayout() {
   const remanentesSubSections = [
     { key: "REM-Importar", label: "Importar Datos" },
     { key: "REM-Resumen", label: "Resumen" },
+    { key: "REM-Avance", label: "Avance Plan" },
+    { key: "REM-Carga", label: "Carga Datos" },
   ];
 
   const productividadSubSections = [
@@ -2017,6 +2019,146 @@ export default function DashboardLayout() {
     };
   }, [dataVersion]);
 
+  // =========================================================================
+  // ESTADO: STATUS REMANENTES - CARGA DATOS (plan vigente, un único registro)
+  // =========================================================================
+  interface PlanRemanentes {
+    id: number;
+    fecha_inicio: string;
+    fecha_fin: string;
+    total_a_procesar: number;
+    proceso_inicial: number;
+    target: number;
+    updated_at: string;
+  }
+
+  const [planRemanentes, setPlanRemanentes] = useState<PlanRemanentes | null>(null);
+  const [planRemanentesLoading, setPlanRemanentesLoading] = useState(false);
+  const [planRemanentesError, setPlanRemanentesError] = useState<string | null>(null);
+  const [editandoPlanRemanentes, setEditandoPlanRemanentes] = useState(false);
+  const [guardandoPlanRemanentes, setGuardandoPlanRemanentes] = useState(false);
+  const [formPlanRemFechaInicio, setFormPlanRemFechaInicio] = useState("");
+  const [formPlanRemFechaFin, setFormPlanRemFechaFin] = useState("");
+  const [formPlanRemTotalAProcesar, setFormPlanRemTotalAProcesar] = useState("");
+  const [formPlanRemProcesoInicial, setFormPlanRemProcesoInicial] = useState("");
+  const [formPlanRemTarget, setFormPlanRemTarget] = useState("");
+
+  const cargarPlanRemanentes = async () => {
+    setPlanRemanentesLoading(true);
+    setPlanRemanentesError(null);
+    try {
+      const res = await fetch("/api/remanentes/plan", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el plan.");
+      setPlanRemanentes(data.plan);
+      if (data.plan) {
+        setFormPlanRemFechaInicio(data.plan.fecha_inicio);
+        setFormPlanRemFechaFin(data.plan.fecha_fin);
+        setFormPlanRemTotalAProcesar(String(data.plan.total_a_procesar));
+        setFormPlanRemProcesoInicial(String(data.plan.proceso_inicial));
+        setFormPlanRemTarget(String(data.plan.target));
+      }
+    } catch (err) {
+      setPlanRemanentesError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setPlanRemanentesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarPlanRemanentes();
+  }, [dataVersion]);
+
+  const planRemanentesFormValido =
+    !!formPlanRemFechaInicio &&
+    !!formPlanRemFechaFin &&
+    formPlanRemFechaFin >= formPlanRemFechaInicio &&
+    formPlanRemTotalAProcesar !== "" &&
+    Number.isFinite(Number(formPlanRemTotalAProcesar)) &&
+    Number(formPlanRemTotalAProcesar) >= 0 &&
+    formPlanRemProcesoInicial !== "" &&
+    Number.isFinite(Number(formPlanRemProcesoInicial)) &&
+    Number(formPlanRemProcesoInicial) >= 0 &&
+    formPlanRemTarget !== "" &&
+    Number.isFinite(Number(formPlanRemTarget)) &&
+    Number(formPlanRemTarget) >= 0;
+
+  const guardarPlanRemanentes = async () => {
+    if (!planRemanentesFormValido) return;
+    setGuardandoPlanRemanentes(true);
+    setPlanRemanentesError(null);
+    try {
+      const res = await fetch("/api/remanentes/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fechaInicio: formPlanRemFechaInicio,
+          fechaFin: formPlanRemFechaFin,
+          totalAProcesar: Number(formPlanRemTotalAProcesar),
+          procesoInicial: Number(formPlanRemProcesoInicial),
+          target: Number(formPlanRemTarget),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar el plan.");
+      setPlanRemanentes(data.plan);
+      setEditandoPlanRemanentes(false);
+      setDataVersion((v) => v + 1); // refresca también el cálculo de Avance Plan
+    } catch (err) {
+      setPlanRemanentesError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setGuardandoPlanRemanentes(false);
+    }
+  };
+
+  const cancelarEdicionPlanRemanentes = () => {
+    setEditandoPlanRemanentes(false);
+    setPlanRemanentesError(null);
+    if (planRemanentes) {
+      setFormPlanRemFechaInicio(planRemanentes.fecha_inicio);
+      setFormPlanRemFechaFin(planRemanentes.fecha_fin);
+      setFormPlanRemTotalAProcesar(String(planRemanentes.total_a_procesar));
+      setFormPlanRemProcesoInicial(String(planRemanentes.proceso_inicial));
+      setFormPlanRemTarget(String(planRemanentes.target));
+    }
+  };
+
+  // =========================================================================
+  // ESTADO: STATUS REMANENTES - AVANCE PLAN
+  // =========================================================================
+  const [avancePlanRemData, setAvancePlanRemData] = useState<{
+    plan: PlanRemanentes | null;
+    tabla: AvancePlanTabla | null;
+    tarjetas: AvancePlanTarjetas | null;
+  } | null>(null);
+  const [avancePlanRemLoading, setAvancePlanRemLoading] = useState(false);
+  const [avancePlanRemError, setAvancePlanRemError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function cargarAvancePlanRem() {
+      setAvancePlanRemLoading(true);
+      setAvancePlanRemError(null);
+      try {
+        const res = await fetch("/api/remanentes/avance", { cache: "no-store" });
+        const data = await res.json();
+        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el avance del plan.");
+        if (!cancelado) setAvancePlanRemData({ plan: data.plan, tabla: data.tabla, tarjetas: data.tarjetas });
+      } catch (err) {
+        if (!cancelado) setAvancePlanRemError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setAvancePlanRemLoading(false);
+      }
+    }
+
+    cargarAvancePlanRem();
+    return () => {
+      cancelado = true;
+    };
+  }, [dataVersion]);
+
   if (permisos === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f8f9fc]">
@@ -2213,6 +2355,8 @@ export default function DashboardLayout() {
              activeTab === "CI-Carga" ? "Status Carga Inicial - Carga Datos" :
              activeTab === "REM-Importar" ? "Status Remanentes - Importar Datos" :
              activeTab === "REM-Resumen" ? "Status Remanentes - Resumen" :
+             activeTab === "REM-Avance" ? "Status Remanentes - Avance Plan" :
+             activeTab === "REM-Carga" ? "Status Remanentes - Carga Datos" :
              activeTab === "PROD-Importar" ? "Producción por Proceso - Importar Datos" :
              activeTab === "PROD-Resumen" ? "Producción por Proceso - Resumen" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
@@ -3924,6 +4068,253 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: REMANENTES - AVANCE PLAN ================= */}
+          {activeTab === "REM-Avance" && (
+            <div className="space-y-6">
+              {avancePlanRemError && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el avance del plan: {avancePlanRemError}
+                </div>
+              )}
+              {avancePlanRemLoading && !avancePlanRemData && (
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando avance del plan...
+                </div>
+              )}
+
+              {!avancePlanRemLoading && avancePlanRemData && !avancePlanRemData.plan && (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl text-center">
+                  <p className="text-sm text-slate-500 mb-4">
+                    Todavía no se cargó el plan de remanentes. Cargalo en la subsección &quot;Carga Datos&quot; para ver el avance acá.
+                  </p>
+                  <button
+                    onClick={() => irA("REM-Carga")}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+                  >
+                    Ir a Carga Datos
+                  </button>
+                </div>
+              )}
+
+              {avancePlanRemData?.plan && avancePlanRemData.tabla && avancePlanRemData.tarjetas && (
+                <>
+                  {/* --- TABLA: DETALLE DEL PLAN --- */}
+                  <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                    <h2 className="text-lg font-bold text-slate-800 mb-4">Detalle del plan</h2>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left whitespace-nowrap">
+                        <thead>
+                          <tr className="text-slate-500 font-medium border-b border-slate-200">
+                            <th className="py-3 px-4 text-left">
+                              Total a procesar al {fmtSoloFecha(avancePlanRemData.tarjetas.fechaFin)}
+                            </th>
+                            <th className="py-3 px-4 text-left">Proceso inicial</th>
+                            <th className="py-3 px-4 text-left">
+                              Para procesar a partir del {fmtSoloFecha(avancePlanRemData.tarjetas.fechaInicio)}
+                            </th>
+                            <th className="py-3 px-4 text-left">Días hábiles¹</th>
+                            <th className="py-3 px-4 text-left">Necesidad por día²</th>
+                            <th className="py-3 px-4 text-left">Producción actual³</th>
+                            <th className="py-3 px-4 text-left">Diferencia⁴</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          <tr>
+                            <td className="py-3 px-4 text-left font-semibold text-slate-900">{fmtNum(avancePlanRemData.tabla.totalAProcesar)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanRemData.tabla.procesoInicial)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanRemData.tabla.paraProcesar)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanRemData.tabla.diasHabilesPlan)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanRemData.tabla.necesidadPorDia)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(avancePlanRemData.tabla.produccionActual)}</td>
+                            <td
+                              className={`py-3 px-4 text-left font-semibold ${
+                                avancePlanRemData.tabla.diferencia >= 0 ? "text-emerald-600" : "text-red-600"
+                              }`}
+                            >
+                              {fmtNum(avancePlanRemData.tabla.diferencia)}
+                            </td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="mt-4 space-y-1 text-xs text-slate-400">
+                      <p>¹ Días hábiles entre la fecha inicio y la fecha fin de plan.</p>
+                      <p>² Para procesar a partir del inicio de plan / Días hábiles.</p>
+                      <p>
+                        ³ Promedio de los datos de remanentes del reporte de producción por proceso, desde la fecha inicio de plan hasta
+                        hoy (o hasta la fecha fin de plan si ya finalizó). Solo se promedia sobre los días hábiles ya transcurridos; los
+                        datos cargados en un día no hábil no se consideran para este cálculo.
+                      </p>
+                      <p>⁴ Diferencia entre la necesidad por día y la producción actual.</p>
+                      <p>El &quot;Total a procesar&quot; es el Total a procesar cargado en Carga Datos multiplicado por el Target (%).</p>
+                    </div>
+                  </div>
+
+                  {/* --- TARJETAS DE SEGUIMIENTO --- */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Fecha inicio / fin de plan</p>
+                      <p className="text-lg font-bold text-slate-800">
+                        {fmtSoloFecha(avancePlanRemData.tarjetas.fechaInicio)} — {fmtSoloFecha(avancePlanRemData.tarjetas.fechaFin)}
+                      </p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Días hábiles transcurridos</p>
+                      <p className="text-2xl font-bold text-slate-800">{fmtNum(avancePlanRemData.tarjetas.diasHabilesTranscurridos)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Avance ideal</p>
+                      <p className="text-2xl font-bold text-slate-800">{fmtNum(avancePlanRemData.tarjetas.avanceIdeal)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Avance real</p>
+                      <p className="text-2xl font-bold text-slate-800">{fmtNum(avancePlanRemData.tarjetas.avanceReal)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">% Avance real</p>
+                      <p className="text-2xl font-bold text-blue-600">{fmtPct(avancePlanRemData.tarjetas.pctAvance)}</p>
+                    </div>
+                    <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                      <p className="text-xs font-medium text-slate-400 mb-2">Unidades pendientes</p>
+                      <p
+                        className={`text-2xl font-bold ${
+                          avancePlanRemData.tarjetas.unidadesPendientes > 0 ? "text-red-600" : "text-emerald-600"
+                        }`}
+                      >
+                        {fmtNum(avancePlanRemData.tarjetas.unidadesPendientes)}
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: REMANENTES - CARGA DATOS ================= */}
+          {activeTab === "REM-Carga" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Carga Datos — Plan de Remanentes</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Estos datos alimentan el cálculo de la subsección &quot;Avance Plan&quot;.
+              </p>
+
+              {planRemanentesError && (
+                <div className="mb-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{planRemanentesError}</div>
+              )}
+              {planRemanentesLoading && !planRemanentes && (
+                <div className="mb-6 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">Cargando plan...</div>
+              )}
+
+              {(!planRemanentes || editandoPlanRemanentes) ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Fecha inicio de plan</label>
+                    <input
+                      type="date"
+                      value={formPlanRemFechaInicio}
+                      onChange={(e) => setFormPlanRemFechaInicio(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Fecha fin de plan</label>
+                    <input
+                      type="date"
+                      value={formPlanRemFechaFin}
+                      onChange={(e) => setFormPlanRemFechaFin(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Total a procesar</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formPlanRemTotalAProcesar}
+                      onChange={(e) => setFormPlanRemTotalAProcesar(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Target (%)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formPlanRemTarget}
+                      onChange={(e) => setFormPlanRemTarget(e.target.value)}
+                      placeholder="Ej: 85"
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-600 mb-1">Proceso inicial</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={formPlanRemProcesoInicial}
+                      onChange={(e) => setFormPlanRemProcesoInicial(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <button
+                      onClick={guardarPlanRemanentes}
+                      disabled={!planRemanentesFormValido || guardandoPlanRemanentes}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                        !planRemanentesFormValido || guardandoPlanRemanentes
+                          ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      {guardandoPlanRemanentes ? "Guardando..." : "Confirmar datos"}
+                    </button>
+                    {planRemanentes && (
+                      <button
+                        onClick={cancelarEdicionPlanRemanentes}
+                        disabled={guardandoPlanRemanentes}
+                        className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Fecha inicio de plan</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtSoloFecha(planRemanentes.fecha_inicio)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Fecha fin de plan</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtSoloFecha(planRemanentes.fecha_fin)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Total a procesar</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtNum(planRemanentes.total_a_procesar)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Target</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtPct(planRemanentes.target)}</dd>
+                    </div>
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200">
+                      <dt className="text-xs font-medium text-slate-400 mb-1">Proceso inicial</dt>
+                      <dd className="text-sm font-semibold text-slate-800">{fmtNum(planRemanentes.proceso_inicial)}</dd>
+                    </div>
+                  </dl>
+                  <button
+                    onClick={() => setEditandoPlanRemanentes(true)}
+                    className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                  >
+                    Modificar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ================= PESTAÑA: ADMIN - PERFILES ================= */}
           {activeTab === "ADMIN-Perfiles" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -4229,7 +4620,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "PROD-Importar", "PROD-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
