@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { parseCsvFile, parseExcelFile } from "@/lib/fileParsers";
+import { parseCsvFile, parseExcelFile, parseExcelFileConFechas } from "@/lib/fileParsers";
 import * as XLSX from "xlsx";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
@@ -2232,17 +2232,6 @@ export default function DashboardLayout() {
   const inputInboundRef = useRef<HTMLInputElement>(null);
   const INB_CHUNK_SIZE = 500;
 
-  // ETD/ETA/ARRIBO AL CD vienen del Excel como texto "dd/mm/yyyy" (parseExcelFile
-  // usa raw:false para no perder ceros a la izquierda en otros campos) -> las
-  // convertimos a ISO "yyyy-mm-dd" para guardarlas en columnas date.
-  function fechaExcelAISO(valor: unknown): string | null {
-    if (typeof valor !== "string") return null;
-    const m = valor.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-    if (!m) return null;
-    const [, d, mo, y] = m;
-    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  }
-
   const handleProcesarInbound = async () => {
     if (archivosInbound.length === 0) return;
 
@@ -2252,7 +2241,12 @@ export default function DashboardLayout() {
     setResultadoInbound(null);
 
     try {
-      const listasDeRegistros = await Promise.all(archivosInbound.map((file) => parseExcelFile(file)));
+      // ETD/ETA/ARRIBO AL CD pueden venir como celdas de fecha reales de Excel
+      // o como texto "dd/mm/yyyy" cargado a mano (mezclado fila por fila) --
+      // parseExcelFileConFechas soporta ambos casos y ya devuelve ISO.
+      const listasDeRegistros = await Promise.all(
+        archivosInbound.map((file) => parseExcelFileConFechas(file, ["etd", "eta", "arribo_al_cd"]))
+      );
       const registrosCrudos = listasDeRegistros.flat();
 
       if (registrosCrudos.length === 0) {
@@ -2260,7 +2254,7 @@ export default function DashboardLayout() {
       }
 
       // Deduplicamos por legajo (si el archivo trae el mismo legajo repetido,
-      // se queda con la última fila) y convertimos las fechas a ISO.
+      // se queda con la última fila).
       const porLegajo = new Map<number, Record<string, unknown>>();
       for (const r of registrosCrudos) {
         const legajo = Number(r.legajo);
@@ -2269,9 +2263,7 @@ export default function DashboardLayout() {
         porLegajo.set(legajo, {
           ...resto,
           legajo,
-          etd: fechaExcelAISO(r.etd),
-          eta: fechaExcelAISO(r.eta),
-          arribo_cd: fechaExcelAISO(arribo_al_cd),
+          arribo_cd: arribo_al_cd,
         });
       }
 
