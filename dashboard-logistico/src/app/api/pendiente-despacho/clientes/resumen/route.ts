@@ -41,6 +41,7 @@ export async function GET() {
         codigoCliente: codigo || "SIN CODIGO",
         cliente: info?.nombre || (r.cliente || "SIN CLIENTE").trim(),
         canal: info?.canal || "SIN CANAL",
+        tipo: r.tipo || "SIN TIPO",
         curva: r.curva || "SIN CURVA",
         temporada: r.temporada || "SIN TEMPORADA",
         unidades: num(r.unidades),

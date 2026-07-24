@@ -2425,6 +2425,7 @@ export default function DashboardLayout() {
     codigoCliente: string;
     cliente: string;
     canal: string;
+    tipo: string;
     curva: string;
     temporada: string;
     unidades: number;
@@ -2464,14 +2465,20 @@ export default function DashboardLayout() {
   }, [dataVersion]);
 
   const [filtroCanalPD, setFiltroCanalPD] = useState("TODAS");
+  const [filtroTipoPD, setFiltroTipoPD] = useState("TODAS");
+  const [filtroCurvaPD, setFiltroCurvaPD] = useState("TODAS");
   const [filtroClientePD, setFiltroClientePD] = useState("");
   const [clienteExpandidoPD, setClienteExpandidoPD] = useState<string | null>(null);
 
   const canalesDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.canal))).sort();
+  const tiposDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.tipo))).sort();
+  const curvasDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.curva))).sort();
 
   const filasFiltradasPD = (pdClientesData?.filas ?? []).filter(
     (f) =>
       (filtroCanalPD === "TODAS" || f.canal === filtroCanalPD) &&
+      (filtroTipoPD === "TODAS" || f.tipo === filtroTipoPD) &&
+      (filtroCurvaPD === "TODAS" || f.curva === filtroCurvaPD) &&
       (!filtroClientePD.trim() || f.cliente.toLowerCase().includes(filtroClientePD.trim().toLowerCase()))
   );
 
@@ -2511,6 +2518,32 @@ export default function DashboardLayout() {
 
   const handleClienteClickPD = (codigoCliente: string) => {
     setClienteExpandidoPD(clienteExpandidoPD === codigoCliente ? null : codigoCliente);
+  };
+
+  // Un solo archivo, dos hojas: "Resumen" (una fila por cliente) y "Detalle"
+  // (una fila por caja) -- ambas sobre los datos ya filtrados en pantalla.
+  const exportarPDExcel = () => {
+    const filasResumen = filasTablaPD.map((f) => ({
+      Canal: f.canal,
+      Cliente: f.cliente,
+      Cajas: f.cajas,
+      Unidades: f.unidades,
+    }));
+    const filasDetalle = filasFiltradasPD.map((f) => ({
+      Número: f.numero,
+      Canal: f.canal,
+      Cliente: f.cliente,
+      Tipo: f.tipo,
+      Curva: f.curva,
+      Temporada: f.temporada,
+      Unidades: f.unidades,
+    }));
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasResumen), "Resumen");
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasDetalle), "Detalle");
+    const fechaArchivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `pendiente_despacho_clientes_${fechaArchivo}.xlsx`);
   };
 
   // =========================================================================
@@ -4258,6 +4291,28 @@ export default function DashboardLayout() {
                   ))}
                 </select>
 
+                <select
+                  value={filtroTipoPD}
+                  onChange={(e) => setFiltroTipoPD(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los tipos</option>
+                  {tiposDisponiblesPD.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroCurvaPD}
+                  onChange={(e) => setFiltroCurvaPD(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todas las curvas</option>
+                  {curvasDisponiblesPD.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
                 <input
                   type="text"
                   value={filtroClientePD}
@@ -4269,11 +4324,25 @@ export default function DashboardLayout() {
                 <button
                   onClick={() => {
                     setFiltroCanalPD("TODAS");
+                    setFiltroTipoPD("TODAS");
+                    setFiltroCurvaPD("TODAS");
                     setFiltroClientePD("");
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Limpiar filtros
+                </button>
+
+                <button
+                  onClick={exportarPDExcel}
+                  disabled={filasFiltradasPD.length === 0}
+                  className={`ml-auto px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    filasFiltradasPD.length === 0
+                      ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  }`}
+                >
+                  Exportar a Excel
                 </button>
               </div>
 
@@ -4333,6 +4402,7 @@ export default function DashboardLayout() {
                                 <thead className="text-slate-500 font-medium border-b border-slate-200">
                                   <tr>
                                     <th className="py-2 px-3 text-left">Número</th>
+                                    <th className="py-2 px-3 text-left">Tipo</th>
                                     <th className="py-2 px-3 text-left">Curva</th>
                                     <th className="py-2 px-3 text-left">Temporada</th>
                                     <th className="py-2 px-3 text-left">Canal</th>
@@ -4344,6 +4414,7 @@ export default function DashboardLayout() {
                                   {detalleClienteExpandidoPD.map((d) => (
                                     <tr key={d.numero}>
                                       <td className="py-2 px-3 text-left font-medium text-slate-700">{d.numero}</td>
+                                      <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
                                       <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
                                       <td className="py-2 px-3 text-left text-slate-600">{d.temporada}</td>
                                       <td className="py-2 px-3 text-left text-slate-600">{d.canal}</td>
