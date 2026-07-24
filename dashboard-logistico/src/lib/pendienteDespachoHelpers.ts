@@ -1,0 +1,61 @@
+import { supabaseAdmin } from "@/lib/supabaseClient";
+
+export interface PendienteDespachoRow {
+  numero: string;
+  pedido_gaci: string | null;
+  cant_cajas: number | null;
+  unidades: number | null;
+  nro_master: string | null;
+  tipo: string | null;
+  fecha: string | null;
+  estado: string | null;
+  cliente: string | null;
+  curva: string | null;
+  temporada: string | null;
+  fecha_envio_gaci: string | null;
+  f_remito: string | null;
+  remito: string | null;
+  ubicacion: string | null;
+  ped_repo: string | null;
+  est_repo: string | null;
+  created_at: string | null;
+}
+
+// Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
+export async function fetchAllPendienteDespacho(table: string): Promise<PendienteDespachoRow[]> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const all: PendienteDespachoRow[] = [];
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from(table)
+      .select(
+        "numero, pedido_gaci, cant_cajas, unidades, nro_master, tipo, fecha, estado, cliente, curva, temporada, fecha_envio_gaci, f_remito, remito, ubicacion, ped_repo, est_repo, created_at"
+      )
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase (${table}): ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    all.push(...(data as PendienteDespachoRow[]));
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return all;
+}
+
+/**
+ * El campo "Cliente" trae el código y el nombre juntos, ej:
+ * "250150 - MUNIZ HENRIQUEZ CINTYAN (CHK V. REGINA)" -> código = "250150".
+ * Los primeros 6 dígitos son el código que matchea con la tabla "clientes".
+ */
+export function parseCodigoCliente(clienteRaw: string | null): string | null {
+  if (!clienteRaw) return null;
+  const m = clienteRaw.trim().match(/^(\d{6})\s*-\s*/);
+  return m ? m[1] : null;
+}

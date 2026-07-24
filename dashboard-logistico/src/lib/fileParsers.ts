@@ -35,6 +35,8 @@ const CAMPOS_NUMERICOS = new Set([
   "legajo",
   "unidades",
   "fob_total_usd",
+  "unida",
+  "cant_cajas",
 ]);
 
 function normalizeRecordKeys(

@@ -49,6 +49,14 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     ],
   },
   {
+    nombre: "Pendiente de Despacho",
+    subsecciones: [
+      { key: "PD-Importar", label: "Importar Datos" },
+      { key: "PD-Clientes", label: "Clientes" },
+      { key: "PD-Propios", label: "Propios" },
+    ],
+  },
+  {
     nombre: "Inbound",
     subsecciones: [
       { key: "INB-Importar", label: "Importar Datos" },
