@@ -56,43 +56,33 @@ export default function LoginPage() {
         throw new Error("La contraseña debe tener al menos 6 caracteres.");
       }
 
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      // La cuenta se crea del lado del servidor (con email_confirm: true),
+      // así queda confirmada de una sin depender de la configuración de
+      // Supabase, y sin perfil asignado hasta que un admin se lo dé.
+      const res = await fetch("/api/auth/registrar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password, nombre: nombre.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo crear la cuenta.");
+      }
+
+      const { error: authError } = await supabase.auth.signInWithPassword({
         email: email.trim(),
         password,
       });
-
-      if (signUpError) {
-        throw new Error(signUpError.message);
-      }
-      if (!data.user) {
-        throw new Error("No se pudo crear la cuenta.");
-      }
-
-      // Crea la fila en "usuarios" (sin perfil asignado) y avisa por mail.
-      // Si esto falla, igual la cuenta de Auth ya existe -- no bloqueamos el
-      // flujo, un administrador la puede regularizar a mano si hace falta.
-      try {
-        await fetch("/api/auth/registrar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ userId: data.user.id, email: email.trim(), nombre: nombre.trim() }),
-        });
-      } catch {
-        // no interrumpe el flujo
-      }
-
-      if (data.session) {
-        // Sin confirmación de mail requerida -- ya queda logueado.
-        router.push("/");
-        router.refresh();
+      if (authError) {
+        // La cuenta ya está creada -- lo mandamos a iniciar sesión a mano.
+        setMensajeExito("Cuenta creada. Iniciá sesión con tu email y contraseña.");
+        setModo("login");
+        setPassword("");
         return;
       }
 
-      setMensajeExito(
-        "Cuenta creada. Revisá tu correo para confirmar la cuenta y despué esperá a que un administrador te asigne un perfil."
-      );
-      setModo("login");
-      setPassword("");
+      router.push("/");
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {

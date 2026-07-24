@@ -6,11 +6,11 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // -----------------------------------------------------------------------
-// Se llama desde el login, justo después de que el navegador crea la cuenta
-// con supabase.auth.signUp() (con la anon key). Esta ruta usa la Service
-// Role Key para: 1) confirmar que el userId es una cuenta de Auth real
-// (evita que cualquiera mande un id/email inventado), 2) crear la fila en
-// "usuarios" sin perfil asignado, 3) avisarle al admin por mail.
+// Autoregistro desde el login. Crea la cuenta con la Service Role Key
+// (email_confirm: true) para que quede confirmada de entrada, sin depender
+// de la configuración de "Confirm email" del proyecto de Supabase -- mismo
+// mecanismo que ya usa /api/admin/usuarios para crear usuarios a mano.
+// Queda sin perfil asignado y se le avisa al admin por mail.
 // -----------------------------------------------------------------------
 export async function POST(request: NextRequest) {
   if (!supabaseEnvOk) {
@@ -19,24 +19,39 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const userId = typeof body?.userId === "string" ? body.userId : "";
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
+    const password = typeof body?.password === "string" ? body.password : "";
     const nombre = typeof body?.nombre === "string" ? body.nombre.trim() : "";
 
-    if (!userId || !email) {
-      return NextResponse.json({ success: false, error: "Faltan datos del usuario." }, { status: 400 });
+    if (!email || !password) {
+      return NextResponse.json({ success: false, error: "Email y contraseña son obligatorios." }, { status: 400 });
+    }
+    if (password.length < 6) {
+      return NextResponse.json({ success: false, error: "La contraseña debe tener al menos 6 caracteres." }, { status: 400 });
     }
 
-    const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId);
-    if (authError || !authUser.user || (authUser.user.email || "").toLowerCase() !== email) {
-      return NextResponse.json({ success: false, error: "No se pudo verificar la cuenta creada." }, { status: 400 });
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    });
+
+    if (authError || !authData.user) {
+      throw new Error(
+        authError?.message === "User already registered" ? "Ese email ya tiene una cuenta." : authError?.message || "No se pudo crear la cuenta."
+      );
     }
 
-    const { error: usuarioError } = await supabaseAdmin
-      .from("usuarios")
-      .upsert({ id: userId, email, nombre: nombre || null, perfil_id: null }, { onConflict: "id" });
+    const { error: usuarioError } = await supabaseAdmin.from("usuarios").insert({
+      id: authData.user.id,
+      email,
+      nombre: nombre || null,
+      perfil_id: null,
+    });
 
     if (usuarioError) {
+      // Si falla el insert en "usuarios", limpiamos el usuario de Auth para no dejar huérfanos.
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
       throw new Error(`Supabase (usuarios): ${usuarioError.message}`);
     }
 
