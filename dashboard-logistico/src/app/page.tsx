@@ -552,6 +552,7 @@ export default function DashboardLayout() {
     { key: "ADMIN-Usuarios", label: "Usuarios" },
     { key: "ADMIN-Accesos", label: "Accesos" },
     { key: "ADMIN-Feriados", label: "Feriados" },
+    { key: "ADMIN-Configuracion", label: "Configuración" },
   ];
 
   // =========================================================================
@@ -1764,6 +1765,35 @@ export default function DashboardLayout() {
     }
   };
 
+  // --- Cambiar contraseña de un usuario (edición inline por fila) ---
+  const [usuarioEditandoPasswordId, setUsuarioEditandoPasswordId] = useState<string | null>(null);
+  const [nuevaPasswordUsuario, setNuevaPasswordUsuario] = useState("");
+  const [guardandoPasswordUsuario, setGuardandoPasswordUsuario] = useState(false);
+
+  const guardarPasswordUsuario = async (id: string) => {
+    if (nuevaPasswordUsuario.length < 6) {
+      setUsuariosAdminError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    setGuardandoPasswordUsuario(true);
+    setUsuariosAdminError(null);
+    try {
+      const res = await fetch(`/api/admin/usuarios/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: nuevaPasswordUsuario }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cambiar la contraseña.");
+      setUsuarioEditandoPasswordId(null);
+      setNuevaPasswordUsuario("");
+    } catch (err) {
+      setUsuariosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setGuardandoPasswordUsuario(false);
+    }
+  };
+
   // =========================================================================
   // ESTADO: ADMINISTRACIÓN - ACCESOS
   // =========================================================================
@@ -1876,6 +1906,59 @@ export default function DashboardLayout() {
       await cargarFeriadosAdmin();
     } catch (err) {
       setFeriadosAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  // =========================================================================
+  // ESTADO: ADMINISTRACIÓN - CONFIGURACIÓN (mail de notificaciones)
+  // =========================================================================
+  const [configAdmin, setConfigAdmin] = useState<{ notification_email: string | null } | null>(null);
+  const [configAdminLoading, setConfigAdminLoading] = useState(false);
+  const [configAdminError, setConfigAdminError] = useState<string | null>(null);
+  const [configAdminExito, setConfigAdminExito] = useState(false);
+  const [formNotificationEmail, setFormNotificationEmail] = useState("");
+  const [guardandoConfig, setGuardandoConfig] = useState(false);
+
+  const cargarConfigAdmin = async () => {
+    setConfigAdminLoading(true);
+    setConfigAdminError(null);
+    try {
+      const res = await fetch("/api/admin/config", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar la configuración.");
+      setConfigAdmin(data.config);
+      setFormNotificationEmail(data.config?.notification_email || "");
+    } catch (err) {
+      setConfigAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setConfigAdminLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarConfigAdmin();
+  }, [dataVersion]);
+
+  const guardarConfigAdmin = async () => {
+    if (!formNotificationEmail.trim()) return;
+    setGuardandoConfig(true);
+    setConfigAdminError(null);
+    setConfigAdminExito(false);
+    try {
+      const res = await fetch("/api/admin/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notificationEmail: formNotificationEmail.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar la configuración.");
+      setConfigAdmin(data.config);
+      setConfigAdminExito(true);
+    } catch (err) {
+      setConfigAdminError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setGuardandoConfig(false);
     }
   };
 
@@ -2852,7 +2935,8 @@ export default function DashboardLayout() {
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
-             activeTab === "ADMIN-Feriados" ? "Administración - Feriados" : activeTab}
+             activeTab === "ADMIN-Feriados" ? "Administración - Feriados" :
+             activeTab === "ADMIN-Configuracion" ? "Administración - Configuración" : activeTab}
           </h1>
         </header>
 
@@ -5515,12 +5599,53 @@ export default function DashboardLayout() {
                             </select>
                           </td>
                           <td className="py-3 px-4 text-left">
-                            <button
-                              onClick={() => eliminarUsuario(u.id)}
-                              className="text-sm text-red-600 hover:underline"
-                            >
-                              Eliminar
-                            </button>
+                            {usuarioEditandoPasswordId === u.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="password"
+                                  placeholder="Contraseña nueva"
+                                  value={nuevaPasswordUsuario}
+                                  onChange={(e) => setNuevaPasswordUsuario(e.target.value)}
+                                  className="px-2 py-1 rounded border border-slate-300 text-xs text-slate-800 bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                                />
+                                <button
+                                  onClick={() => guardarPasswordUsuario(u.id)}
+                                  disabled={guardandoPasswordUsuario}
+                                  className="text-sm font-semibold text-blue-600 hover:underline disabled:opacity-50"
+                                >
+                                  Guardar
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setUsuarioEditandoPasswordId(null);
+                                    setNuevaPasswordUsuario("");
+                                  }}
+                                  disabled={guardandoPasswordUsuario}
+                                  className="text-sm text-slate-400 hover:underline disabled:opacity-50"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-4">
+                                <button
+                                  onClick={() => {
+                                    setUsuarioEditandoPasswordId(u.id);
+                                    setNuevaPasswordUsuario("");
+                                    setUsuariosAdminError(null);
+                                  }}
+                                  className="text-sm text-blue-600 hover:underline"
+                                >
+                                  Cambiar contraseña
+                                </button>
+                                <button
+                                  onClick={() => eliminarUsuario(u.id)}
+                                  className="text-sm text-red-600 hover:underline"
+                                >
+                                  Eliminar
+                                </button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -5640,8 +5765,55 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: ADMIN - CONFIGURACIÓN ================= */}
+          {activeTab === "ADMIN-Configuracion" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-lg">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Configuración</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Dirección de mail a la que se avisa cuando alguien crea una cuenta nueva desde el login
+                (esa cuenta queda sin perfil asignado hasta que un administrador se lo asigne).
+              </p>
+
+              {configAdminError && (
+                <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{configAdminError}</div>
+              )}
+              {configAdminExito && !configAdminError && (
+                <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                  Configuración guardada.
+                </div>
+              )}
+              {configAdminLoading && !configAdmin && <p className="text-sm text-slate-400 mb-4">Cargando...</p>}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-600 mb-1">Email de notificaciones</label>
+                <input
+                  type="email"
+                  value={formNotificationEmail}
+                  onChange={(e) => {
+                    setFormNotificationEmail(e.target.value);
+                    setConfigAdminExito(false);
+                  }}
+                  placeholder="admin@tuempresa.com"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                />
+              </div>
+
+              <button
+                onClick={guardarConfigAdmin}
+                disabled={!formNotificationEmail.trim() || guardandoConfig}
+                className={`mt-4 px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                  !formNotificationEmail.trim() || guardandoConfig
+                    ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                    : "bg-blue-600 text-white hover:bg-blue-700"
+                }`}
+              >
+                {guardandoConfig ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          )}
+
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "INB-Importar", "INB-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "INB-Importar", "INB-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

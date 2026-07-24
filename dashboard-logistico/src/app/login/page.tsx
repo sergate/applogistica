@@ -6,36 +6,95 @@ import { createClient } from "@/lib/supabase/client";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [modo, setModo] = useState<"login" | "signup">("login");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [nombre, setNombre] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [mostrarPassword, setMostrarPassword] = useState(false);
+  const [mensajeExito, setMensajeExito] = useState<string | null>(null);
+
+  const cambiarModo = (nuevoModo: "login" | "signup") => {
+    setModo(nuevoModo);
+    setError(null);
+    setMensajeExito(null);
+    setPassword("");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setMensajeExito(null);
     setCargando(true);
 
     try {
       const supabase = createClient();
-      const { error: authError } = await supabase.auth.signInWithPassword({
+
+      if (modo === "login") {
+        const { error: authError } = await supabase.auth.signInWithPassword({
+          email: email.trim(),
+          password,
+        });
+
+        if (authError) {
+          throw new Error(
+            authError.message === "Invalid login credentials"
+              ? "Email o contraseña incorrectos."
+              : authError.message
+          );
+        }
+
+        router.push("/");
+        router.refresh();
+        return;
+      }
+
+      // --- Crear cuenta ---
+      if (password.length < 6) {
+        throw new Error("La contraseña debe tener al menos 6 caracteres.");
+      }
+
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim(),
         password,
       });
 
-      if (authError) {
-        throw new Error(
-          authError.message === "Invalid login credentials"
-            ? "Email o contraseña incorrectos."
-            : authError.message
-        );
+      if (signUpError) {
+        throw new Error(signUpError.message);
+      }
+      if (!data.user) {
+        throw new Error("No se pudo crear la cuenta.");
       }
 
-      router.push("/");
-      router.refresh();
+      // Crea la fila en "usuarios" (sin perfil asignado) y avisa por mail.
+      // Si esto falla, igual la cuenta de Auth ya existe -- no bloqueamos el
+      // flujo, un administrador la puede regularizar a mano si hace falta.
+      try {
+        await fetch("/api/auth/registrar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: data.user.id, email: email.trim(), nombre: nombre.trim() }),
+        });
+      } catch {
+        // no interrumpe el flujo
+      }
+
+      if (data.session) {
+        // Sin confirmación de mail requerida -- ya queda logueado.
+        router.push("/");
+        router.refresh();
+        return;
+      }
+
+      setMensajeExito(
+        "Cuenta creada. Revisá tu correo para confirmar la cuenta y despué esperá a que un administrador te asigne un perfil."
+      );
+      setModo("login");
+      setPassword("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Error inesperado al iniciar sesión.");
+      setError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
       setCargando(false);
     }
@@ -50,9 +109,30 @@ export default function LoginPage() {
           </svg>
         </div>
         <h1 className="text-xl font-bold text-slate-800 text-center mb-1">Panel Logístico</h1>
-        <p className="text-sm text-slate-500 text-center mb-6">Iniciá sesión para continuar</p>
+        <p className="text-sm text-slate-500 text-center mb-6">
+          {modo === "login" ? "Iniciá sesión para continuar" : "Creá tu cuenta"}
+        </p>
+
+        {mensajeExito && (
+          <div className="mb-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+            {mensajeExito}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {modo === "signup" && (
+            <div>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Nombre (opcional)</label>
+              <input
+                type="text"
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-800 bg-white placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                placeholder="Tu nombre"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-600 mb-1">Email</label>
             <input
@@ -111,9 +191,32 @@ export default function LoginPage() {
                 : "bg-blue-600 text-white hover:bg-blue-700"
             }`}
           >
-            {cargando ? "Ingresando..." : "Ingresar"}
+            {cargando ? "Procesando..." : modo === "login" ? "Ingresar" : "Crear cuenta"}
           </button>
         </form>
+
+        <p className="text-center text-sm text-slate-500 mt-5">
+          {modo === "login" ? (
+            <>
+              ¿No tenés cuenta?{" "}
+              <button type="button" onClick={() => cambiarModo("signup")} className="text-blue-600 font-medium hover:underline">
+                Creá una
+              </button>
+            </>
+          ) : (
+            <>
+              ¿Ya tenés cuenta?{" "}
+              <button type="button" onClick={() => cambiarModo("login")} className="text-blue-600 font-medium hover:underline">
+                Iniciá sesión
+              </button>
+            </>
+          )}
+        </p>
+        {modo === "signup" && (
+          <p className="text-center text-xs text-slate-400 mt-3">
+            Tu cuenta se crea sin acceso a ninguna sección. Un administrador te va a asignar un perfil.
+          </p>
+        )}
       </div>
     </div>
   );
