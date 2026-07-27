@@ -51,11 +51,51 @@ export async function fetchAllPendienteDespacho(table: string): Promise<Pendient
 
 /**
  * El campo "Cliente" trae el código y el nombre juntos, ej:
- * "250150 - MUNIZ HENRIQUEZ CINTYAN (CHK V. REGINA)" -> código = "250150".
- * Los primeros 6 dígitos son el código que matchea con la tabla "clientes".
+ * "250150 - MUNIZ HENRIQUEZ CINTYAN (CHK V. REGINA)" -> código = "250150", o
+ * "1646 - TUCUMAN HIPER LIBERTAD-JAVO SRL" -> código = "1646" (en el archivo
+ * de "Propios" los códigos no tienen largo fijo). El código es la corrida de
+ * dígitos al principio, antes del " - ".
  */
 export function parseCodigoCliente(clienteRaw: string | null): string | null {
   if (!clienteRaw) return null;
-  const m = clienteRaw.trim().match(/^(\d{6})\s*-\s*/);
+  const m = clienteRaw.trim().match(/^(\d+)\s*-\s*/);
   return m ? m[1] : null;
+}
+
+export interface PendienteDespachoPropiosRow {
+  numero: string;
+  curva: string | null;
+  unidades: number | null;
+  tipo: string | null;
+  fecha: string | null;
+  estado: string | null;
+  cliente: string | null;
+  ubicacion: string | null;
+  remito: string | null;
+  created_at: string | null;
+}
+
+export async function fetchAllPendienteDespachoPropios(): Promise<PendienteDespachoPropiosRow[]> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const all: PendienteDespachoPropiosRow[] = [];
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("pendiente_despacho_propios")
+      .select("numero, curva, unidades, tipo, fecha, estado, cliente, ubicacion, remito, created_at")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      throw new Error(`Supabase (pendiente_despacho_propios): ${error.message}`);
+    }
+    if (!data || data.length === 0) break;
+
+    all.push(...(data as PendienteDespachoPropiosRow[]));
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return all;
 }
