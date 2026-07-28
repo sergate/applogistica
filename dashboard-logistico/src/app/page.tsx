@@ -1,9 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseCsvFile, parseExcelFile, parseExcelFileConFechas } from "@/lib/fileParsers";
-import * as XLSX from "xlsx";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
 
@@ -732,57 +731,64 @@ export default function DashboardLayout() {
   const temporadasDisponiblesCI = Array.from(new Set((ciDetalleData?.filas ?? []).map((f) => f.temporada))).sort();
   const gruposDisponiblesCI = Array.from(new Set((ciDetalleData?.filas ?? []).map((f) => f.grupo))).sort();
 
-  const filasFiltradasCI = (ciDetalleData?.filas ?? []).filter(
-    (f) =>
-      (filtroMarcaCI === "TODAS" || f.marca === filtroMarcaCI) &&
-      (filtroTemporadaCI === "TODAS" || f.temporada === filtroTemporadaCI) &&
-      (filtroGrupoCI === "TODAS" || f.grupo === filtroGrupoCI)
-  );
+  // Filtrado + consolidación por (marca, curva) + subtotal, todo junto en
+  // un useMemo para no recalcularlo en cada render del componente.
+  const { filasFiltradasCI, filasTablaCI, subtotalCICalculado } = useMemo(() => {
+    const filasFiltradasCI = (ciDetalleData?.filas ?? []).filter(
+      (f) =>
+        (filtroMarcaCI === "TODAS" || f.marca === filtroMarcaCI) &&
+        (filtroTemporadaCI === "TODAS" || f.temporada === filtroTemporadaCI) &&
+        (filtroGrupoCI === "TODAS" || f.grupo === filtroGrupoCI)
+    );
 
-  // Consolidamos por (marca, curva) para la tabla principal
-  const consolidadoMarcaCurva = new Map<string, { marca: string; curva: string; pedidas: number; distribuidas: number; aRepartir: number }>();
-  for (const f of filasFiltradasCI) {
-    const key = `${f.marca}__${f.curva}`;
-    if (!consolidadoMarcaCurva.has(key)) {
-      consolidadoMarcaCurva.set(key, { marca: f.marca, curva: f.curva, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+    // Consolidamos por (marca, curva) para la tabla principal
+    const consolidadoMarcaCurva = new Map<string, { marca: string; curva: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    for (const f of filasFiltradasCI) {
+      const key = `${f.marca}__${f.curva}`;
+      if (!consolidadoMarcaCurva.has(key)) {
+        consolidadoMarcaCurva.set(key, { marca: f.marca, curva: f.curva, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+      }
+      const acc = consolidadoMarcaCurva.get(key)!;
+      acc.pedidas += f.pedidas;
+      acc.distribuidas += f.distribuidas;
+      acc.aRepartir += f.aRepartir;
     }
-    const acc = consolidadoMarcaCurva.get(key)!;
-    acc.pedidas += f.pedidas;
-    acc.distribuidas += f.distribuidas;
-    acc.aRepartir += f.aRepartir;
-  }
 
-  // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
-  const totalPedidasPorMarca = new Map<string, number>();
-  for (const acc of consolidadoMarcaCurva.values()) {
-    totalPedidasPorMarca.set(acc.marca, (totalPedidasPorMarca.get(acc.marca) || 0) + acc.pedidas);
-  }
+    // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
+    const totalPedidasPorMarca = new Map<string, number>();
+    for (const acc of consolidadoMarcaCurva.values()) {
+      totalPedidasPorMarca.set(acc.marca, (totalPedidasPorMarca.get(acc.marca) || 0) + acc.pedidas);
+    }
 
-  const filasTablaCI = Array.from(consolidadoMarcaCurva.values())
-    .map((acc) => ({
-      ...acc,
-      completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0,
-    }))
-    .sort((a, b) => {
-      const totalA = totalPedidasPorMarca.get(a.marca) || 0;
-      const totalB = totalPedidasPorMarca.get(b.marca) || 0;
-      if (a.marca !== b.marca) return totalB - totalA;
-      return rankCurva(a.curva) - rankCurva(b.curva);
-    });
+    const filasTablaCI = Array.from(consolidadoMarcaCurva.values())
+      .map((acc) => ({
+        ...acc,
+        completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0,
+      }))
+      .sort((a, b) => {
+        const totalA = totalPedidasPorMarca.get(a.marca) || 0;
+        const totalB = totalPedidasPorMarca.get(b.marca) || 0;
+        if (a.marca !== b.marca) return totalB - totalA;
+        return rankCurva(a.curva) - rankCurva(b.curva);
+      });
 
-  // Subtotal general sobre los datos filtrados
-  const subtotalCI = filasFiltradasCI.reduce(
-    (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
-    { pedidas: 0, distribuidas: 0, aRepartir: 0 }
-  );
-  const subtotalCICalculado = {
-    ...subtotalCI,
-    completitud: subtotalCI.pedidas > 0 ? (subtotalCI.distribuidas / subtotalCI.pedidas) * 100 : 0,
-  };
+    // Subtotal general sobre los datos filtrados
+    const subtotalCI = filasFiltradasCI.reduce(
+      (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
+      { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+    );
+    const subtotalCICalculado = {
+      ...subtotalCI,
+      completitud: subtotalCI.pedidas > 0 ? (subtotalCI.distribuidas / subtotalCI.pedidas) * 100 : 0,
+    };
+
+    return { filasFiltradasCI, filasTablaCI, subtotalCICalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ciDetalleData, filtroMarcaCI, filtroTemporadaCI, filtroGrupoCI]);
 
   // Desglose por grupo de la fila (marca + curva) expandida -- se calcula
   // sobre los mismos datos ya filtrados por temporada/grupo/marca.
-  const desgloseGrupoCI = (() => {
+  const desgloseGrupoCI = useMemo(() => {
     if (!filaExpandidaCI) return [];
     const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
     for (const f of filasFiltradasCI) {
@@ -798,7 +804,7 @@ export default function DashboardLayout() {
     return Array.from(porGrupo.values())
       .map((acc) => ({ ...acc, completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0 }))
       .sort((a, b) => b.pedidas - a.pedidas);
-  })();
+  }, [filasFiltradasCI, filaExpandidaCI]);
 
   const handleFilaClickCI = (marca: string, curva: string) => {
     setFilaExpandidaCI(
@@ -956,57 +962,64 @@ export default function DashboardLayout() {
   const temporadasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.temporada))).sort();
   const gruposDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.grupo))).sort();
 
-  const filasFiltradasREM = (remDetalleData?.filas ?? []).filter(
-    (f) =>
-      (filtroMarcaREM === "TODAS" || f.marca === filtroMarcaREM) &&
-      (filtroTemporadaREM === "TODAS" || f.temporada === filtroTemporadaREM) &&
-      (filtroGrupoREM === "TODAS" || f.grupo === filtroGrupoREM)
-  );
+  // Filtrado + consolidación por (marca, archivo) + subtotal, todo junto en
+  // un useMemo para no recalcularlo en cada render del componente.
+  const { filasFiltradasREM, filasTablaREM, subtotalREMCalculado } = useMemo(() => {
+    const filasFiltradasREM = (remDetalleData?.filas ?? []).filter(
+      (f) =>
+        (filtroMarcaREM === "TODAS" || f.marca === filtroMarcaREM) &&
+        (filtroTemporadaREM === "TODAS" || f.temporada === filtroTemporadaREM) &&
+        (filtroGrupoREM === "TODAS" || f.grupo === filtroGrupoREM)
+    );
 
-  // Consolidamos por (marca, archivo) para la tabla principal
-  const consolidadoMarcaArchivo = new Map<string, { marca: string; archivo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
-  for (const f of filasFiltradasREM) {
-    const key = `${f.marca}__${f.archivo}`;
-    if (!consolidadoMarcaArchivo.has(key)) {
-      consolidadoMarcaArchivo.set(key, { marca: f.marca, archivo: f.archivo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+    // Consolidamos por (marca, archivo) para la tabla principal
+    const consolidadoMarcaArchivo = new Map<string, { marca: string; archivo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    for (const f of filasFiltradasREM) {
+      const key = `${f.marca}__${f.archivo}`;
+      if (!consolidadoMarcaArchivo.has(key)) {
+        consolidadoMarcaArchivo.set(key, { marca: f.marca, archivo: f.archivo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+      }
+      const acc = consolidadoMarcaArchivo.get(key)!;
+      acc.pedidas += f.pedidas;
+      acc.distribuidas += f.distribuidas;
+      acc.aRepartir += f.aRepartir;
     }
-    const acc = consolidadoMarcaArchivo.get(key)!;
-    acc.pedidas += f.pedidas;
-    acc.distribuidas += f.distribuidas;
-    acc.aRepartir += f.aRepartir;
-  }
 
-  // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
-  const totalPedidasPorMarcaREM = new Map<string, number>();
-  for (const acc of consolidadoMarcaArchivo.values()) {
-    totalPedidasPorMarcaREM.set(acc.marca, (totalPedidasPorMarcaREM.get(acc.marca) || 0) + acc.pedidas);
-  }
+    // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
+    const totalPedidasPorMarcaREM = new Map<string, number>();
+    for (const acc of consolidadoMarcaArchivo.values()) {
+      totalPedidasPorMarcaREM.set(acc.marca, (totalPedidasPorMarcaREM.get(acc.marca) || 0) + acc.pedidas);
+    }
 
-  const filasTablaREM = Array.from(consolidadoMarcaArchivo.values())
-    .map((acc) => ({
-      ...acc,
-      completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0,
-    }))
-    .sort((a, b) => {
-      const totalA = totalPedidasPorMarcaREM.get(a.marca) || 0;
-      const totalB = totalPedidasPorMarcaREM.get(b.marca) || 0;
-      if (a.marca !== b.marca) return totalB - totalA;
-      return a.archivo.localeCompare(b.archivo);
-    });
+    const filasTablaREM = Array.from(consolidadoMarcaArchivo.values())
+      .map((acc) => ({
+        ...acc,
+        completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0,
+      }))
+      .sort((a, b) => {
+        const totalA = totalPedidasPorMarcaREM.get(a.marca) || 0;
+        const totalB = totalPedidasPorMarcaREM.get(b.marca) || 0;
+        if (a.marca !== b.marca) return totalB - totalA;
+        return a.archivo.localeCompare(b.archivo);
+      });
 
-  // Subtotal general sobre los datos filtrados
-  const subtotalREM = filasFiltradasREM.reduce(
-    (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
-    { pedidas: 0, distribuidas: 0, aRepartir: 0 }
-  );
-  const subtotalREMCalculado = {
-    ...subtotalREM,
-    completitud: subtotalREM.pedidas > 0 ? (subtotalREM.distribuidas / subtotalREM.pedidas) * 100 : 0,
-  };
+    // Subtotal general sobre los datos filtrados
+    const subtotalREM = filasFiltradasREM.reduce(
+      (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
+      { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+    );
+    const subtotalREMCalculado = {
+      ...subtotalREM,
+      completitud: subtotalREM.pedidas > 0 ? (subtotalREM.distribuidas / subtotalREM.pedidas) * 100 : 0,
+    };
+
+    return { filasFiltradasREM, filasTablaREM, subtotalREMCalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remDetalleData, filtroMarcaREM, filtroTemporadaREM, filtroGrupoREM]);
 
   // Desglose por grupo de la fila (marca + archivo) expandida -- se calcula
   // sobre los mismos datos ya filtrados por temporada/grupo/marca.
-  const desgloseGrupoREM = (() => {
+  const desgloseGrupoREM = useMemo(() => {
     if (!filaExpandidaREM) return [];
     const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
     for (const f of filasFiltradasREM) {
@@ -1022,7 +1035,7 @@ export default function DashboardLayout() {
     return Array.from(porGrupo.values())
       .map((acc) => ({ ...acc, completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0 }))
       .sort((a, b) => b.pedidas - a.pedidas);
-  })();
+  }, [filasFiltradasREM, filaExpandidaREM]);
 
   const handleFilaClickREM = (marca: string, archivo: string) => {
     setFilaExpandidaREM(
@@ -1356,59 +1369,77 @@ export default function DashboardLayout() {
 
   const busquedaNormalizada = busquedaPedidos.trim().toLowerCase();
 
-  // Filtrado a nivel (pedido, grupo) -- todavía sin consolidar.
-  const filasCrudasPedidos = (pedidosData?.filas ?? []).filter((f) => {
-    const enRango = semanaPedidos
-      ? f.fecha !== "SIN FECHA" && f.fecha >= semanaPedidos.desde && f.fecha <= semanaPedidos.hasta
-      : f.fecha !== "SIN FECHA" && f.fecha >= limitePedidosISO && f.fecha <= hoyPedidosISO;
-    if (!enRango) return false;
-    if (filtroMarcaPedidos !== "TODAS" && f.marca !== filtroMarcaPedidos) return false;
-    if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
-    if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
-    if (filtroTipoPedidos !== "TODOS" && f.tipoPedido !== filtroTipoPedidos) return false;
-    if (busquedaNormalizada) {
-      const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
-      const matchCodigo = f.codigoTienda.toLowerCase().includes(busquedaNormalizada);
-      if (!matchCliente && !matchCodigo) return false;
+  // Filtrado + consolidación por pedido + subtotal, todo junto en un
+  // useMemo para no recalcularlo en cada render del componente.
+  const { filasFiltradasPedidos, subtotalPedidosCalculado } = useMemo(() => {
+    // Filtrado a nivel (pedido, grupo) -- todavía sin consolidar.
+    const filasCrudasPedidos = (pedidosData?.filas ?? []).filter((f) => {
+      const enRango = semanaPedidos
+        ? f.fecha !== "SIN FECHA" && f.fecha >= semanaPedidos.desde && f.fecha <= semanaPedidos.hasta
+        : f.fecha !== "SIN FECHA" && f.fecha >= limitePedidosISO && f.fecha <= hoyPedidosISO;
+      if (!enRango) return false;
+      if (filtroMarcaPedidos !== "TODAS" && f.marca !== filtroMarcaPedidos) return false;
+      if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
+      if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
+      if (filtroTipoPedidos !== "TODOS" && f.tipoPedido !== filtroTipoPedidos) return false;
+      if (busquedaNormalizada) {
+        const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
+        const matchCodigo = f.codigoTienda.toLowerCase().includes(busquedaNormalizada);
+        if (!matchCliente && !matchCodigo) return false;
+      }
+      return true;
+    });
+
+    // Consolidamos por pedido: el filtro de grupo ya se aplicó arriba, así que
+    // acá solo sumamos lo que haya quedado (si es "Todos los grupos", suma
+    // todas las líneas del pedido; si es un grupo puntual, solo esa porción).
+    const consolidadoPorPedido = new Map<string, PedidoResumen>();
+    for (const f of filasCrudasPedidos) {
+      const existente = consolidadoPorPedido.get(f.pedido);
+      if (!existente) {
+        consolidadoPorPedido.set(f.pedido, { ...f });
+      } else {
+        existente.uni += f.uni;
+        existente.pick += f.pick;
+        existente.sep += f.sep;
+      }
     }
-    return true;
-  });
+    const filasFiltradasPedidos = Array.from(consolidadoPorPedido.values()).map((f) => ({
+      ...f,
+      pendPick: f.uni - f.pick,
+      pendSep: f.uni - f.sep,
+      eficPick: f.uni > 0 ? (f.pick / f.uni) * 100 : 0,
+      eficSep: f.uni > 0 ? (f.sep / f.uni) * 100 : 0,
+    }));
 
-  // Consolidamos por pedido: el filtro de grupo ya se aplicó arriba, así que
-  // acá solo sumamos lo que haya quedado (si es "Todos los grupos", suma
-  // todas las líneas del pedido; si es un grupo puntual, solo esa porción).
-  const consolidadoPorPedido = new Map<string, PedidoResumen>();
-  for (const f of filasCrudasPedidos) {
-    const existente = consolidadoPorPedido.get(f.pedido);
-    if (!existente) {
-      consolidadoPorPedido.set(f.pedido, { ...f });
-    } else {
-      existente.uni += f.uni;
-      existente.pick += f.pick;
-      existente.sep += f.sep;
-    }
-  }
-  const filasFiltradasPedidos = Array.from(consolidadoPorPedido.values()).map((f) => ({
-    ...f,
-    pendPick: f.uni - f.pick,
-    pendSep: f.uni - f.sep,
-    eficPick: f.uni > 0 ? (f.pick / f.uni) * 100 : 0,
-    eficSep: f.uni > 0 ? (f.sep / f.uni) * 100 : 0,
-  }));
+    const subtotalPedidos = filasFiltradasPedidos.reduce(
+      (acc, f) => ({ uni: acc.uni + f.uni, pick: acc.pick + f.pick, sep: acc.sep + f.sep }),
+      { uni: 0, pick: 0, sep: 0 }
+    );
+    const subtotalPedidosCalculado = {
+      ...subtotalPedidos,
+      pendPick: subtotalPedidos.uni - subtotalPedidos.pick,
+      pendSep: subtotalPedidos.uni - subtotalPedidos.sep,
+      eficPick: subtotalPedidos.uni > 0 ? (subtotalPedidos.pick / subtotalPedidos.uni) * 100 : 0,
+      eficSep: subtotalPedidos.uni > 0 ? (subtotalPedidos.sep / subtotalPedidos.uni) * 100 : 0,
+    };
 
-  const subtotalPedidos = filasFiltradasPedidos.reduce(
-    (acc, f) => ({ uni: acc.uni + f.uni, pick: acc.pick + f.pick, sep: acc.sep + f.sep }),
-    { uni: 0, pick: 0, sep: 0 }
-  );
-  const subtotalPedidosCalculado = {
-    ...subtotalPedidos,
-    pendPick: subtotalPedidos.uni - subtotalPedidos.pick,
-    pendSep: subtotalPedidos.uni - subtotalPedidos.sep,
-    eficPick: subtotalPedidos.uni > 0 ? (subtotalPedidos.pick / subtotalPedidos.uni) * 100 : 0,
-    eficSep: subtotalPedidos.uni > 0 ? (subtotalPedidos.sep / subtotalPedidos.uni) * 100 : 0,
-  };
+    return { filasFiltradasPedidos, subtotalPedidosCalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pedidosData,
+    semanaPedidos,
+    limitePedidosISO,
+    hoyPedidosISO,
+    filtroMarcaPedidos,
+    filtroCanalPedidos,
+    filtroGrupoPedidos,
+    filtroTipoPedidos,
+    busquedaNormalizada,
+  ]);
 
-  const exportarPedidosAExcel = () => {
+  const exportarPedidosAExcel = async () => {
+    const XLSX = await import("xlsx");
     const filasExport = filasFiltradasPedidos.map((f) => ({
       "Código Tienda": f.codigoTienda,
       Cliente: f.cliente,
@@ -1465,19 +1496,6 @@ export default function DashboardLayout() {
     return d.toISOString().slice(0, 10);
   })();
 
-  const filasConFecha = (fechaData?.filas ?? []).filter((f) => {
-    if (f.fecha === "SIN FECHA") return false;
-    if (semanaFecha) return f.fecha >= semanaFecha.desde && f.fecha <= semanaFecha.hasta;
-    if (fechaSeleccionada) return f.fecha === fechaSeleccionada;
-    return f.fecha >= limiteFechaISO && f.fecha <= hoyISO;
-  });
-  // Los pedidos sin fecha_creacion solo se muestran en el filtro "Último mes"
-  // (y no cuando se eligió una fecha puntual o una semana), siempre al final de la tabla.
-  const filasSinFecha =
-    rangoFecha === 30 && !fechaSeleccionada && !semanaFecha
-      ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA")
-      : [];
-
   // Lista de marcas, canales y grupos disponibles para los filtros (únicas, ordenadas)
   const marcasDisponiblesFecha = Array.from(
     new Set((fechaData?.filas ?? []).map((f) => f.marca))
@@ -1489,63 +1507,84 @@ export default function DashboardLayout() {
     new Set((fechaData?.filas ?? []).map((f) => f.grupo))
   ).sort();
 
-  const filasFiltradas = [...filasConFecha, ...filasSinFecha].filter(
-    (f) =>
-      (filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha) &&
-      (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha) &&
-      (filtroGrupoFecha === "TODAS" || f.grupo === filtroGrupoFecha) &&
-      (filtroTipoFecha === "TODOS" || f.tipoPedido === filtroTipoFecha)
-  );
+  // Filtrado + consolidación por (fecha, marca) + subtotal -- se recalcula
+  // solo cuando cambian los datos o los filtros de esta pestaña, no en
+  // cualquier render del componente.
+  const { fechasData, subtotalFechaCalculado } = useMemo(() => {
+    const filasConFecha = (fechaData?.filas ?? []).filter((f) => {
+      if (f.fecha === "SIN FECHA") return false;
+      if (semanaFecha) return f.fecha >= semanaFecha.desde && f.fecha <= semanaFecha.hasta;
+      if (fechaSeleccionada) return f.fecha === fechaSeleccionada;
+      return f.fecha >= limiteFechaISO && f.fecha <= hoyISO;
+    });
+    // Los pedidos sin fecha_creacion solo se muestran en el filtro "Último mes"
+    // (y no cuando se eligió una fecha puntual o una semana), siempre al final de la tabla.
+    const filasSinFecha =
+      rangoFecha === 30 && !fechaSeleccionada && !semanaFecha
+        ? (fechaData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA")
+        : [];
 
-  // Consolidamos por (fecha, marca): el canal se usa solo para filtrar,
-  // no se muestra como columna ni se desglosa en el resultado.
-  const consolidadoPorFechaMarca = new Map<
-    string,
-    { fecha: string; marca: string; uni: number; pick: number; sep: number }
-  >();
-  for (const f of filasFiltradas) {
-    const key = `${f.fecha}__${f.marca}`;
-    if (!consolidadoPorFechaMarca.has(key)) {
-      consolidadoPorFechaMarca.set(key, { fecha: f.fecha, marca: f.marca, uni: 0, pick: 0, sep: 0 });
+    const filasFiltradas = [...filasConFecha, ...filasSinFecha].filter(
+      (f) =>
+        (filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha) &&
+        (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha) &&
+        (filtroGrupoFecha === "TODAS" || f.grupo === filtroGrupoFecha) &&
+        (filtroTipoFecha === "TODOS" || f.tipoPedido === filtroTipoFecha)
+    );
+
+    // Consolidamos por (fecha, marca): el canal se usa solo para filtrar,
+    // no se muestra como columna ni se desglosa en el resultado.
+    const consolidadoPorFechaMarca = new Map<
+      string,
+      { fecha: string; marca: string; uni: number; pick: number; sep: number }
+    >();
+    for (const f of filasFiltradas) {
+      const key = `${f.fecha}__${f.marca}`;
+      if (!consolidadoPorFechaMarca.has(key)) {
+        consolidadoPorFechaMarca.set(key, { fecha: f.fecha, marca: f.marca, uni: 0, pick: 0, sep: 0 });
+      }
+      const acc = consolidadoPorFechaMarca.get(key)!;
+      acc.uni += f.uni;
+      acc.pick += f.pick;
+      acc.sep += f.sep;
     }
-    const acc = consolidadoPorFechaMarca.get(key)!;
-    acc.uni += f.uni;
-    acc.pick += f.pick;
-    acc.sep += f.sep;
-  }
 
-  const fechasData = Array.from(consolidadoPorFechaMarca.values())
-    .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.uni - a.uni))
-    .map((f) => ({
-      fecha: f.fecha,
-      marca: f.marca,
-      dot: dotForMarcaName(f.marca),
-      uni: fmtNum(f.uni),
-      pick: fmtNum(f.pick),
-      sep: fmtNum(f.sep),
-      pendPick: fmtNum(f.uni - f.pick),
-      pendSep: fmtNum(f.uni - f.sep),
-      eficPick: fmtPct(f.uni > 0 ? (f.pick / f.uni) * 100 : 0),
-      eficSep: fmtPct(f.uni > 0 ? (f.sep / f.uni) * 100 : 0),
-    }));
+    const fechasData = Array.from(consolidadoPorFechaMarca.values())
+      .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.uni - a.uni))
+      .map((f) => ({
+        fecha: f.fecha,
+        marca: f.marca,
+        dot: dotForMarcaName(f.marca),
+        uni: fmtNum(f.uni),
+        pick: fmtNum(f.pick),
+        sep: fmtNum(f.sep),
+        pendPick: fmtNum(f.uni - f.pick),
+        pendSep: fmtNum(f.uni - f.sep),
+        eficPick: fmtPct(f.uni > 0 ? (f.pick / f.uni) * 100 : 0),
+        eficSep: fmtPct(f.uni > 0 ? (f.sep / f.uni) * 100 : 0),
+      }));
 
-  // Subtotal sobre los datos ya filtrados (fecha + marca + canal). La eficiencia
-  // se recalcula sobre los totales sumados, NO como promedio de los % de cada fila.
-  const subtotalFecha = filasFiltradas.reduce(
-    (acc, f) => ({
-      uni: acc.uni + f.uni,
-      pick: acc.pick + f.pick,
-      sep: acc.sep + f.sep,
-    }),
-    { uni: 0, pick: 0, sep: 0 }
-  );
-  const subtotalFechaCalculado = {
-    ...subtotalFecha,
-    pendPick: subtotalFecha.uni - subtotalFecha.pick,
-    pendSep: subtotalFecha.uni - subtotalFecha.sep,
-    eficPick: subtotalFecha.uni > 0 ? (subtotalFecha.pick / subtotalFecha.uni) * 100 : 0,
-    eficSep: subtotalFecha.uni > 0 ? (subtotalFecha.sep / subtotalFecha.uni) * 100 : 0,
-  };
+    // Subtotal sobre los datos ya filtrados (fecha + marca + canal). La eficiencia
+    // se recalcula sobre los totales sumados, NO como promedio de los % de cada fila.
+    const subtotalFecha = filasFiltradas.reduce(
+      (acc, f) => ({
+        uni: acc.uni + f.uni,
+        pick: acc.pick + f.pick,
+        sep: acc.sep + f.sep,
+      }),
+      { uni: 0, pick: 0, sep: 0 }
+    );
+    const subtotalFechaCalculado = {
+      ...subtotalFecha,
+      pendPick: subtotalFecha.uni - subtotalFecha.pick,
+      pendSep: subtotalFecha.uni - subtotalFecha.sep,
+      eficPick: subtotalFecha.uni > 0 ? (subtotalFecha.pick / subtotalFecha.uni) * 100 : 0,
+      eficSep: subtotalFecha.uni > 0 ? (subtotalFecha.sep / subtotalFecha.uni) * 100 : 0,
+    };
+
+    return { fechasData, subtotalFechaCalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaData, rangoFecha, fechaSeleccionada, semanaFecha, filtroMarcaFecha, filtroCanalFecha, filtroGrupoFecha, filtroTipoFecha, hoyISO, limiteFechaISO]);
 
   // =========================================================================
   // DATOS MOCK - OTRAS SECCIONES (Productividad, Carga, Remanentes)
@@ -2291,57 +2330,60 @@ export default function DashboardLayout() {
   const [filtroMarcaResumenREM, setFiltroMarcaResumenREM] = useState("TODAS");
   const [filtroGrupoResumenREM, setFiltroGrupoResumenREM] = useState("TODAS");
 
-  const filasFiltradasResumenREM = (remDetalleData?.filas ?? []).filter(
-    (f) =>
-      (filtroMarcaResumenREM === "TODAS" || f.marca === filtroMarcaResumenREM) &&
-      (filtroGrupoResumenREM === "TODAS" || f.grupo === filtroGrupoResumenREM)
-  );
-
   const targetPctREM = planRemanentes ? planRemanentes.target : 0;
 
-  // Consolidamos por (marca, grupo) sumando todos los archivos/temporadas
-  const consolidadoMarcaGrupoREM = new Map<
-    string,
-    { marca: string; grupo: string; pedidas: number; distribuidas: number; aRepartir: number }
-  >();
-  for (const f of filasFiltradasResumenREM) {
-    const key = `${f.marca}__${f.grupo}`;
-    if (!consolidadoMarcaGrupoREM.has(key)) {
-      consolidadoMarcaGrupoREM.set(key, { marca: f.marca, grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+  const { filasTablaResumenMarcaGrupoREM, subtotalResumenMarcaGrupoREMCalculado } = useMemo(() => {
+    const filasFiltradasResumenREM = (remDetalleData?.filas ?? []).filter(
+      (f) =>
+        (filtroMarcaResumenREM === "TODAS" || f.marca === filtroMarcaResumenREM) &&
+        (filtroGrupoResumenREM === "TODAS" || f.grupo === filtroGrupoResumenREM)
+    );
+
+    // Consolidamos por (marca, grupo) sumando todos los archivos/temporadas
+    const consolidadoMarcaGrupoREM = new Map<
+      string,
+      { marca: string; grupo: string; pedidas: number; distribuidas: number; aRepartir: number }
+    >();
+    for (const f of filasFiltradasResumenREM) {
+      const key = `${f.marca}__${f.grupo}`;
+      if (!consolidadoMarcaGrupoREM.has(key)) {
+        consolidadoMarcaGrupoREM.set(key, { marca: f.marca, grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+      }
+      const acc = consolidadoMarcaGrupoREM.get(key)!;
+      acc.pedidas += f.pedidas;
+      acc.distribuidas += f.distribuidas;
+      acc.aRepartir += f.aRepartir;
     }
-    const acc = consolidadoMarcaGrupoREM.get(key)!;
-    acc.pedidas += f.pedidas;
-    acc.distribuidas += f.distribuidas;
-    acc.aRepartir += f.aRepartir;
-  }
 
-  const filasTablaResumenMarcaGrupoREM = Array.from(consolidadoMarcaGrupoREM.values())
-    .map((acc) => {
-      const unidadesTarget = acc.pedidas * (targetPctREM / 100);
-      return {
-        ...acc,
-        unidadesTarget,
-        pctAvance: unidadesTarget > 0 ? (acc.distribuidas / unidadesTarget) * 100 : 0,
-      };
-    })
-    .sort((a, b) => (a.marca !== b.marca ? a.marca.localeCompare(b.marca) : a.grupo.localeCompare(b.grupo)));
+    const filasTablaResumenMarcaGrupoREM = Array.from(consolidadoMarcaGrupoREM.values())
+      .map((acc) => {
+        const unidadesTarget = acc.pedidas * (targetPctREM / 100);
+        return {
+          ...acc,
+          unidadesTarget,
+          pctAvance: unidadesTarget > 0 ? (acc.distribuidas / unidadesTarget) * 100 : 0,
+        };
+      })
+      .sort((a, b) => (a.marca !== b.marca ? a.marca.localeCompare(b.marca) : a.grupo.localeCompare(b.grupo)));
 
-  const subtotalResumenMarcaGrupoREM = filasFiltradasResumenREM.reduce(
-    (acc, f) => ({
-      pedidas: acc.pedidas + f.pedidas,
-      distribuidas: acc.distribuidas + f.distribuidas,
-      aRepartir: acc.aRepartir + f.aRepartir,
-    }),
-    { pedidas: 0, distribuidas: 0, aRepartir: 0 }
-  );
-  const subtotalResumenMarcaGrupoREMCalculado = (() => {
-    const unidadesTarget = subtotalResumenMarcaGrupoREM.pedidas * (targetPctREM / 100);
-    return {
+    const subtotalResumenMarcaGrupoREM = filasFiltradasResumenREM.reduce(
+      (acc, f) => ({
+        pedidas: acc.pedidas + f.pedidas,
+        distribuidas: acc.distribuidas + f.distribuidas,
+        aRepartir: acc.aRepartir + f.aRepartir,
+      }),
+      { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+    );
+    const unidadesTargetSubtotal = subtotalResumenMarcaGrupoREM.pedidas * (targetPctREM / 100);
+    const subtotalResumenMarcaGrupoREMCalculado = {
       ...subtotalResumenMarcaGrupoREM,
-      unidadesTarget,
-      pctAvance: unidadesTarget > 0 ? (subtotalResumenMarcaGrupoREM.distribuidas / unidadesTarget) * 100 : 0,
+      unidadesTarget: unidadesTargetSubtotal,
+      pctAvance: unidadesTargetSubtotal > 0 ? (subtotalResumenMarcaGrupoREM.distribuidas / unidadesTargetSubtotal) * 100 : 0,
     };
-  })();
+
+    return { filasTablaResumenMarcaGrupoREM, subtotalResumenMarcaGrupoREMCalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [remDetalleData, filtroMarcaResumenREM, filtroGrupoResumenREM, targetPctREM]);
 
   // =========================================================================
   // ESTADO: PENDIENTE DE DESPACHO - IMPORTAR DATOS (CLIENTES) (.xlsx -> pendiente_despacho_clientes)
@@ -2601,51 +2643,58 @@ export default function DashboardLayout() {
   const tiposDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.curva))).sort();
 
-  const filasFiltradasPDP = (pdPropiosData?.filas ?? []).filter(
-    (f) =>
-      (filtroCanalPDP === "TODAS" || f.canal === filtroCanalPDP) &&
-      (filtroTipoPDP === "TODAS" || f.tipo === filtroTipoPDP) &&
-      (filtroCurvaPDP === "TODAS" || f.curva === filtroCurvaPDP) &&
-      (!filtroClientePDP.trim() || f.cliente.toLowerCase().includes(filtroClientePDP.trim().toLowerCase()))
-  );
+  const { filasFiltradasPDP, filasTablaPDP, subtotalPDP } = useMemo(() => {
+    const filasFiltradasPDP = (pdPropiosData?.filas ?? []).filter(
+      (f) =>
+        (filtroCanalPDP === "TODAS" || f.canal === filtroCanalPDP) &&
+        (filtroTipoPDP === "TODAS" || f.tipo === filtroTipoPDP) &&
+        (filtroCurvaPDP === "TODAS" || f.curva === filtroCurvaPDP) &&
+        (!filtroClientePDP.trim() || f.cliente.toLowerCase().includes(filtroClientePDP.trim().toLowerCase()))
+    );
 
-  const consolidadoClientesPDP = new Map<
-    string,
-    { codigoCliente: string; cliente: string; canal: string; cajas: number; unidades: number }
-  >();
-  for (const f of filasFiltradasPDP) {
-    if (!consolidadoClientesPDP.has(f.codigoCliente)) {
-      consolidadoClientesPDP.set(f.codigoCliente, {
-        codigoCliente: f.codigoCliente,
-        cliente: f.cliente,
-        canal: f.canal,
-        cajas: 0,
-        unidades: 0,
-      });
+    const consolidadoClientesPDP = new Map<
+      string,
+      { codigoCliente: string; cliente: string; canal: string; cajas: number; unidades: number }
+    >();
+    for (const f of filasFiltradasPDP) {
+      if (!consolidadoClientesPDP.has(f.codigoCliente)) {
+        consolidadoClientesPDP.set(f.codigoCliente, {
+          codigoCliente: f.codigoCliente,
+          cliente: f.cliente,
+          canal: f.canal,
+          cajas: 0,
+          unidades: 0,
+        });
+      }
+      const acc = consolidadoClientesPDP.get(f.codigoCliente)!;
+      acc.cajas += 1;
+      acc.unidades += f.unidades;
     }
-    const acc = consolidadoClientesPDP.get(f.codigoCliente)!;
-    acc.cajas += 1;
-    acc.unidades += f.unidades;
-  }
 
-  const filasTablaPDP = Array.from(consolidadoClientesPDP.values()).sort((a, b) =>
-    a.canal !== b.canal ? a.canal.localeCompare(b.canal) : a.cliente.localeCompare(b.cliente)
+    const filasTablaPDP = Array.from(consolidadoClientesPDP.values()).sort((a, b) =>
+      a.canal !== b.canal ? a.canal.localeCompare(b.canal) : a.cliente.localeCompare(b.cliente)
+    );
+
+    const subtotalPDP = filasTablaPDP.reduce(
+      (acc, f) => ({ cajas: acc.cajas + f.cajas, unidades: acc.unidades + f.unidades }),
+      { cajas: 0, unidades: 0 }
+    );
+
+    return { filasFiltradasPDP, filasTablaPDP, subtotalPDP };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdPropiosData, filtroCanalPDP, filtroTipoPDP, filtroCurvaPDP, filtroClientePDP]);
+
+  const detalleClienteExpandidoPDP = useMemo(
+    () => (clienteExpandidoPDP ? filasFiltradasPDP.filter((f) => f.codigoCliente === clienteExpandidoPDP) : []),
+    [filasFiltradasPDP, clienteExpandidoPDP]
   );
-
-  const subtotalPDP = filasTablaPDP.reduce(
-    (acc, f) => ({ cajas: acc.cajas + f.cajas, unidades: acc.unidades + f.unidades }),
-    { cajas: 0, unidades: 0 }
-  );
-
-  const detalleClienteExpandidoPDP = clienteExpandidoPDP
-    ? filasFiltradasPDP.filter((f) => f.codigoCliente === clienteExpandidoPDP)
-    : [];
 
   const handleClienteClickPDP = (codigoCliente: string) => {
     setClienteExpandidoPDP(clienteExpandidoPDP === codigoCliente ? null : codigoCliente);
   };
 
-  const exportarPDPropiosExcel = () => {
+  const exportarPDPropiosExcel = async () => {
+    const XLSX = await import("xlsx");
     const filasResumen = filasTablaPDP.map((f) => ({
       Canal: f.canal,
       Cliente: f.cliente,
@@ -2726,47 +2775,53 @@ export default function DashboardLayout() {
   const tiposDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.curva))).sort();
 
-  const filasFiltradasPD = (pdClientesData?.filas ?? []).filter(
-    (f) =>
-      (filtroCanalPD === "TODAS" || f.canal === filtroCanalPD) &&
-      (filtroTipoPD === "TODAS" || f.tipo === filtroTipoPD) &&
-      (filtroCurvaPD === "TODAS" || f.curva === filtroCurvaPD) &&
-      (!filtroClientePD.trim() || f.cliente.toLowerCase().includes(filtroClientePD.trim().toLowerCase()))
-  );
+  const { filasFiltradasPD, filasTablaPD, subtotalPD } = useMemo(() => {
+    const filasFiltradasPD = (pdClientesData?.filas ?? []).filter(
+      (f) =>
+        (filtroCanalPD === "TODAS" || f.canal === filtroCanalPD) &&
+        (filtroTipoPD === "TODAS" || f.tipo === filtroTipoPD) &&
+        (filtroCurvaPD === "TODAS" || f.curva === filtroCurvaPD) &&
+        (!filtroClientePD.trim() || f.cliente.toLowerCase().includes(filtroClientePD.trim().toLowerCase()))
+    );
 
-  // Una fila por cliente: Cajas = cantidad de líneas (cada línea es una caja),
-  // Unidades = suma de unidades de esas líneas.
-  const consolidadoClientesPD = new Map<
-    string,
-    { codigoCliente: string; cliente: string; canal: string; cajas: number; unidades: number }
-  >();
-  for (const f of filasFiltradasPD) {
-    if (!consolidadoClientesPD.has(f.codigoCliente)) {
-      consolidadoClientesPD.set(f.codigoCliente, {
-        codigoCliente: f.codigoCliente,
-        cliente: f.cliente,
-        canal: f.canal,
-        cajas: 0,
-        unidades: 0,
-      });
+    // Una fila por cliente: Cajas = cantidad de líneas (cada línea es una caja),
+    // Unidades = suma de unidades de esas líneas.
+    const consolidadoClientesPD = new Map<
+      string,
+      { codigoCliente: string; cliente: string; canal: string; cajas: number; unidades: number }
+    >();
+    for (const f of filasFiltradasPD) {
+      if (!consolidadoClientesPD.has(f.codigoCliente)) {
+        consolidadoClientesPD.set(f.codigoCliente, {
+          codigoCliente: f.codigoCliente,
+          cliente: f.cliente,
+          canal: f.canal,
+          cajas: 0,
+          unidades: 0,
+        });
+      }
+      const acc = consolidadoClientesPD.get(f.codigoCliente)!;
+      acc.cajas += 1;
+      acc.unidades += f.unidades;
     }
-    const acc = consolidadoClientesPD.get(f.codigoCliente)!;
-    acc.cajas += 1;
-    acc.unidades += f.unidades;
-  }
 
-  const filasTablaPD = Array.from(consolidadoClientesPD.values()).sort((a, b) =>
-    a.canal !== b.canal ? a.canal.localeCompare(b.canal) : a.cliente.localeCompare(b.cliente)
+    const filasTablaPD = Array.from(consolidadoClientesPD.values()).sort((a, b) =>
+      a.canal !== b.canal ? a.canal.localeCompare(b.canal) : a.cliente.localeCompare(b.cliente)
+    );
+
+    const subtotalPD = filasTablaPD.reduce(
+      (acc, f) => ({ cajas: acc.cajas + f.cajas, unidades: acc.unidades + f.unidades }),
+      { cajas: 0, unidades: 0 }
+    );
+
+    return { filasFiltradasPD, filasTablaPD, subtotalPD };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pdClientesData, filtroCanalPD, filtroTipoPD, filtroCurvaPD, filtroClientePD]);
+
+  const detalleClienteExpandidoPD = useMemo(
+    () => (clienteExpandidoPD ? filasFiltradasPD.filter((f) => f.codigoCliente === clienteExpandidoPD) : []),
+    [filasFiltradasPD, clienteExpandidoPD]
   );
-
-  const subtotalPD = filasTablaPD.reduce(
-    (acc, f) => ({ cajas: acc.cajas + f.cajas, unidades: acc.unidades + f.unidades }),
-    { cajas: 0, unidades: 0 }
-  );
-
-  const detalleClienteExpandidoPD = clienteExpandidoPD
-    ? filasFiltradasPD.filter((f) => f.codigoCliente === clienteExpandidoPD)
-    : [];
 
   const handleClienteClickPD = (codigoCliente: string) => {
     setClienteExpandidoPD(clienteExpandidoPD === codigoCliente ? null : codigoCliente);
@@ -2774,7 +2829,8 @@ export default function DashboardLayout() {
 
   // Un solo archivo, dos hojas: "Resumen" (una fila por cliente) y "Detalle"
   // (una fila por caja) -- ambas sobre los datos ya filtrados en pantalla.
-  const exportarPDExcel = () => {
+  const exportarPDExcel = async () => {
+    const XLSX = await import("xlsx");
     const filasResumen = filasTablaPD.map((f) => ({
       Canal: f.canal,
       Cliente: f.cliente,
@@ -3046,55 +3102,59 @@ export default function DashboardLayout() {
   const [filtroSemanaPendientes, setFiltroSemanaPendientes] = useState(""); // "" = todas las semanas
   const [filtroLegajoEnCd, setFiltroLegajoEnCd] = useState("");
 
-  // Solo mostramos en el desplegable las semanas que efectivamente tienen
-  // algún legajo pendiente con ARRIBO AL CD en ese rango.
-  const semanasConDatosInbound = (() => {
-    const fechas = (inboundData?.pendientes ?? [])
-      .map((f) => f.arribo_cd)
-      .filter((f): f is string => !!f);
-    if (fechas.length === 0) return [] as SemanaDelMes[];
+  const { semanasConDatosInbound, pendientesFiltradosInbound, enCdFiltradosInbound, subtotalPendientesInbound } =
+    useMemo(() => {
+      // Solo mostramos en el desplegable las semanas que efectivamente tienen
+      // algún legajo pendiente con ARRIBO AL CD en ese rango.
+      const fechas = (inboundData?.pendientes ?? [])
+        .map((f) => f.arribo_cd)
+        .filter((f): f is string => !!f);
 
-    const minFecha = fechas.reduce((a, b) => (a < b ? a : b));
-    const maxFecha = fechas.reduce((a, b) => (a > b ? a : b));
-    const anioMin = Number(minFecha.slice(0, 4));
-    const anioMax = Number(maxFecha.slice(0, 4));
+      let semanasConDatosInbound: SemanaDelMes[] = [];
+      if (fechas.length > 0) {
+        const minFecha = fechas.reduce((a, b) => (a < b ? a : b));
+        const maxFecha = fechas.reduce((a, b) => (a > b ? a : b));
+        const anioMin = Number(minFecha.slice(0, 4));
+        const anioMax = Number(maxFecha.slice(0, 4));
 
-    let todas: SemanaDelMes[] = [];
-    for (let y = anioMin; y <= anioMax; y++) {
-      todas = todas.concat(semanasDelAnio(y));
-    }
-    return todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
-  })();
+        let todas: SemanaDelMes[] = [];
+        for (let y = anioMin; y <= anioMax; y++) {
+          todas = todas.concat(semanasDelAnio(y));
+        }
+        semanasConDatosInbound = todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
+      }
 
-  const pendientesFiltradosInbound = (inboundData?.pendientes ?? []).filter((f) => {
-    if (filtroLegajoPendientes.trim() && !String(f.legajo).includes(filtroLegajoPendientes.trim())) return false;
-    if (filtroSemanaPendientes) {
-      const semana = semanasConDatosInbound.find((s) => s.desde === filtroSemanaPendientes);
-      if (!semana) return false;
-      if (!f.arribo_cd || f.arribo_cd < semana.desde || f.arribo_cd > semana.hasta) return false;
-    }
-    return true;
-  });
+      const pendientesFiltradosInbound = (inboundData?.pendientes ?? []).filter((f) => {
+        if (filtroLegajoPendientes.trim() && !String(f.legajo).includes(filtroLegajoPendientes.trim())) return false;
+        if (filtroSemanaPendientes) {
+          const semana = semanasConDatosInbound.find((s) => s.desde === filtroSemanaPendientes);
+          if (!semana) return false;
+          if (!f.arribo_cd || f.arribo_cd < semana.desde || f.arribo_cd > semana.hasta) return false;
+        }
+        return true;
+      });
 
-  const enCdFiltradosInbound = (inboundData?.enCd ?? []).filter(
-    (f) => !filtroLegajoEnCd.trim() || String(f.legajo).includes(filtroLegajoEnCd.trim())
-  );
+      const enCdFiltradosInbound = (inboundData?.enCd ?? []).filter(
+        (f) => !filtroLegajoEnCd.trim() || String(f.legajo).includes(filtroLegajoEnCd.trim())
+      );
 
-  // Subtotal de "Por arribar al CD" sobre lo ya filtrado. Bultos/CBM son
-  // texto (a veces "A CONFIRMAR") -- solo se suman los valores numéricos.
-  const subtotalPendientesInbound = (() => {
-    let unidades = 0;
-    let bultos = 0;
-    let cbm = 0;
-    for (const f of pendientesFiltradosInbound) {
-      unidades += f.unidades ?? 0;
-      const b = Number(f.bultos);
-      if (Number.isFinite(b)) bultos += b;
-      const c = Number(f.cbm);
-      if (Number.isFinite(c)) cbm += c;
-    }
-    return { legajos: pendientesFiltradosInbound.length, unidades, bultos, cbm };
-  })();
+      // Subtotal de "Por arribar al CD" sobre lo ya filtrado. Bultos/CBM son
+      // texto (a veces "A CONFIRMAR") -- solo se suman los valores numéricos.
+      let unidades = 0;
+      let bultos = 0;
+      let cbm = 0;
+      for (const f of pendientesFiltradosInbound) {
+        unidades += f.unidades ?? 0;
+        const b = Number(f.bultos);
+        if (Number.isFinite(b)) bultos += b;
+        const c = Number(f.cbm);
+        if (Number.isFinite(c)) cbm += c;
+      }
+      const subtotalPendientesInbound = { legajos: pendientesFiltradosInbound.length, unidades, bultos, cbm };
+
+      return { semanasConDatosInbound, pendientesFiltradosInbound, enCdFiltradosInbound, subtotalPendientesInbound };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inboundData, filtroLegajoPendientes, filtroSemanaPendientes, filtroLegajoEnCd]);
 
   // --- Edición de ARRIBO CD + botón "marcar arribado" (solo INB-EditarArribo) ---
   const [editandoArriboLegajo, setEditandoArriboLegajo] = useState<number | null>(null);

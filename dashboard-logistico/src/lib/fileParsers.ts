@@ -1,4 +1,7 @@
-import * as XLSX from "xlsx";
+// "xlsx" pesa varios cientos de KB -- se carga con import() dinámico recién
+// cuando hace falta parsear un archivo Excel, en vez de venir siempre en el
+// bundle inicial de la app (nadie que solo mire un resumen debería bajarla).
+import type * as XLSXType from "xlsx";
 import Papa from "papaparse";
 
 // Normaliza los nombres de columna: minúsculas, sin espacios/acentos, guion bajo.
@@ -77,6 +80,7 @@ function normalizeRecordKeys(
 export async function parseExcelFile(
   file: File
 ): Promise<Record<string, unknown>[]> {
+  const XLSX = await import("xlsx");
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: "array" });
   const firstSheetName = workbook.SheetNames[0];
@@ -108,7 +112,7 @@ export async function parseExcelFile(
 // archivo puede traer, para la misma columna, celdas de fecha reales de
 // Excel (llegan como Date por `cellDates:true`) y celdas cargadas a mano
 // como texto "dd/mm/yyyy" -- hay que soportar ambos casos.
-function excelValueToISODate(value: unknown): string | null {
+function excelValueToISODate(value: unknown, XLSX: typeof XLSXType): string | null {
   if (value instanceof Date) {
     // Excel guarda la fecha "pura" como medianoche UTC -> usamos los
     // getters UTC para no correrse un día según el huso horario del navegador.
@@ -152,6 +156,7 @@ export async function parseExcelFileConFechas(
   file: File,
   camposFecha: string[]
 ): Promise<Record<string, unknown>[]> {
+  const XLSX = await import("xlsx");
   const arrayBuffer = await file.arrayBuffer();
   const workbook = XLSX.read(arrayBuffer, { type: "array", cellDates: true });
   const firstSheetName = workbook.SheetNames[0];
@@ -177,7 +182,7 @@ export async function parseExcelFileConFechas(
       if (value === "") value = null;
 
       if (camposFechaSet.has(headerNormalizado)) {
-        normalized[headerNormalizado] = excelValueToISODate(value);
+        normalized[headerNormalizado] = excelValueToISODate(value, XLSX);
         continue;
       }
 
