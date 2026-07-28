@@ -1,4 +1,12 @@
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { getCached } from "@/lib/queryCache";
+
+// Los "maestros" (grupo_pedidos, tiendas_destino, clientes) los piden
+// completos y sin filtrar varias rutas distintas en la misma ventana de
+// tiempo (Resumen, Por Fecha, Por Pedidos, Por Canal...). Cachearlos unos
+// segundos evita traer la tabla entera de vuelta en cada request -- se
+// invalida a mano en /api/import-maestros apenas se reimporta alguno.
+const MAESTROS_TTL_MS = 20_000;
 
 // Grupos que NO cuentan para los cálculos de Status de Preparación
 // (son materiales de vidriera/empaque/packaging/promoción, no unidades de venta)
@@ -27,28 +35,30 @@ export interface GrupoPedidoRow {
 
 // Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
 export async function fetchAllGrupoPedidos(): Promise<GrupoPedidoRow[]> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const all: GrupoPedidoRow[] = [];
+  return getCached("grupo_pedidos:all", MAESTROS_TTL_MS, async () => {
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const all: GrupoPedidoRow[] = [];
 
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("grupo_pedidos")
-      .select("pedido, grupo, seller, estado_pedido, nombre_pedido, uni, uni_pick, uni_sep, fecha_creacion, updated_at")
-      .range(from, from + PAGE_SIZE - 1);
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("grupo_pedidos")
+        .select("pedido, grupo, seller, estado_pedido, nombre_pedido, uni, uni_pick, uni_sep, fecha_creacion, updated_at")
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) {
-      throw new Error(`Supabase (grupo_pedidos): ${error.message}`);
+      if (error) {
+        throw new Error(`Supabase (grupo_pedidos): ${error.message}`);
+      }
+      if (!data || data.length === 0) break;
+
+      all.push(...(data as GrupoPedidoRow[]));
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
-    if (!data || data.length === 0) break;
 
-    all.push(...(data as GrupoPedidoRow[]));
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return all;
+    return all;
+  });
 }
 
 export function esGrupoContable(grupo: string | null): boolean {
@@ -92,28 +102,30 @@ export interface TiendaDestinoRow {
 
 /** Trae TODA la tabla tiendas_destino con todas sus columnas de datos (paginado). */
 export async function fetchAllTiendasDestino(): Promise<TiendaDestinoRow[]> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const all: TiendaDestinoRow[] = [];
+  return getCached("tiendas_destino:all", MAESTROS_TTL_MS, async () => {
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const all: TiendaDestinoRow[] = [];
 
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("tiendas_destino")
-      .select("pedido, tiendas_destino, nombre_pedido, seller, estado_pedido, uni, uni_pick, uni_sep, fecha_creacion")
-      .range(from, from + PAGE_SIZE - 1);
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("tiendas_destino")
+        .select("pedido, tiendas_destino, nombre_pedido, seller, estado_pedido, uni, uni_pick, uni_sep, fecha_creacion")
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) {
-      throw new Error(`Supabase (tiendas_destino): ${error.message}`);
+      if (error) {
+        throw new Error(`Supabase (tiendas_destino): ${error.message}`);
+      }
+      if (!data || data.length === 0) break;
+
+      all.push(...(data as TiendaDestinoRow[]));
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
-    if (!data || data.length === 0) break;
 
-    all.push(...(data as TiendaDestinoRow[]));
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return all;
+    return all;
+  });
 }
 
 export interface ClienteInfo {
@@ -123,35 +135,37 @@ export interface ClienteInfo {
 
 /** Trae toda la tabla clientes y arma un mapa código -> {nombre, canal}. */
 export async function fetchClientesInfo(): Promise<Map<string, ClienteInfo>> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const map = new Map<string, ClienteInfo>();
+  return getCached("clientes:info", MAESTROS_TTL_MS, async () => {
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const map = new Map<string, ClienteInfo>();
 
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("clientes")
-      .select("codigo, nombre, canal")
-      .range(from, from + PAGE_SIZE - 1);
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("clientes")
+        .select("codigo, nombre, canal")
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) {
-      throw new Error(`Supabase (clientes): ${error.message}`);
-    }
-    if (!data || data.length === 0) break;
-
-    for (const row of data) {
-      if (row.codigo) {
-        map.set(row.codigo, {
-          nombre: (row.nombre as string | null) || "SIN NOMBRE",
-          canal: (row.canal as string | null) || "SIN CANAL",
-        });
+      if (error) {
+        throw new Error(`Supabase (clientes): ${error.message}`);
       }
+      if (!data || data.length === 0) break;
+
+      for (const row of data) {
+        if (row.codigo) {
+          map.set(row.codigo, {
+            nombre: (row.nombre as string | null) || "SIN NOMBRE",
+            canal: (row.canal as string | null) || "SIN CANAL",
+          });
+        }
+      }
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
 
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return map;
+    return map;
+  });
 }
 
 /**
@@ -161,61 +175,65 @@ export async function fetchClientesInfo(): Promise<Map<string, ClienteInfo>> {
  * pedido -> lista de códigos de tienda asociados a ese pedido.
  */
 export async function fetchTiendasPorPedido(): Promise<Map<string, string[]>> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const map = new Map<string, string[]>();
+  return getCached("tiendas_destino:por_pedido", MAESTROS_TTL_MS, async () => {
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const map = new Map<string, string[]>();
 
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("tiendas_destino")
-      .select("pedido, tiendas_destino")
-      .range(from, from + PAGE_SIZE - 1);
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("tiendas_destino")
+        .select("pedido, tiendas_destino")
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) {
-      throw new Error(`Supabase (tiendas_destino): ${error.message}`);
+      if (error) {
+        throw new Error(`Supabase (tiendas_destino): ${error.message}`);
+      }
+      if (!data || data.length === 0) break;
+
+      for (const row of data) {
+        const codigoTienda = row.tiendas_destino as string | null;
+        if (!codigoTienda) continue;
+        if (!map.has(row.pedido)) map.set(row.pedido, []);
+        map.get(row.pedido)!.push(codigoTienda);
+      }
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
-    if (!data || data.length === 0) break;
 
-    for (const row of data) {
-      const codigoTienda = row.tiendas_destino as string | null;
-      if (!codigoTienda) continue;
-      if (!map.has(row.pedido)) map.set(row.pedido, []);
-      map.get(row.pedido)!.push(codigoTienda);
-    }
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return map;
+    return map;
+  });
 }
 
 /** Trae toda la tabla clientes y arma un mapa código de tienda -> canal. */
 export async function fetchCanalPorCodigoTienda(): Promise<Map<string, string>> {
-  const PAGE_SIZE = 1000;
-  let from = 0;
-  const map = new Map<string, string>();
+  return getCached("clientes:canal_por_codigo", MAESTROS_TTL_MS, async () => {
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const map = new Map<string, string>();
 
-  while (true) {
-    const { data, error } = await supabaseAdmin
-      .from("clientes")
-      .select("codigo, canal")
-      .range(from, from + PAGE_SIZE - 1);
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("clientes")
+        .select("codigo, canal")
+        .range(from, from + PAGE_SIZE - 1);
 
-    if (error) {
-      throw new Error(`Supabase (clientes): ${error.message}`);
+      if (error) {
+        throw new Error(`Supabase (clientes): ${error.message}`);
+      }
+      if (!data || data.length === 0) break;
+
+      for (const row of data) {
+        if (row.codigo) map.set(row.codigo, (row.canal as string | null) || "SIN CANAL");
+      }
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
     }
-    if (!data || data.length === 0) break;
 
-    for (const row of data) {
-      if (row.codigo) map.set(row.codigo, (row.canal as string | null) || "SIN CANAL");
-    }
-
-    if (data.length < PAGE_SIZE) break;
-    from += PAGE_SIZE;
-  }
-
-  return map;
+    return map;
+  });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { invalidateCache } from "@/lib/queryCache";
 
 export const runtime = "nodejs";
 
@@ -101,6 +102,10 @@ export async function POST(request: NextRequest) {
         throw new Error(`Supabase (${config.table} - borrado total): ${delError.message}`);
       }
     }
+
+    // El maestro cambió (se borró y/o se va a insertar/actualizar) -> lo que
+    // haya cacheado en memoria de esta tabla ya no vale.
+    invalidateCache(`${config.table}:`);
 
     if (batch.length === 0) {
       return NextResponse.json({ success: true, filasInsertadas: 0 });

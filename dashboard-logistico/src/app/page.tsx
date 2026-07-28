@@ -346,6 +346,7 @@ export default function DashboardLayout() {
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
 
   useEffect(() => {
+    if (activeTab !== "Resumen") return;
     let cancelado = false;
 
     async function cargarResumen() {
@@ -385,7 +386,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion, rangoResumen, filtroTipoResumen]);
+  }, [activeTab, dataVersion, rangoResumen, filtroTipoResumen]);
 
   // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
   const DOT_PALETTE = [
@@ -477,6 +478,7 @@ export default function DashboardLayout() {
   const [filtroTipoFecha, setFiltroTipoFecha] = useState<"TODOS" | "REMA" | "STD">("TODOS");
 
   useEffect(() => {
+    if (activeTab !== "Por fecha") return;
     let cancelado = false;
 
     async function cargarPorFecha() {
@@ -505,7 +507,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   // Solo mostramos en el desplegable las semanas que efectivamente tienen
   // datos cargados (según el rango real de fechas en grupo_pedidos), en vez
@@ -687,6 +689,7 @@ export default function DashboardLayout() {
   const [filaExpandidaCI, setFilaExpandidaCI] = useState<{ marca: string; curva: string } | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "CI-Resumen") return;
     let cancelado = false;
 
     async function cargarDetalleCI() {
@@ -715,7 +718,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   // Orden fijo de curvas: ADELANTO, 1RA ETAPA, SEGUNDA ETAPA, y las que sigan
   // (desconocidas van al final, ordenadas alfabéticamente entre sí).
@@ -917,6 +920,8 @@ export default function DashboardLayout() {
   const [filaExpandidaREM, setFilaExpandidaREM] = useState<{ marca: string; archivo: string } | null>(null);
 
   useEffect(() => {
+    // remDetalleData también lo usa la tabla "Resumen por Marca / Grupo" de REM-Avance.
+    if (activeTab !== "REM-Resumen" && activeTab !== "REM-Avance") return;
     let cancelado = false;
 
     async function cargarDetalleREM() {
@@ -945,7 +950,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const marcasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.marca))).sort();
   const temporadasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.temporada))).sort();
@@ -1158,6 +1163,7 @@ export default function DashboardLayout() {
   const [productividadResumenError, setProductividadResumenError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "PROD-Resumen") return;
     let cancelado = false;
 
     async function cargarProductividadResumen() {
@@ -1186,7 +1192,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   // --- Filtros de la tabla de Productividad ---
   const [rangoProductividad, setRangoProductividad] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
@@ -1276,6 +1282,7 @@ export default function DashboardLayout() {
   const [gruposError, setGruposError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "Por pedidos") return;
     let cancelado = false;
 
     async function cargarPedidos() {
@@ -1304,7 +1311,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const handleTiendaClick = async (pedido: string) => {
     if (pedidoExpandido === pedido) {
@@ -1630,9 +1637,11 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    // perfilesAdmin también alimenta el selector de perfil en ADMIN-Usuarios.
+    if (activeTab !== "ADMIN-Perfiles" && activeTab !== "ADMIN-Usuarios") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarPerfilesAdmin();
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const seleccionarPerfil = (perfil: PerfilAdmin | null) => {
     if (perfil) {
@@ -1725,9 +1734,10 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    if (activeTab !== "ADMIN-Usuarios") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarUsuariosAdmin();
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const crearUsuario = async () => {
     if (!formUsuarioEmail.trim() || !formUsuarioPassword) return;
@@ -1831,6 +1841,7 @@ export default function DashboardLayout() {
   const [accesosAdminError, setAccesosAdminError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "ADMIN-Accesos") return;
     let cancelado = false;
     async function cargarAccesos() {
       setAccesosAdminLoading(true);
@@ -1850,7 +1861,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   // Etiqueta legible para una subseccion_key (ej: "CI-Resumen" -> "Status Carga Inicial / Resumen")
   const labelSubseccion = (key: string) => {
@@ -1892,9 +1903,10 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    if (activeTab !== "ADMIN-Feriados") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarFeriadosAdmin();
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const crearFeriado = async () => {
     if (!formFeriadoFecha) return;
@@ -1958,9 +1970,10 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    if (activeTab !== "ADMIN-Configuracion") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarConfigAdmin();
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const guardarConfigAdmin = async () => {
     if (!formNotificationEmail.trim()) return;
@@ -2028,9 +2041,10 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    if (activeTab !== "CI-Carga") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarPlanCargaInicial();
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const planFormValido =
     !!formPlanFechaInicio &&
@@ -2112,6 +2126,7 @@ export default function DashboardLayout() {
   const [avancePlanError, setAvancePlanError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "CI-Avance") return;
     let cancelado = false;
 
     async function cargarAvancePlan() {
@@ -2133,7 +2148,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   // =========================================================================
   // ESTADO: STATUS REMANENTES - CARGA DATOS (plan vigente, un único registro)
@@ -2179,9 +2194,11 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    // planRemanentes también lo usa el "target" mostrado en REM-Avance.
+    if (activeTab !== "REM-Carga" && activeTab !== "REM-Avance") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarPlanRemanentes();
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const planRemanentesFormValido =
     !!formPlanRemFechaInicio &&
@@ -2244,6 +2261,7 @@ export default function DashboardLayout() {
   const [avancePlanRemError, setAvancePlanRemError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "REM-Avance") return;
     let cancelado = false;
 
     async function cargarAvancePlanRem() {
@@ -2265,7 +2283,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   // =========================================================================
   // ESTADO: STATUS REMANENTES - RESUMEN POR MARCA / GRUPO (con Unidades Target)
@@ -2544,6 +2562,7 @@ export default function DashboardLayout() {
   const [pdPropiosError, setPdPropiosError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "PD-Propios") return;
     let cancelado = false;
 
     async function cargarPDPropios() {
@@ -2570,7 +2589,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const [filtroCanalPDP, setFiltroCanalPDP] = useState("TODAS");
   const [filtroTipoPDP, setFiltroTipoPDP] = useState("TODAS");
@@ -2668,6 +2687,7 @@ export default function DashboardLayout() {
   const [pdClientesError, setPdClientesError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "PD-Clientes") return;
     let cancelado = false;
 
     async function cargarPDClientes() {
@@ -2694,7 +2714,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const [filtroCanalPD, setFiltroCanalPD] = useState("TODAS");
   const [filtroTipoPD, setFiltroTipoPD] = useState("TODAS");
@@ -2993,6 +3013,7 @@ export default function DashboardLayout() {
   const [inboundError, setInboundError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (activeTab !== "INB-Resumen") return;
     let cancelado = false;
 
     async function cargarInbound() {
@@ -3019,7 +3040,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion]);
+  }, [activeTab, dataVersion]);
 
   const [filtroLegajoPendientes, setFiltroLegajoPendientes] = useState("");
   const [filtroSemanaPendientes, setFiltroSemanaPendientes] = useState(""); // "" = todas las semanas
