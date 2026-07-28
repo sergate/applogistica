@@ -45,6 +45,7 @@ interface FechaResumen {
   marca: string;
   canal: string;
   grupo: string;
+  tipoPedido: "REMA" | "STD";
   uni: number;
   pick: number;
   sep: number;
@@ -342,6 +343,7 @@ export default function DashboardLayout() {
   const [resumenLoading, setResumenLoading] = useState(false);
   const [resumenError, setResumenError] = useState<string | null>(null);
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
+  const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
 
   useEffect(() => {
     let cancelado = false;
@@ -351,11 +353,16 @@ export default function DashboardLayout() {
       setResumenError(null);
       try {
         let url = "/api/resumen";
+        const params = new URLSearchParams();
         if (rangoResumen) {
           const d = new Date();
           d.setDate(d.getDate() - (rangoResumen - 1));
-          url += `?desde=${d.toISOString().slice(0, 10)}`;
+          params.set("desde", d.toISOString().slice(0, 10));
         }
+        if (filtroTipoResumen !== "TODOS") {
+          params.set("tipoPedido", filtroTipoResumen);
+        }
+        if (params.toString()) url += `?${params.toString()}`;
         const res = await fetch(url, { cache: "no-store" });
         let data;
         try {
@@ -378,7 +385,7 @@ export default function DashboardLayout() {
     return () => {
       cancelado = true;
     };
-  }, [dataVersion, rangoResumen]);
+  }, [dataVersion, rangoResumen, filtroTipoResumen]);
 
   // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
   const DOT_PALETTE = [
@@ -467,6 +474,7 @@ export default function DashboardLayout() {
   const [filtroMarcaFecha, setFiltroMarcaFecha] = useState<string>("TODAS");
   const [filtroCanalFecha, setFiltroCanalFecha] = useState<string>("TODAS");
   const [filtroGrupoFecha, setFiltroGrupoFecha] = useState<string>("TODAS");
+  const [filtroTipoFecha, setFiltroTipoFecha] = useState<"TODOS" | "REMA" | "STD">("TODOS");
 
   useEffect(() => {
     let cancelado = false;
@@ -1226,6 +1234,7 @@ export default function DashboardLayout() {
     codigoTienda: string;
     cliente: string;
     nombrePedido: string;
+    tipoPedido: "REMA" | "STD";
     marca: string;
     canal: string;
     fecha: string;
@@ -1246,6 +1255,7 @@ export default function DashboardLayout() {
   const [filtroMarcaPedidos, setFiltroMarcaPedidos] = useState("TODAS");
   const [filtroCanalPedidos, setFiltroCanalPedidos] = useState("TODAS");
   const [filtroGrupoPedidos, setFiltroGrupoPedidos] = useState("TODAS");
+  const [filtroTipoPedidos, setFiltroTipoPedidos] = useState<"TODOS" | "REMA" | "STD">("TODOS");
   const [rangoFechaPedidos, setRangoFechaPedidos] = useState<7 | 14 | 30>(7);
   const [semanaPedidos, setSemanaPedidos] = useState<{ desde: string; hasta: string } | null>(null);
 
@@ -1348,6 +1358,7 @@ export default function DashboardLayout() {
     if (filtroMarcaPedidos !== "TODAS" && f.marca !== filtroMarcaPedidos) return false;
     if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
     if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
+    if (filtroTipoPedidos !== "TODOS" && f.tipoPedido !== filtroTipoPedidos) return false;
     if (busquedaNormalizada) {
       const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
       const matchCodigo = f.codigoTienda.toLowerCase().includes(busquedaNormalizada);
@@ -1475,7 +1486,8 @@ export default function DashboardLayout() {
     (f) =>
       (filtroMarcaFecha === "TODAS" || f.marca === filtroMarcaFecha) &&
       (filtroCanalFecha === "TODAS" || f.canal === filtroCanalFecha) &&
-      (filtroGrupoFecha === "TODAS" || f.grupo === filtroGrupoFecha)
+      (filtroGrupoFecha === "TODAS" || f.grupo === filtroGrupoFecha) &&
+      (filtroTipoFecha === "TODOS" || f.tipoPedido === filtroTipoFecha)
   );
 
   // Consolidamos por (fecha, marca): el canal se usa solo para filtrar,
@@ -3452,8 +3464,21 @@ export default function DashboardLayout() {
                   </button>
                 ))}
 
+                <select
+                  value={filtroTipoResumen}
+                  onChange={(e) => setFiltroTipoResumen(e.target.value as "TODOS" | "REMA" | "STD")}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los pedidos</option>
+                  <option value="REMA">REMA</option>
+                  <option value="STD">STD</option>
+                </select>
+
                 <button
-                  onClick={() => setRangoResumen(null)}
+                  onClick={() => {
+                    setRangoResumen(null);
+                    setFiltroTipoResumen("TODOS");
+                  }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Limpiar filtros
@@ -3863,6 +3888,16 @@ export default function DashboardLayout() {
                   ))}
                 </select>
 
+                <select
+                  value={filtroTipoFecha}
+                  onChange={(e) => setFiltroTipoFecha(e.target.value as "TODOS" | "REMA" | "STD")}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los pedidos</option>
+                  <option value="REMA">REMA</option>
+                  <option value="STD">STD</option>
+                </select>
+
                 <button
                   onClick={() => {
                     setRangoFecha(7);
@@ -3871,6 +3906,7 @@ export default function DashboardLayout() {
                     setFiltroMarcaFecha("TODAS");
                     setFiltroCanalFecha("TODAS");
                     setFiltroGrupoFecha("TODAS");
+                    setFiltroTipoFecha("TODOS");
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
@@ -3899,6 +3935,7 @@ export default function DashboardLayout() {
                           {filtroMarcaFecha !== "TODAS" ? ` — ${filtroMarcaFecha}` : " — Todas las marcas"}
                           {filtroCanalFecha !== "TODAS" ? ` — ${filtroCanalFecha}` : ""}
                           {filtroGrupoFecha !== "TODAS" ? ` — ${filtroGrupoFecha}` : ""}
+                          {filtroTipoFecha !== "TODOS" ? ` — ${filtroTipoFecha}` : ""}
                         </td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.uni)}</td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaCalculado.pick)}</td>
@@ -3998,6 +4035,16 @@ export default function DashboardLayout() {
                   {gruposDisponiblesPedidos.map((g) => (
                     <option key={g} value={g}>{g}</option>
                   ))}
+                </select>
+
+                <select
+                  value={filtroTipoPedidos}
+                  onChange={(e) => setFiltroTipoPedidos(e.target.value as "TODOS" | "REMA" | "STD")}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los pedidos</option>
+                  <option value="REMA">REMA</option>
+                  <option value="STD">STD</option>
                 </select>
 
                 <button

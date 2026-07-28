@@ -7,6 +7,11 @@ export const GRUPOS_EXCLUIDOS = ["VIDRIERA", "MATERIALES EMPAQUE", "PACKAGING", 
 // Pedidos con este estado tampoco cuentan para los cálculos (ya están cerrados)
 export const ESTADOS_EXCLUIDOS = ["OD_TERMINADO"];
 
+/** Si el "Nombre pedido" contiene "rema" (sin importar mayúsculas) es REMA, si no STD. */
+export function tipoPedidoDeNombre(nombrePedido: string | null): "REMA" | "STD" {
+  return (nombrePedido || "").toLowerCase().includes("rema") ? "REMA" : "STD";
+}
+
 export interface GrupoPedidoRow {
   pedido: string;
   grupo: string | null;

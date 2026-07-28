@@ -8,6 +8,7 @@ import {
   fetchTiendasPorPedido,
   fetchClientesInfo,
   resolverTiendaCliente,
+  tipoPedidoDeNombre,
 } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
@@ -82,6 +83,7 @@ export async function GET() {
         codigoTienda,
         cliente: nombre,
         nombrePedido: meta.nombrePedido,
+        tipoPedido: tipoPedidoDeNombre(meta.nombrePedido),
         marca: meta.marca,
         canal,
         fecha: meta.fecha,

@@ -8,6 +8,7 @@ import {
   fetchTiendasPorPedido,
   fetchCanalPorCodigoTienda,
   resolverCanal,
+  tipoPedidoDeNombre,
 } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
@@ -32,14 +33,16 @@ export async function GET() {
     const rows = await fetchAllGrupoPedidos();
     const contables = rows.filter(esContable);
 
-    // Fecha y marca son consistentes dentro de un mismo pedido (todas sus
-    // líneas comparten esos valores), así que armamos un mapa auxiliar.
-    const metaPorPedido = new Map<string, { fecha: string; marca: string }>();
+    // Fecha, marca y tipo de pedido son consistentes dentro de un mismo
+    // pedido (todas sus líneas comparten esos valores), así que armamos un
+    // mapa auxiliar.
+    const metaPorPedido = new Map<string, { fecha: string; marca: string; tipoPedido: "REMA" | "STD" }>();
     for (const r of contables) {
       if (!metaPorPedido.has(r.pedido)) {
         metaPorPedido.set(r.pedido, {
           fecha: soloFecha(r.fecha_creacion),
           marca: (r.seller || "").trim() || "SIN SELLER",
+          tipoPedido: tipoPedidoDeNombre(r.nombre_pedido),
         });
       }
     }
@@ -59,21 +62,40 @@ export async function GET() {
       return canalPorPedido.get(pedido)!;
     };
 
-    // Agrupamos por (fecha, marca, canal, grupo) -- mantenemos "grupo" para
-    // poder filtrar por él en el frontend sin perder precisión.
+    // Agrupamos por (fecha, marca, canal, grupo, tipoPedido) -- mantenemos
+    // "grupo" y "tipoPedido" para poder filtrar por ellos en el frontend sin
+    // perder precisión.
     const grupos = new Map<
       string,
-      { fecha: string; marca: string; canal: string; grupo: string; uni: number; pick: number; sep: number }
+      {
+        fecha: string;
+        marca: string;
+        canal: string;
+        grupo: string;
+        tipoPedido: "REMA" | "STD";
+        uni: number;
+        pick: number;
+        sep: number;
+      }
     >();
 
     for (const r of contables) {
       const meta = metaPorPedido.get(r.pedido)!;
       const canal = getCanal(r.pedido);
       const grupoNombre = (r.grupo || "").trim() || "SIN GRUPO";
-      const key = `${meta.fecha}__${meta.marca}__${canal}__${grupoNombre}`;
+      const key = `${meta.fecha}__${meta.marca}__${canal}__${grupoNombre}__${meta.tipoPedido}`;
 
       if (!grupos.has(key)) {
-        grupos.set(key, { fecha: meta.fecha, marca: meta.marca, canal, grupo: grupoNombre, uni: 0, pick: 0, sep: 0 });
+        grupos.set(key, {
+          fecha: meta.fecha,
+          marca: meta.marca,
+          canal,
+          grupo: grupoNombre,
+          tipoPedido: meta.tipoPedido,
+          uni: 0,
+          pick: 0,
+          sep: 0,
+        });
       }
       const g = grupos.get(key)!;
       g.uni += num(r.uni);
@@ -87,6 +109,7 @@ export async function GET() {
         marca: g.marca,
         canal: g.canal,
         grupo: g.grupo,
+        tipoPedido: g.tipoPedido,
         uni: g.uni,
         pick: g.pick,
         sep: g.sep,

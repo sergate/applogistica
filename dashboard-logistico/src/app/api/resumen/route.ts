@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion } from "@/lib/resumenHelpers";
+import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion, tipoPedidoDeNombre } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
@@ -18,14 +18,19 @@ export async function GET(request: NextRequest) {
   }
 
   // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante).
-  // Sin este parámetro, se muestran todos los datos sin filtrar.
+  // Filtro opcional por tipo de pedido: ?tipoPedido=REMA|STD.
+  // Sin estos parámetros, se muestran todos los datos sin filtrar.
   const desde = request.nextUrl.searchParams.get("desde");
+  const tipoPedido = request.nextUrl.searchParams.get("tipoPedido");
 
   try {
     const rows = await fetchAllGrupoPedidos();
     let contables = rows.filter(esContable);
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+    }
+    if (tipoPedido === "REMA" || tipoPedido === "STD") {
+      contables = contables.filter((r) => tipoPedidoDeNombre(r.nombre_pedido) === tipoPedido);
     }
 
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
