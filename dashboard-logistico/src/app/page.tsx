@@ -924,6 +924,29 @@ export default function DashboardLayout() {
   const [filtroTemporadaREM, setFiltroTemporadaREM] = useState("TODAS");
   const [filtroGrupoREM, setFiltroGrupoREM] = useState("TODAS");
   const [filaExpandidaREM, setFilaExpandidaREM] = useState<{ marca: string; archivo: string } | null>(null);
+  const [eliminandoArchivoREM, setEliminandoArchivoREM] = useState<string | null>(null);
+  const [eliminarArchivoErrorREM, setEliminarArchivoErrorREM] = useState<string | null>(null);
+
+  const eliminarArchivoREM = async (archivo: string) => {
+    if (!confirm(`¿Confirmás que querés borrar de la base de datos todos los registros del archivo "${archivo}"? Esta acción no se puede deshacer.`)) return;
+    setEliminandoArchivoREM(archivo);
+    setEliminarArchivoErrorREM(null);
+    try {
+      const res = await fetch("/api/remanentes/eliminar-archivo", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numero: archivo }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo borrar el archivo.");
+      if (filaExpandidaREM?.archivo === archivo) setFilaExpandidaREM(null);
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setEliminarArchivoErrorREM(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setEliminandoArchivoREM(null);
+    }
+  };
 
   useEffect(() => {
     // remDetalleData también lo usa la tabla "Resumen por Marca / Grupo" de REM-Avance.
@@ -6127,6 +6150,11 @@ export default function DashboardLayout() {
                     Error al cargar el detalle: {remDetalleError}
                   </div>
                 )}
+                {eliminarArchivoErrorREM && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    {eliminarArchivoErrorREM}
+                  </div>
+                )}
                 {remDetalleLoading && !remDetalleData && (
                   <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
                     Cargando datos de remanentes...
@@ -6148,6 +6176,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{fmtNum(subtotalREMCalculado.distribuidas)}</td>
                           <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalREMCalculado.aRepartir)}</td>
                           <td className="py-3 px-4 text-left">{fmtPct(subtotalREMCalculado.completitud)}</td>
+                          {tienePermiso("REM-EliminarArchivo") && <td className="py-3 px-4 text-left"></td>}
                         </tr>
                       )}
                       <tr className="text-slate-500 font-medium border-b border-slate-200">
@@ -6157,6 +6186,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
                         <th className="py-3 px-4 text-left">Unidades a Repartir</th>
                         <th className="py-3 px-4 text-left">% Completitud</th>
+                        {tienePermiso("REM-EliminarArchivo") && <th className="py-3 px-4 text-left">Acción</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -6178,11 +6208,22 @@ export default function DashboardLayout() {
                             <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
                             <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
                             <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
+                            {tienePermiso("REM-EliminarArchivo") && (
+                              <td className="py-3 px-4 text-left" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => eliminarArchivoREM(row.archivo)}
+                                  disabled={eliminandoArchivoREM === row.archivo}
+                                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                                >
+                                  {eliminandoArchivoREM === row.archivo ? "Borrando..." : "Borrar archivo"}
+                                </button>
+                              </td>
+                            )}
                           </tr>
 
                           {estaExpandida && (
                               <tr>
-                                <td colSpan={6} className="bg-slate-50 px-4 py-4">
+                                <td colSpan={tienePermiso("REM-EliminarArchivo") ? 7 : 6} className="bg-slate-50 px-4 py-4">
                                   <p className="text-xs font-semibold text-slate-500 mb-2">
                                     Desglose por grupo — {row.marca} / {row.archivo}
                                   </p>
