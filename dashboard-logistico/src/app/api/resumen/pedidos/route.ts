@@ -8,7 +8,8 @@ import {
   fetchTiendasPorPedido,
   fetchClientesInfo,
   resolverTiendaCliente,
-  tipoPedidoDeNombre,
+  tipoPedido,
+  fetchPedidosRemaManual,
 } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
@@ -48,9 +49,10 @@ export async function GET() {
 
     // tiendas_destino + clientes se usan SOLO para resolver código de tienda,
     // nombre de cliente y canal -- no aportan unidades.
-    const [tiendasPorPedido, clientesInfo] = await Promise.all([
+    const [tiendasPorPedido, clientesInfo, pedidosRemaManual] = await Promise.all([
       fetchTiendasPorPedido(),
       fetchClientesInfo(),
+      fetchPedidosRemaManual(),
     ]);
 
     // Agregamos por (pedido, grupo) -- mantenemos "grupo" para poder filtrar
@@ -83,7 +85,7 @@ export async function GET() {
         codigoTienda,
         cliente: nombre,
         nombrePedido: meta.nombrePedido,
-        tipoPedido: tipoPedidoDeNombre(meta.nombrePedido),
+        tipoPedido: tipoPedido(g.pedido, meta.nombrePedido, pedidosRemaManual),
         marca: meta.marca,
         canal,
         fecha: meta.fecha,

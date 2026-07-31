@@ -21,6 +21,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "Resumen", label: "Resumen" },
       { key: "Por fecha", label: "Por Fecha" },
       { key: "Por pedidos", label: "Por Pedidos" },
+      { key: "REMA Manual", label: "Pedidos REMA Manual" },
     ],
   },
   {

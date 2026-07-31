@@ -20,6 +20,32 @@ export function tipoPedidoDeNombre(nombrePedido: string | null): "REMA" | "STD" 
   return (nombrePedido || "").toLowerCase().includes("rema") ? "REMA" : "STD";
 }
 
+/**
+ * Igual que tipoPedidoDeNombre, pero además fuerza REMA para cualquier
+ * pedido cargado a mano en "pedidos_rema_manual" (panel Status de
+ * Preparación / Pedidos REMA Manual) aunque su nombre no contenga "rema".
+ * Deja de contar como REMA en cuanto se borra de esa lista.
+ */
+export function tipoPedido(
+  pedido: string,
+  nombrePedido: string | null,
+  pedidosRemaManual: Set<string>
+): "REMA" | "STD" {
+  if (pedidosRemaManual.has(pedido)) return "REMA";
+  return tipoPedidoDeNombre(nombrePedido);
+}
+
+/** Trae todos los códigos de pedido cargados a mano como REMA. */
+export async function fetchPedidosRemaManual(): Promise<Set<string>> {
+  return getCached("pedidos_rema_manual:all", MAESTROS_TTL_MS, async () => {
+    const { data, error } = await supabaseAdmin.from("pedidos_rema_manual").select("pedido");
+    if (error) {
+      throw new Error(`Supabase (pedidos_rema_manual): ${error.message}`);
+    }
+    return new Set((data ?? []).map((r) => r.pedido as string));
+  });
+}
+
 export interface GrupoPedidoRow {
   pedido: string;
   grupo: string | null;

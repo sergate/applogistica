@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion, tipoPedidoDeNombre } from "@/lib/resumenHelpers";
+import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion, tipoPedido, fetchPedidosRemaManual } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
   // Filtro opcional por tipo de pedido: ?tipoPedido=REMA|STD.
   // Sin estos parámetros, se muestran todos los datos sin filtrar.
   const desde = request.nextUrl.searchParams.get("desde");
-  const tipoPedido = request.nextUrl.searchParams.get("tipoPedido");
+  const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
 
   try {
     const rows = await fetchAllGrupoPedidos();
@@ -29,8 +29,9 @@ export async function GET(request: NextRequest) {
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
     }
-    if (tipoPedido === "REMA" || tipoPedido === "STD") {
-      contables = contables.filter((r) => tipoPedidoDeNombre(r.nombre_pedido) === tipoPedido);
+    if (tipoPedidoParam === "REMA" || tipoPedidoParam === "STD") {
+      const pedidosRemaManual = await fetchPedidosRemaManual();
+      contables = contables.filter((r) => tipoPedido(r.pedido, r.nombre_pedido, pedidosRemaManual) === tipoPedidoParam);
     }
 
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
