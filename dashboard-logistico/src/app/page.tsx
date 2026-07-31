@@ -1725,7 +1725,9 @@ export default function DashboardLayout() {
     setCanalError(null);
     setCanalRows(null);
     try {
-      const res = await fetch(`/api/resumen/canal?marca=${encodeURIComponent(marca)}`, {
+      let url = `/api/resumen/canal?marca=${encodeURIComponent(marca)}`;
+      if (filtroTipoResumen !== "TODOS") url += `&tipoPedido=${filtroTipoResumen}`;
+      const res = await fetch(url, {
         cache: "no-store",
       });
       let data;
@@ -1744,6 +1746,15 @@ export default function DashboardLayout() {
       setCanalLoading(false);
     }
   };
+
+  // Si cambia el filtro REMA/STD de Resumen mientras el desglose por canal
+  // de una marca está abierto, lo recarga para que muestre lo mismo que la
+  // tabla de arriba (en vez de quedarse con los datos del filtro anterior).
+  useEffect(() => {
+    if (!selectedMarca) return;
+    void cargarCanalPorMarca(selectedMarca);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroTipoResumen]);
 
   // =========================================================================
   // ESTADO: ADMINISTRACIÓN - PERFILES

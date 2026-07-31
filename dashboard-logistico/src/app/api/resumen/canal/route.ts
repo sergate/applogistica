@@ -7,6 +7,8 @@ import {
   fetchTiendasPorPedido,
   fetchCanalPorCodigoTienda,
   resolverCanal,
+  tipoPedido,
+  fetchPedidosRemaManual,
 } from "@/lib/resumenHelpers";
 
 export const runtime = "nodejs";
@@ -28,13 +30,21 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   }
+  // Filtro opcional por tipo de pedido: ?tipoPedido=REMA|STD (mismo filtro
+  // que Resumen, para que el desglose por canal muestre lo mismo que ya se
+  // ve arriba en vez de siempre todos los pedidos de la marca).
+  const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
 
   try {
     const rows = await fetchAllGrupoPedidos();
     const marcaTrim = marca.trim();
-    const contables = rows.filter(
+    let contables = rows.filter(
       (r) => esContable(r) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
     );
+    if (tipoPedidoParam === "REMA" || tipoPedidoParam === "STD") {
+      const pedidosRemaManual = await fetchPedidosRemaManual();
+      contables = contables.filter((r) => tipoPedido(r.pedido, r.nombre_pedido, pedidosRemaManual) === tipoPedidoParam);
+    }
 
     // El canal se define a nivel PEDIDO (no a nivel línea/grupo), así que
     // primero sumamos las unidades de cada pedido dentro de esta marca.
