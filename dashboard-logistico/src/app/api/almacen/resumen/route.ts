@@ -34,15 +34,18 @@ export async function GET() {
     const [layout, ocupacion] = await Promise.all([fetchAlmacenLayout(), fetchAlmacenOcupacion()]);
 
     // Agrupamos por (grupo, subzona); cada ubicación del layout aporta 1 a
-    // "capacidad" de su grupo/subzona, y 1 a "ocupadas" si está en el set de
-    // ubicaciones ocupadas (viene de la última importación del archivo grande).
+    // "ocupadas" si está en el set de ubicaciones ocupadas (viene de la
+    // última importación del archivo grande). Para "capacidad": las
+    // sub-filas MZN (Calzado/Indumentaria) admiten hasta 6 contenedores por
+    // posición, así que cuentan 6 por posición en vez de 1 -- el resto de
+    // las zonas (Pallet, PALLET F01, AWADA) sigue contando 1 por posición.
     const porGrupoSubzona = new Map<string, Fila>();
     for (const row of layout) {
       const { grupo, subzona } = clasificarZonaAlmacen(row.zona);
       const key = `${grupo}__${subzona}`;
       if (!porGrupoSubzona.has(key)) porGrupoSubzona.set(key, { capacidad: 0, ocupadas: 0 });
       const acc = porGrupoSubzona.get(key)!;
-      acc.capacidad += 1;
+      acc.capacidad += subzona.startsWith("MZN") ? 6 : 1;
       if (ocupacion.ubicacionesOcupadas.has(row.ubicacion)) acc.ocupadas += 1;
     }
 
