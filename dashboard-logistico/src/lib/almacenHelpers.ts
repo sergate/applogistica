@@ -22,6 +22,7 @@ const MAPA_ZONAS: Record<string, { grupo: string; subzona: string }> = {
   "MZN IND 2": { grupo: "Indumentaria", subzona: "MZN PISO 2" },
   "MZN IND 3": { grupo: "Indumentaria", subzona: "MZN PISO 3" },
   "MZN IND 4": { grupo: "Indumentaria", subzona: "MZN PISO 4" },
+  "PALLET F01": { grupo: "Indumentaria", subzona: "PALLET F01" },
   "PERCHERO AWADA": { grupo: "AWADA", subzona: "PERCHEROS" },
   "PICKING AWADA": { grupo: "AWADA", subzona: "PICKING" },
 };
