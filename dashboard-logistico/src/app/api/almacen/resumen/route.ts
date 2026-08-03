@@ -17,7 +17,9 @@ function conVacantesYPct(f: Fila) {
   return {
     capacidad: f.capacidad,
     ocupadas: f.ocupadas,
-    vacias: f.capacidad - f.ocupadas,
+    // Nunca negativas -- puede pasar si una zona de tipo "contenedores por
+    // posición" (MZN) trae más contenedores cargados que el máximo esperado.
+    vacias: Math.max(0, f.capacidad - f.ocupadas),
     pct: f.capacidad > 0 ? (f.ocupadas / f.capacidad) * 100 : 0,
   };
 }
@@ -33,20 +35,26 @@ export async function GET() {
   try {
     const [layout, ocupacion] = await Promise.all([fetchAlmacenLayout(), fetchAlmacenOcupacion()]);
 
-    // Agrupamos por (grupo, subzona); "ocupadas" es la suma de contenedores
-    // únicos (con stock>0) que hay en todas las posiciones de esa zona --
-    // viene de la última importación del archivo grande. Para "capacidad":
-    // las sub-filas MZN (Calzado/Indumentaria) admiten hasta 6 contenedores
-    // por posición, así que cuentan 6 por posición en vez de 1 -- el resto
-    // de las zonas (Pallet, PALLET F01, AWADA) sigue contando 1 por posición.
+    // Agrupamos por (grupo, subzona). "Capacidad" depende del tipo de
+    // sub-fila: MZN (Calzado/Indumentaria) admite hasta 6 contenedores por
+    // posición -> cuenta 6 por posición; PALLET F01 admite hasta 10 -> cuenta
+    // 10 por posición; el resto (NAVE 2/3, PERCHEROS, PICKING) cuenta 1 por
+    // posición. "Ocupadas": en las sub-filas "por contenedor" (MZN y
+    // PALLET F01) se suman los contenedores únicos con stock>0 (la capacidad
+    // ya está en esa unidad); en el resto (tipo pallet -- una posición
+    // entera, no por contenedor) una posición cuenta como ocupada si tiene 1
+    // o más contenedores con stock>0, y como vacía si no tiene ninguno.
     const porGrupoSubzona = new Map<string, Fila>();
     for (const row of layout) {
       const { grupo, subzona } = clasificarZonaAlmacen(row.zona);
       const key = `${grupo}__${subzona}`;
       if (!porGrupoSubzona.has(key)) porGrupoSubzona.set(key, { capacidad: 0, ocupadas: 0 });
       const acc = porGrupoSubzona.get(key)!;
-      acc.capacidad += subzona.startsWith("MZN") ? 6 : 1;
-      acc.ocupadas += ocupacion.contenedoresPorUbicacion.get(row.ubicacion) ?? 0;
+      const esPorContenedor = subzona.startsWith("MZN") || subzona === "PALLET F01";
+      acc.capacidad += subzona.startsWith("MZN") ? 6 : subzona === "PALLET F01" ? 10 : 1;
+
+      const contenedores = ocupacion.contenedoresPorUbicacion.get(row.ubicacion) ?? 0;
+      acc.ocupadas += esPorContenedor ? contenedores : contenedores > 0 ? 1 : 0;
     }
 
     const porGrupo = new Map<string, { subzona: string; fila: Fila }[]>();
