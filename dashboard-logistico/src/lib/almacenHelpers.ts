@@ -9,32 +9,30 @@ export interface AlmacenLayoutRow {
   zona: string;
 }
 
-/**
- * Clasifica una fila del layout (nave + zona, tal como vienen del Excel) en
- * el grupo y la sub-fila que se muestran en Ocupación Almacén - Resumen.
- * Es la única función con esta lógica: si algún valor real de "Zona" no cae
- * en el grupo correcto, se ajusta acá y se recalcula solo (el layout se
- * guarda crudo, sin la clasificación).
- */
-export function clasificarZonaAlmacen(nave: string | null, zonaRaw: string): { grupo: string; subzona: string } {
-  const zona = (zonaRaw || "").toUpperCase();
+// Mapeo exacto de los valores de "Zona" que trae el layout real a
+// (grupo, sub-fila) mostrados en Ocupación Almacén - Resumen. Es la única
+// lógica de clasificación: si aparece un valor de Zona nuevo que no está
+// acá, cae en el grupo "Sin clasificar" (no se pierde ni rompe nada) y se
+// agrega una línea nueva a este mapa.
+const MAPA_ZONAS: Record<string, { grupo: string; subzona: string }> = {
+  "RACK NAVE 2": { grupo: "Pallet", subzona: "NAVE 2" },
+  "RACK AWADA": { grupo: "Pallet", subzona: "NAVE 3" },
+  "MZN CAL 3": { grupo: "Calzado", subzona: "MZN PISO 3" },
+  "MZN IND 1": { grupo: "Indumentaria", subzona: "MZN PISO 1" },
+  "MZN IND 2": { grupo: "Indumentaria", subzona: "MZN PISO 2" },
+  "MZN IND 3": { grupo: "Indumentaria", subzona: "MZN PISO 3" },
+  "MZN IND 4": { grupo: "Indumentaria", subzona: "MZN PISO 4" },
+  "PERCHERO AWADA": { grupo: "AWADA", subzona: "PERCHEROS" },
+  "PICKING AWADA": { grupo: "AWADA", subzona: "PICKING" },
+};
 
-  if (zona.includes("AWADA")) {
-    const subzona = zona.includes("PERCHER") ? "PERCHEROS" : zona.includes("PICKING") ? "PICKING" : zonaRaw.trim();
-    return { grupo: "AWADA", subzona };
-  }
-  if (zona.includes("CALZADO")) {
-    const piso = zona.match(/PISO\s*\d+/);
-    return { grupo: "Calzado", subzona: piso ? `MZN ${piso[0]}` : zonaRaw.trim() };
-  }
-  if (zona.includes("INDUMENTARIA")) {
-    const piso = zona.match(/PISO\s*\d+/);
-    if (piso) return { grupo: "Indumentaria", subzona: `MZN ${piso[0]}` };
-    if (zona.includes("PALLET")) return { grupo: "Indumentaria", subzona: "PALLET F01" };
-    return { grupo: "Indumentaria", subzona: zonaRaw.trim() };
-  }
-  // Todo lo que no matchea AWADA/Calzado/Indumentaria se asume Pallet, agrupado por nave.
-  return { grupo: "Pallet", subzona: nave ? `NAVE ${nave}` : zonaRaw.trim() || "SIN NAVE" };
+/**
+ * Clasifica una fila del layout (según su "Zona", tal como viene del Excel)
+ * en el grupo y la sub-fila que se muestran en Ocupación Almacén - Resumen.
+ */
+export function clasificarZonaAlmacen(zonaRaw: string): { grupo: string; subzona: string } {
+  const zona = (zonaRaw || "").trim().toUpperCase();
+  return MAPA_ZONAS[zona] ?? { grupo: "Sin clasificar", subzona: zonaRaw.trim() || "SIN ZONA" };
 }
 
 /** Trae TODO el layout del almacén (paginado, Supabase pagina de a 1000). */

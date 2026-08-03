@@ -38,7 +38,7 @@ export async function GET() {
     // ubicaciones ocupadas (viene de la última importación del archivo grande).
     const porGrupoSubzona = new Map<string, Fila>();
     for (const row of layout) {
-      const { grupo, subzona } = clasificarZonaAlmacen(row.nave, row.zona);
+      const { grupo, subzona } = clasificarZonaAlmacen(row.zona);
       const key = `${grupo}__${subzona}`;
       if (!porGrupoSubzona.has(key)) porGrupoSubzona.set(key, { capacidad: 0, ocupadas: 0 });
       const acc = porGrupoSubzona.get(key)!;
