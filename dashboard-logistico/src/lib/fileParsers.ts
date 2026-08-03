@@ -219,3 +219,86 @@ export async function parseCsvFile(
 
   return normalizeRecordKeys(result.data);
 }
+
+// Separador para la clave compuesta ubicacion+contenedor -- un caracter de
+// control que no debería aparecer en ninguno de los dos campos.
+const CLAVE_SEP = String.fromCharCode(31);
+
+export interface FilaOcupacionAlmacen {
+  ubicacion: string;
+  contenedor: string;
+  unidades: number;
+}
+
+/**
+ * Lee el archivo de ocupación de almacén (puede pesar >100MB / cientos de
+ * miles de filas) en modo streaming con Papa Parse (`worker:true` + `step`),
+ * sin nunca tener el archivo completo ni el array de filas originales en
+ * memoria. Va armando directamente una "tabla dinámica" de combinaciones
+ * únicas (ubicacion, contenedor) con stock>0, sumando "unidades" si la misma
+ * combinación aparece más de una vez en el archivo. `onProgreso` (0-100) se
+ * llama según los bytes ya leídos del archivo.
+ *
+ * Se parsea con `header:false` (filas como array, no objeto) y se resuelve
+ * el índice de cada columna a mano en la primera fila -- Papa Parse no puede
+ * mandar una función (`transformHeader`) al Web Worker (falla el
+ * postMessage), así que la única función que puede viajar es `step`, que
+ * corre en el hilo principal recibiendo cada fila ya parseada.
+ */
+export async function parseOcupacionAlmacenStreaming(
+  file: File,
+  onProgreso?: (pct: number) => void
+): Promise<FilaOcupacionAlmacen[]> {
+  const tabla = new Map<string, number>();
+  let idxUbicacion = -1;
+  let idxContenedor = -1;
+  let idxStock = -1;
+  let primeraFila = true;
+
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: false,
+      worker: true,
+      skipEmptyLines: true,
+      step: (results) => {
+        const row = results.data as string[];
+
+        if (primeraFila) {
+          primeraFila = false;
+          idxUbicacion = row.findIndex((h) => normalizeHeader(h) === "ubicacion");
+          idxContenedor = row.findIndex((h) => normalizeHeader(h) === "contenedor");
+          idxStock = row.findIndex((h) => normalizeHeader(h) === "stock");
+          return;
+        }
+
+        if (idxUbicacion === -1 || idxContenedor === -1 || idxStock === -1) return;
+
+        const ubicacion = (row[idxUbicacion] || "").trim();
+        const contenedor = (row[idxContenedor] || "").trim();
+        const unidades = Number(String(row[idxStock] ?? "").trim().replace(",", "."));
+
+        if (ubicacion && contenedor && Number.isFinite(unidades) && unidades > 0) {
+          const clave = ubicacion + CLAVE_SEP + contenedor;
+          tabla.set(clave, (tabla.get(clave) ?? 0) + unidades);
+        }
+
+        if (onProgreso && file.size > 0 && typeof results.meta.cursor === "number") {
+          onProgreso(Math.min(100, Math.round((results.meta.cursor / file.size) * 100)));
+        }
+      },
+      complete: () => {
+        if (idxUbicacion === -1 || idxContenedor === -1 || idxStock === -1) {
+          reject(new Error('El archivo no tiene las columnas "Ubicacion", "Contenedor" y "Stock".'));
+          return;
+        }
+        const filas: FilaOcupacionAlmacen[] = [];
+        for (const [clave, unidades] of tabla) {
+          const sepIdx = clave.indexOf(CLAVE_SEP);
+          filas.push({ ubicacion: clave.slice(0, sepIdx), contenedor: clave.slice(sepIdx + 1), unidades });
+        }
+        resolve(filas);
+      },
+      error: (err: Error) => reject(err),
+    });
+  });
+}
