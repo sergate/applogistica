@@ -63,21 +63,22 @@ export async function fetchAlmacenLayout(): Promise<AlmacenLayoutRow[]> {
 }
 
 export interface AlmacenOcupacionInfo {
-  ubicacionesOcupadas: Set<string>;
+  contenedoresPorUbicacion: Map<string, number>;
   updatedAt: string | null;
 }
 
 /**
  * Trae la "tabla dinámica" ya limpia (ubicacion/contenedor/unidades, una
- * fila por combinación única con stock>0) y la reduce a las ubicaciones
- * ocupadas -- cualquier ubicación con al menos una fila acá ya cuenta como
- * ocupada, no hace falta mirar "unidades" de nuevo.
+ * fila por combinación única con stock>0) y la reduce a la cantidad de
+ * contenedores únicos por ubicación -- la ocupación de una zona es la suma
+ * de esos contenedores en todas las posiciones que le pertenecen (no solo
+ * si la posición tiene o no algo).
  */
 export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
   return getCached("almacen_ocupacion:all", ALMACEN_TTL_MS, async () => {
     const PAGE_SIZE = 1000;
     let from = 0;
-    const ubicacionesOcupadas = new Set<string>();
+    const contenedoresPorUbicacion = new Map<string, number>();
     let updatedAt: string | null = null;
 
     while (true) {
@@ -90,7 +91,8 @@ export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
       if (!data || data.length === 0) break;
 
       for (const row of data) {
-        ubicacionesOcupadas.add(row.ubicacion as string);
+        const ubicacion = row.ubicacion as string;
+        contenedoresPorUbicacion.set(ubicacion, (contenedoresPorUbicacion.get(ubicacion) ?? 0) + 1);
         const actualizadoAt = row.actualizado_at as string | null;
         if (actualizadoAt && (!updatedAt || actualizadoAt > updatedAt)) updatedAt = actualizadoAt;
       }
@@ -99,6 +101,6 @@ export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
       from += PAGE_SIZE;
     }
 
-    return { ubicacionesOcupadas, updatedAt };
+    return { contenedoresPorUbicacion, updatedAt };
   });
 }
