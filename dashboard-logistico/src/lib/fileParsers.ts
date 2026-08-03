@@ -238,24 +238,44 @@ export interface FilaOcupacionAlmacen {
  * únicas (ubicacion, contenedor) con stock>0, sumando "unidades" si la misma
  * combinación aparece más de una vez en el archivo. `onProgreso` (0-100) se
  * llama según los bytes ya leídos del archivo.
+ *
+ * Se parsea con `header:false` (filas como array, no objeto) y se resuelve
+ * el índice de cada columna a mano en la primera fila -- Papa Parse no puede
+ * mandar una función (`transformHeader`) al Web Worker (falla el
+ * postMessage), así que la única función que puede viajar es `step`, que
+ * corre en el hilo principal recibiendo cada fila ya parseada.
  */
 export async function parseOcupacionAlmacenStreaming(
   file: File,
   onProgreso?: (pct: number) => void
 ): Promise<FilaOcupacionAlmacen[]> {
   const tabla = new Map<string, number>();
+  let idxUbicacion = -1;
+  let idxContenedor = -1;
+  let idxStock = -1;
+  let primeraFila = true;
 
   return new Promise((resolve, reject) => {
     Papa.parse(file, {
-      header: true,
+      header: false,
       worker: true,
       skipEmptyLines: true,
-      transformHeader: normalizeHeader,
       step: (results) => {
-        const row = results.data as Record<string, unknown>;
-        const ubicacion = typeof row.ubicacion === "string" ? row.ubicacion.trim() : "";
-        const contenedor = typeof row.contenedor === "string" ? row.contenedor.trim() : "";
-        const unidades = Number(String(row.stock ?? "").trim().replace(",", "."));
+        const row = results.data as string[];
+
+        if (primeraFila) {
+          primeraFila = false;
+          idxUbicacion = row.findIndex((h) => normalizeHeader(h) === "ubicacion");
+          idxContenedor = row.findIndex((h) => normalizeHeader(h) === "contenedor");
+          idxStock = row.findIndex((h) => normalizeHeader(h) === "stock");
+          return;
+        }
+
+        if (idxUbicacion === -1 || idxContenedor === -1 || idxStock === -1) return;
+
+        const ubicacion = (row[idxUbicacion] || "").trim();
+        const contenedor = (row[idxContenedor] || "").trim();
+        const unidades = Number(String(row[idxStock] ?? "").trim().replace(",", "."));
 
         if (ubicacion && contenedor && Number.isFinite(unidades) && unidades > 0) {
           const clave = ubicacion + CLAVE_SEP + contenedor;
@@ -267,6 +287,10 @@ export async function parseOcupacionAlmacenStreaming(
         }
       },
       complete: () => {
+        if (idxUbicacion === -1 || idxContenedor === -1 || idxStock === -1) {
+          reject(new Error('El archivo no tiene las columnas "Ubicacion", "Contenedor" y "Stock".'));
+          return;
+        }
         const filas: FilaOcupacionAlmacen[] = [];
         for (const [clave, unidades] of tabla) {
           const sepIdx = clave.indexOf(CLAVE_SEP);
