@@ -219,3 +219,62 @@ export async function parseCsvFile(
 
   return normalizeRecordKeys(result.data);
 }
+
+// Separador para la clave compuesta ubicacion+contenedor -- un caracter de
+// control que no debería aparecer en ninguno de los dos campos.
+const CLAVE_SEP = String.fromCharCode(31);
+
+export interface FilaOcupacionAlmacen {
+  ubicacion: string;
+  contenedor: string;
+  unidades: number;
+}
+
+/**
+ * Lee el archivo de ocupación de almacén (puede pesar >100MB / cientos de
+ * miles de filas) en modo streaming con Papa Parse (`worker:true` + `step`),
+ * sin nunca tener el archivo completo ni el array de filas originales en
+ * memoria. Va armando directamente una "tabla dinámica" de combinaciones
+ * únicas (ubicacion, contenedor) con stock>0, sumando "unidades" si la misma
+ * combinación aparece más de una vez en el archivo. `onProgreso` (0-100) se
+ * llama según los bytes ya leídos del archivo.
+ */
+export async function parseOcupacionAlmacenStreaming(
+  file: File,
+  onProgreso?: (pct: number) => void
+): Promise<FilaOcupacionAlmacen[]> {
+  const tabla = new Map<string, number>();
+
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: true,
+      worker: true,
+      skipEmptyLines: true,
+      transformHeader: normalizeHeader,
+      step: (results) => {
+        const row = results.data as Record<string, unknown>;
+        const ubicacion = typeof row.ubicacion === "string" ? row.ubicacion.trim() : "";
+        const contenedor = typeof row.contenedor === "string" ? row.contenedor.trim() : "";
+        const unidades = Number(String(row.stock ?? "").trim().replace(",", "."));
+
+        if (ubicacion && contenedor && Number.isFinite(unidades) && unidades > 0) {
+          const clave = ubicacion + CLAVE_SEP + contenedor;
+          tabla.set(clave, (tabla.get(clave) ?? 0) + unidades);
+        }
+
+        if (onProgreso && file.size > 0 && typeof results.meta.cursor === "number") {
+          onProgreso(Math.min(100, Math.round((results.meta.cursor / file.size) * 100)));
+        }
+      },
+      complete: () => {
+        const filas: FilaOcupacionAlmacen[] = [];
+        for (const [clave, unidades] of tabla) {
+          const sepIdx = clave.indexOf(CLAVE_SEP);
+          filas.push({ ubicacion: clave.slice(0, sepIdx), contenedor: clave.slice(sepIdx + 1), unidades });
+        }
+        resolve(filas);
+      },
+      error: (err: Error) => reject(err),
+    });
+  });
+}

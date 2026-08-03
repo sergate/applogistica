@@ -67,6 +67,14 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     ],
   },
   {
+    nombre: "Ocupación Almacén",
+    subsecciones: [
+      { key: "ALM-Importar", label: "Importar Datos" },
+      { key: "ALM-Resumen", label: "Resumen" },
+      { key: "ALM-ImportarLayout", label: "Importar Layout (en Importar Datos)" },
+    ],
+  },
+  {
     nombre: "Administración",
     subsecciones: [
       { key: "ADMIN-Perfiles", label: "Perfiles" },

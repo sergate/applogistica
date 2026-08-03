@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { parseCsvFile, parseExcelFile, parseExcelFileConFechas } from "@/lib/fileParsers";
+import { parseCsvFile, parseExcelFile, parseExcelFileConFechas, parseOcupacionAlmacenStreaming } from "@/lib/fileParsers";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
 
@@ -153,6 +153,10 @@ export default function DashboardLayout() {
   const [isInboundOpen, setIsInboundOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("INB-");
+  });
+  const [isAlmacenOpen, setIsAlmacenOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("ALM-");
   });
   const [isAdminOpen, setIsAdminOpen] = useState(() => {
     if (typeof window === "undefined") return false;
@@ -642,6 +646,13 @@ export default function DashboardLayout() {
   const inboundSubSections = [
     { key: "INB-Importar", label: "Importar Datos" },
     { key: "INB-Resumen", label: "Resumen" },
+  ];
+
+  // "ALM-ImportarLayout" NO va acá -- es un permiso de capacidad (habilita el
+  // panel de importar el layout del almacén dentro de Importar Datos), no una pestaña.
+  const almacenSubSections = [
+    { key: "ALM-Importar", label: "Importar Datos" },
+    { key: "ALM-Resumen", label: "Resumen" },
   ];
 
   const adminSubSections = [
@@ -3376,6 +3387,250 @@ export default function DashboardLayout() {
     }
   };
 
+  // =========================================================================
+  // ESTADO: OCUPACIÓN ALMACÉN - IMPORTAR LAYOUT (nave/ubicacion/zona -> almacen_layout)
+  // =========================================================================
+  const [archivoLayoutAlmacen, setArchivoLayoutAlmacen] = useState<File | null>(null);
+  const [isImportandoLayoutAlmacen, setIsImportandoLayoutAlmacen] = useState(false);
+  const [errorLayoutAlmacen, setErrorLayoutAlmacen] = useState<string | null>(null);
+  const [resultadoLayoutAlmacen, setResultadoLayoutAlmacen] = useState<{ filasInsertadas: number } | null>(null);
+  const inputLayoutAlmacenRef = useRef<HTMLInputElement>(null);
+
+  const handleImportarLayoutAlmacen = async () => {
+    if (!archivoLayoutAlmacen) return;
+
+    setIsImportandoLayoutAlmacen(true);
+    setErrorLayoutAlmacen(null);
+    setResultadoLayoutAlmacen(null);
+
+    try {
+      const esCsv = archivoLayoutAlmacen.name.toLowerCase().endsWith(".csv");
+      const registros = esCsv ? await parseCsvFile(archivoLayoutAlmacen) : await parseExcelFile(archivoLayoutAlmacen);
+
+      if (registros.length === 0) {
+        throw new Error("El archivo no tiene filas de datos.");
+      }
+
+      const filas = registros.map((r) => ({
+        nave: r.nave != null ? String(r.nave) : null,
+        ubicacion: r.ubicacion != null ? String(r.ubicacion) : "",
+        zona: r.zona != null ? String(r.zona) : "",
+      }));
+
+      const res = await fetch("/api/almacen/layout/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filas }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo importar el layout.");
+
+      setResultadoLayoutAlmacen({ filasInsertadas: data.filasInsertadas });
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setErrorLayoutAlmacen(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setIsImportandoLayoutAlmacen(false);
+    }
+  };
+
+  const resetLayoutAlmacen = () => {
+    setArchivoLayoutAlmacen(null);
+    setResultadoLayoutAlmacen(null);
+    setErrorLayoutAlmacen(null);
+    if (inputLayoutAlmacenRef.current) inputLayoutAlmacenRef.current.value = "";
+  };
+
+  // =========================================================================
+  // ESTADO: OCUPACIÓN ALMACÉN - IMPORTAR OCUPACIÓN (archivo grande -> almacen_ocupacion)
+  // =========================================================================
+  const [archivoOcupacionAlmacen, setArchivoOcupacionAlmacen] = useState<File | null>(null);
+  const [isProcesandoOcupacionAlmacen, setIsProcesandoOcupacionAlmacen] = useState(false);
+  const [etapaOcupacionAlmacen, setEtapaOcupacionAlmacen] = useState<"leyendo" | "subiendo" | null>(null);
+  const [progresoOcupacionAlmacen, setProgresoOcupacionAlmacen] = useState(0);
+  const [errorOcupacionAlmacen, setErrorOcupacionAlmacen] = useState<string | null>(null);
+  const [resultadoOcupacionAlmacen, setResultadoOcupacionAlmacen] = useState<{ filasInsertadas: number } | null>(null);
+  const inputOcupacionAlmacenRef = useRef<HTMLInputElement>(null);
+
+  const ALM_OCUPACION_CHUNK_SIZE = 2000;
+
+  const handleProcesarOcupacionAlmacen = async () => {
+    if (!archivoOcupacionAlmacen) return;
+
+    setIsProcesandoOcupacionAlmacen(true);
+    setEtapaOcupacionAlmacen("leyendo");
+    setProgresoOcupacionAlmacen(0);
+    setErrorOcupacionAlmacen(null);
+    setResultadoOcupacionAlmacen(null);
+
+    try {
+      // Todo el trabajo pesado (leer y pivotear ~740.000 filas) pasa acá,
+      // en el navegador y en modo streaming -- el archivo original nunca
+      // sale de la máquina, solo el resultado ya limpio y deduplicado.
+      const filas = await parseOcupacionAlmacenStreaming(archivoOcupacionAlmacen, setProgresoOcupacionAlmacen);
+
+      if (filas.length === 0) {
+        throw new Error("No se encontraron posiciones ocupadas (Stock > 0) en el archivo.");
+      }
+
+      setEtapaOcupacionAlmacen("subiendo");
+      setProgresoOcupacionAlmacen(0);
+
+      const total = filas.length;
+      let procesados = 0;
+      let filasInsertadasTotal = 0;
+
+      for (let i = 0; i < filas.length; i += ALM_OCUPACION_CHUNK_SIZE) {
+        const batch = filas.slice(i, i + ALM_OCUPACION_CHUNK_SIZE);
+        const res = await fetch("/api/almacen/ocupacion/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batch, esPrimerLote: i === 0 }),
+        });
+
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) throw new Error(data.error || "Error al procesar el archivo.");
+
+        filasInsertadasTotal += data.filasInsertadas ?? batch.length;
+        procesados += batch.length;
+        setProgresoOcupacionAlmacen(Math.min(100, Math.round((procesados / total) * 100)));
+      }
+
+      setResultadoOcupacionAlmacen({ filasInsertadas: filasInsertadasTotal });
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setErrorOcupacionAlmacen(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setIsProcesandoOcupacionAlmacen(false);
+      setEtapaOcupacionAlmacen(null);
+    }
+  };
+
+  const resetOcupacionAlmacen = () => {
+    setArchivoOcupacionAlmacen(null);
+    setResultadoOcupacionAlmacen(null);
+    setErrorOcupacionAlmacen(null);
+    setProgresoOcupacionAlmacen(0);
+    if (inputOcupacionAlmacenRef.current) inputOcupacionAlmacenRef.current.value = "";
+  };
+
+  // =========================================================================
+  // ESTADO: OCUPACIÓN ALMACÉN - RESUMEN
+  // =========================================================================
+  interface AlmacenResumenFila {
+    subzona: string;
+    capacidad: number;
+    ocupadas: number;
+    vacias: number;
+    pct: number;
+  }
+  interface AlmacenResumenGrupo {
+    grupo: string;
+    subrows: AlmacenResumenFila[];
+    subtotal: Omit<AlmacenResumenFila, "subzona">;
+  }
+  const [almacenResumenData, setAlmacenResumenData] = useState<{
+    grupos: AlmacenResumenGrupo[];
+    total: Omit<AlmacenResumenFila, "subzona">;
+    updatedAt: string | null;
+  } | null>(null);
+  const [almacenResumenLoading, setAlmacenResumenLoading] = useState(false);
+  const [almacenResumenError, setAlmacenResumenError] = useState<string | null>(null);
+  const [filtroGrupoAlmacen, setFiltroGrupoAlmacen] = useState("TODOS");
+
+  useEffect(() => {
+    if (activeTab !== "ALM-Resumen") return;
+    let cancelado = false;
+
+    async function cargarAlmacenResumen() {
+      setAlmacenResumenLoading(true);
+      setAlmacenResumenError(null);
+      try {
+        const res = await fetch("/api/almacen/resumen", { cache: "no-store" });
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
+        if (!cancelado) setAlmacenResumenData({ grupos: data.grupos, total: data.total, updatedAt: data.updatedAt });
+      } catch (err) {
+        if (!cancelado) setAlmacenResumenError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setAlmacenResumenLoading(false);
+      }
+    }
+
+    cargarAlmacenResumen();
+    return () => {
+      cancelado = true;
+    };
+  }, [activeTab, dataVersion]);
+
+  const gruposAlmacenFiltrados = (almacenResumenData?.grupos ?? []).filter(
+    (g) => filtroGrupoAlmacen === "TODOS" || g.grupo === filtroGrupoAlmacen
+  );
+
+  const renderAlmacenTabla = (
+    subrows: AlmacenResumenFila[],
+    subtotal: Omit<AlmacenResumenFila, "subzona">,
+    subtotalLabel: string
+  ) => (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm text-left whitespace-nowrap">
+        <thead>
+          <tr className="text-slate-500 font-medium border-b border-slate-200">
+            <th className="py-3 px-4 text-left"></th>
+            <th className="py-3 px-4 text-left">Capacidad Posiciones</th>
+            <th className="py-3 px-4 text-left">Ocupación</th>
+            <th className="py-3 px-4 text-left">Vacías</th>
+            <th className="py-3 px-4 text-left">%</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {subrows.map((r) => (
+            <tr key={r.subzona}>
+              <td className="py-3 px-4 text-left font-medium text-slate-700">{r.subzona}</td>
+              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(r.capacidad)}</td>
+              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(r.ocupadas)}</td>
+              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(r.vacias)}</td>
+              <td className="py-3 px-4 text-left">
+                <span
+                  className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    r.pct >= 100 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                  }`}
+                >
+                  {fmtPct(r.pct)}
+                </span>
+              </td>
+            </tr>
+          ))}
+          <tr className="bg-blue-50 border-t-2 border-blue-200 font-bold text-blue-900">
+            <td className="py-3 px-4 text-left">{subtotalLabel}</td>
+            <td className="py-3 px-4 text-left">{fmtNum(subtotal.capacidad)}</td>
+            <td className="py-3 px-4 text-left">{fmtNum(subtotal.ocupadas)}</td>
+            <td className="py-3 px-4 text-left">{fmtNum(subtotal.vacias)}</td>
+            <td className="py-3 px-4 text-left">
+              <span
+                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                  subtotal.pct >= 100 ? "bg-red-100 text-red-700" : "bg-emerald-100 text-emerald-700"
+                }`}
+              >
+                {fmtPct(subtotal.pct)}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+
   if (permisos === null) {
     return (
       <div className="flex h-screen items-center justify-center bg-[#f8f9fc]">
@@ -3561,6 +3816,28 @@ export default function DashboardLayout() {
           </div>
           )}
 
+          {seccionVisible(almacenSubSections.map((s) => s.key)) && (
+          <div className="pt-2">
+            <button onClick={() => setIsAlmacenOpen(!isAlmacenOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7l9-4 9 4-9 4-9-4zm0 0v10l9 4m0-14v14m9-14v10l-9 4" /></svg>
+                Ocupación Almacén
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isAlmacenOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isAlmacenOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {almacenSubSections.filter((sub) => tienePermiso(sub.key)).map((sub) => (
+                  <button key={sub.key} onClick={() => irA(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
           {seccionVisible(adminSubSections.map((s) => s.key)) && (
           <div className="pt-2">
             <button onClick={() => setIsAdminOpen(!isAdminOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
@@ -3626,6 +3903,8 @@ export default function DashboardLayout() {
              activeTab === "PD-Propios" ? "Pendiente de Despacho - Propios" :
              activeTab === "INB-Importar" ? "Inbound - Importar Datos" :
              activeTab === "INB-Resumen" ? "Inbound - Resumen" :
+             activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
+             activeTab === "ALM-Resumen" ? "Ocupación Almacén - Resumen" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -6758,6 +7037,217 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: OCUPACIÓN ALMACÉN - IMPORTAR DATOS ================= */}
+          {activeTab === "ALM-Importar" && (
+            <div className="space-y-6">
+              {tienePermiso("ALM-ImportarLayout") && (
+                <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
+                  <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Layout del Almacén</h2>
+                  <p className="text-sm text-slate-500 mb-6">
+                    Archivo con las columnas Nave, Ubicacion y Zona -- una fila por posición física. Reemplaza por
+                    completo el layout anterior. Solo hace falta reimportarlo si cambia la distribución del almacén.
+                  </p>
+
+                  <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
+                    <input
+                      ref={inputLayoutAlmacenRef}
+                      type="file"
+                      accept=".csv,.xlsx,.xls"
+                      className="hidden"
+                      onChange={(e) => setArchivoLayoutAlmacen(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      onClick={() => inputLayoutAlmacenRef.current?.click()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                    >
+                      Seleccionar archivo
+                    </button>
+                    {archivoLayoutAlmacen && (
+                      <p className="text-sm text-emerald-600 font-medium mt-3">{archivoLayoutAlmacen.name}</p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 mt-6">
+                    <button
+                      onClick={handleImportarLayoutAlmacen}
+                      disabled={!archivoLayoutAlmacen || isImportandoLayoutAlmacen}
+                      className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                        !archivoLayoutAlmacen || isImportandoLayoutAlmacen
+                          ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      {isImportandoLayoutAlmacen ? "Importando..." : "Importar Layout"}
+                    </button>
+                    <button
+                      onClick={resetLayoutAlmacen}
+                      disabled={isImportandoLayoutAlmacen}
+                      className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                    >
+                      Limpiar
+                    </button>
+                  </div>
+
+                  {errorLayoutAlmacen && (
+                    <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      {errorLayoutAlmacen}
+                    </div>
+                  )}
+                  {resultadoLayoutAlmacen && !errorLayoutAlmacen && (
+                    <div className="mt-6 p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                      {resultadoLayoutAlmacen.filasInsertadas} posiciones cargadas correctamente.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
+                <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Ocupación</h2>
+                <p className="text-sm text-slate-500 mb-6">
+                  Subí el archivo de ocupación completo (columnas Ubicacion, Contenedor, Stock). Se procesa entero en
+                  tu navegador -- solo se sube el resultado ya limpio, nunca el archivo original.
+                </p>
+
+                <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
+                  <input
+                    ref={inputOcupacionAlmacenRef}
+                    type="file"
+                    accept=".csv"
+                    className="hidden"
+                    onChange={(e) => setArchivoOcupacionAlmacen(e.target.files?.[0] ?? null)}
+                  />
+                  <button
+                    onClick={() => inputOcupacionAlmacenRef.current?.click()}
+                    className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                  >
+                    Seleccionar archivo .csv
+                  </button>
+                  {archivoOcupacionAlmacen && (
+                    <p className="text-sm text-emerald-600 font-medium mt-3">
+                      {archivoOcupacionAlmacen.name} ({(archivoOcupacionAlmacen.size / 1024 / 1024).toFixed(1)} MB)
+                    </p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-3 mt-6">
+                  <button
+                    onClick={handleProcesarOcupacionAlmacen}
+                    disabled={!archivoOcupacionAlmacen || isProcesandoOcupacionAlmacen}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                      !archivoOcupacionAlmacen || isProcesandoOcupacionAlmacen
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {isProcesandoOcupacionAlmacen ? "Procesando..." : "Procesar archivo"}
+                  </button>
+                  <button
+                    onClick={resetOcupacionAlmacen}
+                    disabled={isProcesandoOcupacionAlmacen}
+                    className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                  >
+                    Limpiar
+                  </button>
+                </div>
+
+                {isProcesandoOcupacionAlmacen && (
+                  <div className="mt-6">
+                    <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                      <span>{etapaOcupacionAlmacen === "subiendo" ? "Subiendo resultado..." : "Leyendo y limpiando archivo..."}</span>
+                      <span className="font-semibold text-slate-700">{progresoOcupacionAlmacen}%</span>
+                    </div>
+                    <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                      <div
+                        className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                        style={{ width: `${progresoOcupacionAlmacen}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {errorOcupacionAlmacen && (
+                  <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    {errorOcupacionAlmacen}
+                  </div>
+                )}
+                {resultadoOcupacionAlmacen && !errorOcupacionAlmacen && (
+                  <div className="mt-6 p-4 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                    {resultadoOcupacionAlmacen.filasInsertadas} posiciones ocupadas actualizadas correctamente.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: OCUPACIÓN ALMACÉN - RESUMEN ================= */}
+          {activeTab === "ALM-Resumen" && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {["TODOS", "Pallet", "Calzado", "Indumentaria", "AWADA"].map((g) => (
+                    <button
+                      key={g}
+                      onClick={() => setFiltroGrupoAlmacen(g)}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        filtroGrupoAlmacen === g ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {g === "TODOS" ? "Todos" : g}
+                    </button>
+                  ))}
+                </div>
+                {almacenResumenData?.updatedAt && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización: <span className="font-medium text-slate-700">{fmtFecha(almacenResumenData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              {almacenResumenError && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el resumen: {almacenResumenError}
+                </div>
+              )}
+              {almacenResumenLoading && !almacenResumenData && (
+                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando ocupación del almacén...
+                </div>
+              )}
+
+              {almacenResumenData && (
+                <>
+                  {filtroGrupoAlmacen === "TODOS" && (
+                    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                      <h2 className="text-lg font-bold text-slate-800 mb-4">TOTAL</h2>
+                      {renderAlmacenTabla(
+                        gruposAlmacenFiltrados.map((g) => ({ subzona: g.grupo, ...g.subtotal })),
+                        almacenResumenData.total,
+                        "TOTAL"
+                      )}
+                    </div>
+                  )}
+
+                  {gruposAlmacenFiltrados.map((g) => (
+                    <div key={g.grupo} className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                      <h2 className="text-lg font-bold text-slate-800 mb-4">{g.grupo}</h2>
+                      {renderAlmacenTabla(g.subrows, g.subtotal, "TOTAL")}
+                    </div>
+                  ))}
+
+                  {gruposAlmacenFiltrados.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-8">
+                      No hay datos de layout cargados todavía para este grupo.
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
           {/* ================= PESTAÑA: ADMIN - PERFILES ================= */}
           {activeTab === "ADMIN-Perfiles" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -7151,7 +7641,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "INB-Importar", "INB-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
