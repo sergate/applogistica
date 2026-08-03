@@ -36,6 +36,11 @@ export function clasificarZonaAlmacen(zonaRaw: string): { grupo: string; subzona
   return MAPA_ZONAS[zona] ?? { grupo: "Sin clasificar", subzona: zonaRaw.trim() || "SIN ZONA" };
 }
 
+/** Catálogo fijo de (grupo, subzona) posibles -- se arma solo, a partir de MAPA_ZONAS. */
+export const CATALOGO_ZONAS_ALMACEN: { grupo: string; subzona: string }[] = Array.from(
+  new Map(Object.values(MAPA_ZONAS).map((z) => [`${z.grupo}__${z.subzona}`, z])).values()
+);
+
 /** Trae TODO el layout del almacén (paginado, Supabase pagina de a 1000). */
 export async function fetchAlmacenLayout(): Promise<AlmacenLayoutRow[]> {
   return getCached("almacen_layout:all", ALMACEN_TTL_MS, async () => {
@@ -102,5 +107,24 @@ export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
     }
 
     return { contenedoresPorUbicacion, updatedAt };
+  });
+}
+
+/**
+ * Trae qué (grupo, subzona) están deshabilitados para mostrarse en
+ * Ocupación Almacén - Resumen (panel Configuración). Por default, todo lo
+ * que no está en esta tabla está habilitado -- solo se guardan las
+ * excepciones que alguien apagó a mano.
+ */
+export async function fetchAlmacenIndicadoresDeshabilitados(): Promise<Set<string>> {
+  return getCached("almacen_indicadores:deshabilitados", ALMACEN_TTL_MS, async () => {
+    const { data, error } = await supabaseAdmin
+      .from("almacen_indicadores_config")
+      .select("grupo, subzona")
+      .eq("habilitado", false);
+
+    if (error) throw new Error(`Supabase (almacen_indicadores_config): ${error.message}`);
+
+    return new Set((data ?? []).map((r) => `${r.grupo}__${r.subzona}`));
   });
 }

@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAlmacenLayout, fetchAlmacenOcupacion, clasificarZonaAlmacen } from "@/lib/almacenHelpers";
+import {
+  fetchAlmacenLayout,
+  fetchAlmacenOcupacion,
+  fetchAlmacenIndicadoresDeshabilitados,
+  clasificarZonaAlmacen,
+} from "@/lib/almacenHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +38,11 @@ export async function GET() {
   }
 
   try {
-    const [layout, ocupacion] = await Promise.all([fetchAlmacenLayout(), fetchAlmacenOcupacion()]);
+    const [layout, ocupacion, deshabilitados] = await Promise.all([
+      fetchAlmacenLayout(),
+      fetchAlmacenOcupacion(),
+      fetchAlmacenIndicadoresDeshabilitados(),
+    ]);
 
     // Agrupamos por (grupo, subzona). "Capacidad" depende del tipo de
     // sub-fila: MZN (Calzado/Indumentaria) admite hasta 6 contenedores por
@@ -48,6 +57,9 @@ export async function GET() {
     for (const row of layout) {
       const { grupo, subzona } = clasificarZonaAlmacen(row.zona);
       const key = `${grupo}__${subzona}`;
+      // Grupo/subzona apagado desde Configuración -- se excluye por completo,
+      // no solo de la vista sino también de los subtotales y el total general.
+      if (deshabilitados.has(key)) continue;
       if (!porGrupoSubzona.has(key)) porGrupoSubzona.set(key, { capacidad: 0, ocupadas: 0 });
       const acc = porGrupoSubzona.get(key)!;
       const esPorContenedor = subzona.startsWith("MZN") || subzona === "PALLET F01";
