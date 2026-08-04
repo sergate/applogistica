@@ -3003,7 +3003,7 @@ export default function DashboardLayout() {
       // o como texto "dd/mm/yyyy" cargado a mano (mezclado fila por fila) --
       // parseExcelFileConFechas soporta ambos casos y ya devuelve ISO.
       const listasDeRegistros = await Promise.all(
-        archivosInbound.map((file) => parseExcelFileConFechas(file, ["etd", "eta", "arribo_al_cd"]))
+        archivosInbound.map((file) => parseExcelFileConFechas(file, ["etd", "eta", "arribo_cd"]))
       );
       const registrosCrudos = listasDeRegistros.flat();
 
@@ -3017,12 +3017,7 @@ export default function DashboardLayout() {
       for (const r of registrosCrudos) {
         const legajo = Number(r.legajo);
         if (!Number.isFinite(legajo)) continue;
-        const { arribo_al_cd, ...resto } = r;
-        porLegajo.set(legajo, {
-          ...resto,
-          legajo,
-          arribo_cd: arribo_al_cd,
-        });
+        porLegajo.set(legajo, { ...r, legajo });
       }
 
       const records = Array.from(porLegajo.values());
