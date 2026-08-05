@@ -16,14 +16,29 @@ export async function GET() {
   }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from("urgencias_contenedores")
-      .select("id, contenedor, nota, created_at")
-      .order("created_at", { ascending: false });
+    // Paginado -- Supabase corta en 1000 filas por default si no se pagina
+    // explícitamente, y podría haber más de 1000 contenedores cargados.
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const contenedores: Record<string, unknown>[] = [];
 
-    if (error) throw new Error(`Supabase (urgencias_contenedores): ${error.message}`);
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("urgencias_contenedores")
+        .select("id, contenedor, nota, created_at")
+        .order("created_at", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
 
-    return NextResponse.json({ success: true, contenedores: data ?? [] });
+      if (error) throw new Error(`Supabase (urgencias_contenedores): ${error.message}`);
+      if (!data || data.length === 0) break;
+
+      contenedores.push(...data);
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    return NextResponse.json({ success: true, contenedores });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado" },

@@ -22,6 +22,33 @@ interface UrgenciaContenedorRow {
   created_at: string;
 }
 
+// Supabase pagina de a 1000 filas por default -> traemos todo en tandas
+// (si se carga más de 1000 contenedores, un .select() sin .range() los corta
+// en silencio y los más viejos dejan de aparecer).
+async function fetchTodosLosContenedores(): Promise<UrgenciaContenedorRow[]> {
+  const PAGE_SIZE = 1000;
+  let from = 0;
+  const all: UrgenciaContenedorRow[] = [];
+
+  while (true) {
+    const { data, error } = await supabaseAdmin
+      .from("urgencias_contenedores")
+      .select("contenedor, nota, created_at")
+      .order("created_at", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) throw new Error(`Supabase (urgencias_contenedores): ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    all.push(...(data as UrgenciaContenedorRow[]));
+
+    if (data.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+
+  return all;
+}
+
 export async function GET() {
   if (!supabaseEnvOk) {
     return NextResponse.json(
@@ -31,14 +58,8 @@ export async function GET() {
   }
 
   try {
-    const { data: contenedores, error } = await supabaseAdmin
-      .from("urgencias_contenedores")
-      .select("contenedor, nota, created_at")
-      .order("created_at", { ascending: false });
-
-    if (error) throw new Error(`Supabase (urgencias_contenedores): ${error.message}`);
-
-    const [lineasClientes, lineasPropios, clientesInfo, posicionesPorContenedor] = await Promise.all([
+    const [contenedores, lineasClientes, lineasPropios, clientesInfo, posicionesPorContenedor] = await Promise.all([
+      fetchTodosLosContenedores(),
       fetchAllPendienteDespacho("pendiente_despacho_clientes"),
       fetchAllPendienteDespachoPropios(),
       fetchClientesInfo(),
