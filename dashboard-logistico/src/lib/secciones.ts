@@ -56,6 +56,8 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "PD-Importar", label: "Importar Datos" },
       { key: "PD-Clientes", label: "Clientes" },
       { key: "PD-Propios", label: "Propios" },
+      { key: "PD-Urgencias", label: "Seguimiento Urgencias" },
+      { key: "PD-CargaDatos", label: "Carga de Datos" },
     ],
   },
   {

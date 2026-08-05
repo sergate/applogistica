@@ -111,6 +111,43 @@ export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
 }
 
 /**
+ * Trae, para cada contenedor de la última importación de ocupación, en qué
+ * ubicación del almacén está (usado por Seguimiento Urgencias para mostrar
+ * la posición de cada contenedor cargado). Si un contenedor aparece en más
+ * de una ubicación (no debería, pero el archivo de origen es enorme), se
+ * queda con la primera que encuentra.
+ */
+export async function fetchPosicionesPorContenedor(): Promise<Map<string, string>> {
+  return getCached("almacen_ocupacion:posiciones", ALMACEN_TTL_MS, async () => {
+    const PAGE_SIZE = 1000;
+    let from = 0;
+    const posicionesPorContenedor = new Map<string, string>();
+
+    while (true) {
+      const { data, error } = await supabaseAdmin
+        .from("almacen_ocupacion")
+        .select("contenedor, ubicacion")
+        .range(from, from + PAGE_SIZE - 1);
+
+      if (error) throw new Error(`Supabase (almacen_ocupacion): ${error.message}`);
+      if (!data || data.length === 0) break;
+
+      for (const row of data) {
+        const contenedor = row.contenedor as string;
+        if (!posicionesPorContenedor.has(contenedor)) {
+          posicionesPorContenedor.set(contenedor, row.ubicacion as string);
+        }
+      }
+
+      if (data.length < PAGE_SIZE) break;
+      from += PAGE_SIZE;
+    }
+
+    return posicionesPorContenedor;
+  });
+}
+
+/**
  * Trae qué (grupo, subzona) están deshabilitados para mostrarse en
  * Ocupación Almacén - Resumen (panel Configuración). Por default, todo lo
  * que no está en esta tabla está habilitado -- solo se guardan las
