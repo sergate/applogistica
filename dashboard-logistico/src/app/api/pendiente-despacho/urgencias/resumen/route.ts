@@ -74,13 +74,18 @@ export async function GET() {
           ? !vacio(lineaPropios.remito)
           : false;
 
+      // Si el contenedor no matchea ninguna línea de Pendiente de Despacho, lo
+      // más probable es que ya haya sido despachado (salió y ya no figura en
+      // esas tablas) -- se muestra como "DESPACHADO" en vez de "SIN CLIENTE".
+      const noEncontrado = !linea;
+
       return {
         contenedor: c.contenedor,
         nota: c.nota,
         cargadoEn: c.created_at,
-        codigoCliente: codigo || "SIN CODIGO",
-        cliente: info?.nombre || (linea?.cliente || "SIN CLIENTE").trim(),
-        canal: info?.canal || "SIN CANAL",
+        codigoCliente: noEncontrado ? "DESPACHADO" : codigo || "SIN CODIGO",
+        cliente: noEncontrado ? "DESPACHADO" : info?.nombre || (linea?.cliente || "SIN CLIENTE").trim(),
+        canal: noEncontrado ? "DESPACHADO" : info?.canal || "SIN CANAL",
         tipo: linea?.tipo || "SIN TIPO",
         curva: linea?.curva || "SIN CURVA",
         posicion: posicionesPorContenedor.get(c.contenedor) || null,
