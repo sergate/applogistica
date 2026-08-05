@@ -17,16 +17,20 @@ export async function GET() {
 
   try {
     // Paginado -- Supabase corta en 1000 filas por default si no se pagina
-    // explícitamente, y podría haber más de 1000 contenedores cargados.
+    // explícitamente, y podría haber más de 1000 contenedores cargados. Se
+    // desempata por "id" además de "created_at" (un upsert de muchas filas
+    // de una vez les asigna el mismo timestamp) para que .range() no repita
+    // filas entre páginas.
     const PAGE_SIZE = 1000;
     let from = 0;
-    const contenedores: Record<string, unknown>[] = [];
+    const contenedores: { id: string; contenedor: string; nota: string | null; created_at: string }[] = [];
 
     while (true) {
       const { data, error } = await supabaseAdmin
         .from("urgencias_contenedores")
         .select("id, contenedor, nota, created_at")
         .order("created_at", { ascending: false })
+        .order("id", { ascending: true })
         .range(from, from + PAGE_SIZE - 1);
 
       if (error) throw new Error(`Supabase (urgencias_contenedores): ${error.message}`);
@@ -38,7 +42,10 @@ export async function GET() {
       from += PAGE_SIZE;
     }
 
-    return NextResponse.json({ success: true, contenedores });
+    const vistos = new Set<string>();
+    const sinDuplicados = contenedores.filter((r) => (vistos.has(r.id) ? false : (vistos.add(r.id), true)));
+
+    return NextResponse.json({ success: true, contenedores: sinDuplicados });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado" },

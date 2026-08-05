@@ -17,6 +17,7 @@ export const revalidate = 0;
 const vacio = (v: string | null): boolean => !v || v.trim() === "";
 
 interface UrgenciaContenedorRow {
+  id: string;
   contenedor: string;
   nota: string | null;
   created_at: string;
@@ -24,7 +25,13 @@ interface UrgenciaContenedorRow {
 
 // Supabase pagina de a 1000 filas por default -> traemos todo en tandas
 // (si se carga más de 1000 contenedores, un .select() sin .range() los corta
-// en silencio y los más viejos dejan de aparecer).
+// en silencio y los más viejos dejan de aparecer). Ordenar solo por
+// "created_at" no alcanza como desempate: un upsert de muchas filas de una
+// sola vez les asigna a todas el mismo timestamp (el "now()" de Postgres se
+// evalúa una sola vez por sentencia), y paginar con .range() sobre un orden
+// con empates no es estable -- puede repetir filas entre una página y la
+// siguiente. Se agrega "id" como desempate para que la paginación sea
+// determinística.
 async function fetchTodosLosContenedores(): Promise<UrgenciaContenedorRow[]> {
   const PAGE_SIZE = 1000;
   let from = 0;
@@ -33,8 +40,9 @@ async function fetchTodosLosContenedores(): Promise<UrgenciaContenedorRow[]> {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("urgencias_contenedores")
-      .select("contenedor, nota, created_at")
+      .select("id, contenedor, nota, created_at")
       .order("created_at", { ascending: false })
+      .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw new Error(`Supabase (urgencias_contenedores): ${error.message}`);
@@ -46,7 +54,10 @@ async function fetchTodosLosContenedores(): Promise<UrgenciaContenedorRow[]> {
     from += PAGE_SIZE;
   }
 
-  return all;
+  // Por las dudas, deduplicamos por id (no debería hacer falta con la
+  // paginación ya estable, pero es una red de seguridad barata).
+  const vistos = new Set<string>();
+  return all.filter((r) => (vistos.has(r.id) ? false : (vistos.add(r.id), true)));
 }
 
 export async function GET() {

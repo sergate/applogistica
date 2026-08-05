@@ -697,8 +697,6 @@ export default function DashboardLayout() {
         Tipo: f.tipo,
         Curva: f.curva,
         Posición: f.posicion || "SIN POSICIÓN",
-        Nota: f.nota || "",
-        Cargado: fmtFecha(f.cargadoEn),
         "Con Remito": f.conRemito ? "Sí" : "No",
       }));
 
