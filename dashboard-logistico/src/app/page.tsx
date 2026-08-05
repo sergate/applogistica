@@ -5965,8 +5965,6 @@ export default function DashboardLayout() {
                                 <thead className="text-slate-500 font-medium border-b border-slate-200">
                                   <tr>
                                     <th className="py-2 px-3 text-left">Contenedor</th>
-                                    <th className="py-2 px-3 text-left">Nota</th>
-                                    <th className="py-2 px-3 text-left">Cargado</th>
                                     <th className="py-2 px-3 text-left">Tipo</th>
                                     <th className="py-2 px-3 text-left">Curva</th>
                                     <th className="py-2 px-3 text-left">Posición</th>
@@ -5977,8 +5975,6 @@ export default function DashboardLayout() {
                                   {detalleClienteExpandidoUrgencias.map((d) => (
                                     <tr key={d.contenedor}>
                                       <td className="py-2 px-3 text-left font-medium text-slate-700">{d.contenedor}</td>
-                                      <td className="py-2 px-3 text-left text-slate-600">{d.nota || "—"}</td>
-                                      <td className="py-2 px-3 text-left text-slate-600">{fmtFecha(d.cargadoEn)}</td>
                                       <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
                                       <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
                                       <td className="py-2 px-3 text-left text-slate-600">{d.posicion || "—"}</td>
