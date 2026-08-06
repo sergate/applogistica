@@ -3483,15 +3483,24 @@ export default function DashboardLayout() {
         semanasConDatosInbound = todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
       }
 
-      const pendientesFiltradosInbound = (inboundData?.pendientes ?? []).filter((f) => {
-        if (filtroLegajoPendientes.trim() && !String(f.legajo).includes(filtroLegajoPendientes.trim())) return false;
-        if (filtroSemanaPendientes) {
-          const semana = semanasConDatosInbound.find((s) => s.desde === filtroSemanaPendientes);
-          if (!semana) return false;
-          if (!f.arribo_cd || f.arribo_cd < semana.desde || f.arribo_cd > semana.hasta) return false;
-        }
-        return true;
-      });
+      const pendientesFiltradosInbound = (inboundData?.pendientes ?? [])
+        .filter((f) => {
+          if (filtroLegajoPendientes.trim() && !String(f.legajo).includes(filtroLegajoPendientes.trim())) return false;
+          if (filtroSemanaPendientes) {
+            const semana = semanasConDatosInbound.find((s) => s.desde === filtroSemanaPendientes);
+            if (!semana) return false;
+            if (!f.arribo_cd || f.arribo_cd < semana.desde || f.arribo_cd > semana.hasta) return false;
+          }
+          return true;
+        })
+        // Primero por Arribo CD (sin fecha al final), después por Legajo.
+        .sort((a, b) => {
+          if (!a.arribo_cd && !b.arribo_cd) return a.legajo - b.legajo;
+          if (!a.arribo_cd) return 1;
+          if (!b.arribo_cd) return -1;
+          if (a.arribo_cd !== b.arribo_cd) return a.arribo_cd < b.arribo_cd ? -1 : 1;
+          return a.legajo - b.legajo;
+        });
 
       const enCdFiltradosInbound = (inboundData?.enCd ?? []).filter(
         (f) => !filtroLegajoEnCd.trim() || String(f.legajo).includes(filtroLegajoEnCd.trim())
@@ -3620,6 +3629,74 @@ export default function DashboardLayout() {
       setLegajoProductosError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
       setLegajoProductosLoading(null);
+    }
+  };
+
+  const [exportandoInboundPendientes, setExportandoInboundPendientes] = useState(false);
+
+  const exportarInboundPendientesExcel = async () => {
+    setExportandoInboundPendientes(true);
+    try {
+      const XLSX = await import("xlsx");
+
+      // "Resumen" = exactamente lo que se ve en pantalla en la tabla (una fila por legajo).
+      const filasResumen = pendientesFiltradosInbound.map((f) => ({
+        Legajo: f.legajo,
+        Etapa: f.etapa,
+        Marca: f.marca,
+        Unidades: f.unidades,
+        "Tipo Carga": f.tipo_carga,
+        Bultos: f.bultos,
+        CBM: f.cbm,
+        ETD: fmtSoloFecha(f.etd),
+        ETA: fmtSoloFecha(f.eta),
+        "Arribo CD": fmtSoloFecha(f.arribo_cd),
+        Status: f.status,
+      }));
+
+      // "Detalle" = el detalle de productos por legajo, lo mismo que se ve al
+      // hacer click en cada fila -- se completa el caché con los legajos que
+      // todavía no se hayan desplegado en pantalla.
+      const legajosFaltantes = pendientesFiltradosInbound
+        .map((f) => f.legajo)
+        .filter((legajo) => !productosPorLegajo.has(legajo));
+
+      const productosCompletos = new Map(productosPorLegajo);
+      if (legajosFaltantes.length > 0) {
+        const traidos = await Promise.all(
+          legajosFaltantes.map(async (legajo) => {
+            try {
+              const res = await fetch(`/api/inbound/productos?legajo=${legajo}`, { cache: "no-store" });
+              const data = await res.json();
+              return { legajo, productos: res.ok && data.success ? (data.productos as InboundProductoFila[]) : [] };
+            } catch {
+              return { legajo, productos: [] as InboundProductoFila[] };
+            }
+          })
+        );
+        for (const { legajo, productos } of traidos) productosCompletos.set(legajo, productos);
+        setProductosPorLegajo(productosCompletos);
+      }
+
+      const filasDetalle = [...pendientesFiltradosInbound]
+        .sort((a, b) => a.legajo - b.legajo)
+        .flatMap((f) =>
+          (productosCompletos.get(f.legajo) ?? []).map((p) => ({
+            Legajo: f.legajo,
+            Marca: p.marca,
+            Grupo: p.grupo,
+            Master: p.master,
+            Descripción: p.descripcion,
+          }))
+        );
+
+      const libro = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasResumen), "Resumen");
+      XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasDetalle), "Detalle");
+      const fechaArchivo = new Date().toISOString().slice(0, 10);
+      XLSX.writeFile(libro, `inbound_por_arribar_cd_${fechaArchivo}.xlsx`);
+    } finally {
+      setExportandoInboundPendientes(false);
     }
   };
 
@@ -6329,6 +6406,18 @@ export default function DashboardLayout() {
                     className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     Limpiar filtros
+                  </button>
+
+                  <button
+                    onClick={exportarInboundPendientesExcel}
+                    disabled={pendientesFiltradosInbound.length === 0 || exportandoInboundPendientes}
+                    className={`ml-auto px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      pendientesFiltradosInbound.length === 0 || exportandoInboundPendientes
+                        ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    {exportandoInboundPendientes ? "Exportando..." : "Exportar a Excel"}
                   </button>
                 </div>
 
