@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { parseCsvFile, parseExcelFile, parseExcelFileConFechas, parseOcupacionAlmacenStreaming } from "@/lib/fileParsers";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
+import { useTabData } from "@/hooks/useTabData";
+import { SkeletonCard } from "@/components/Skeleton";
 
 type ImportKey = "clientes" | "grupos" | "tiendas";
 
@@ -3847,44 +3849,19 @@ export default function DashboardLayout() {
     subrows: AlmacenResumenFila[];
     subtotal: Omit<AlmacenResumenFila, "subzona">;
   }
-  const [almacenResumenData, setAlmacenResumenData] = useState<{
+  const [filtroGrupoAlmacen, setFiltroGrupoAlmacen] = useState("TODOS");
+
+  // Cache por (pestaña, dataVersion) vía SWR -- volver a esta pestaña ya
+  // visitada no vuelve a pegarle a Supabase mientras el cache siga vigente.
+  const {
+    data: almacenResumenData,
+    error: almacenResumenError,
+    isLoading: almacenResumenLoading,
+  } = useTabData<{
     grupos: AlmacenResumenGrupo[];
     total: Omit<AlmacenResumenFila, "subzona">;
     updatedAt: string | null;
-  } | null>(null);
-  const [almacenResumenLoading, setAlmacenResumenLoading] = useState(false);
-  const [almacenResumenError, setAlmacenResumenError] = useState<string | null>(null);
-  const [filtroGrupoAlmacen, setFiltroGrupoAlmacen] = useState("TODOS");
-
-  useEffect(() => {
-    if (activeTab !== "ALM-Resumen") return;
-    let cancelado = false;
-
-    async function cargarAlmacenResumen() {
-      setAlmacenResumenLoading(true);
-      setAlmacenResumenError(null);
-      try {
-        const res = await fetch("/api/almacen/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
-        if (!cancelado) setAlmacenResumenData({ grupos: data.grupos, total: data.total, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setAlmacenResumenError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setAlmacenResumenLoading(false);
-      }
-    }
-
-    cargarAlmacenResumen();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  }>(activeTab, "ALM-Resumen", "/api/almacen/resumen", dataVersion);
 
   const gruposAlmacenFiltrados = (almacenResumenData?.grupos ?? []).filter(
     (g) => filtroGrupoAlmacen === "TODOS" || g.grupo === filtroGrupoAlmacen
@@ -7896,8 +7873,10 @@ export default function DashboardLayout() {
                 </div>
               )}
               {almacenResumenLoading && !almacenResumenData && (
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando ocupación del almacén...
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
                 </div>
               )}
 

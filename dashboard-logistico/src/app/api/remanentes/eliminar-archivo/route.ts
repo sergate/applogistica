@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAdminPermission } from "@/lib/adminAuth";
+import { invalidateCache } from "@/lib/queryCache";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin.from("remanentes").delete().eq("numero", numero);
     if (error) throw new Error(`Supabase (remanentes): ${error.message}`);
 
+    invalidateCache("remanentes:all");
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json(
