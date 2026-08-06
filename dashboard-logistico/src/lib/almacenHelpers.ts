@@ -147,6 +147,49 @@ export async function fetchPosicionesPorContenedor(): Promise<Map<string, string
   });
 }
 
+export interface AlmacenResumenFilaAgregada {
+  grupo: string;
+  subzona: string;
+  capacidad: number;
+  ocupadas: number;
+}
+
+export interface AlmacenResumenAgregado {
+  filas: AlmacenResumenFilaAgregada[];
+  updatedAt: string | null;
+}
+
+/**
+ * Versión rápida de "traer todo y agrupar en JS": la agregación por
+ * (grupo, subzona) se hace directamente en Postgres vía la función
+ * `almacen_resumen_agrupado()` (ver sql/almacen_resumen_agrupado.sql), en vez
+ * de paginar almacen_layout + almacen_ocupacion completas (esta última tiene
+ * cientos de miles de filas) a memoria. El "updatedAt" se pide aparte con un
+ * `order + limit 1`, mucho más liviano que traer la tabla entera solo para
+ * sacar el máximo.
+ */
+export async function fetchAlmacenResumenAgregado(): Promise<AlmacenResumenAgregado> {
+  return getCached("almacen_resumen:agregado", ALMACEN_TTL_MS, async () => {
+    const [rpcResult, ultimaFila] = await Promise.all([
+      supabaseAdmin.rpc("almacen_resumen_agrupado"),
+      supabaseAdmin
+        .from("almacen_ocupacion")
+        .select("actualizado_at")
+        .order("actualizado_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (rpcResult.error) throw new Error(`Supabase (almacen_resumen_agrupado): ${rpcResult.error.message}`);
+    if (ultimaFila.error) throw new Error(`Supabase (almacen_ocupacion): ${ultimaFila.error.message}`);
+
+    return {
+      filas: (rpcResult.data ?? []) as AlmacenResumenFilaAgregada[],
+      updatedAt: (ultimaFila.data?.actualizado_at as string | undefined) ?? null,
+    };
+  });
+}
+
 /**
  * Trae qué (grupo, subzona) están deshabilitados para mostrarse en
  * Ocupación Almacén - Resumen (panel Configuración). Por default, todo lo

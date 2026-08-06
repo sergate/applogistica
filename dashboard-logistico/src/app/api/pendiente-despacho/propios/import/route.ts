@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { invalidateCache } from "@/lib/queryCache";
 
 export const runtime = "nodejs";
 
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
       throw new Error(`Supabase (pendiente_despacho_propios - insert): ${error.message}`);
     }
 
+    invalidateCache("pendiente_despacho:pendiente_despacho_propios");
     return NextResponse.json({ success: true, filasInsertadas: count ?? batch.length });
   } catch (err) {
     return NextResponse.json(

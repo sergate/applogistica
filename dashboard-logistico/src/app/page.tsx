@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { parseCsvFile, parseExcelFile, parseExcelFileConFechas, parseOcupacionAlmacenStreaming } from "@/lib/fileParsers";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
+import { useTabData } from "@/hooks/useTabData";
+import { SkeletonCard, SkeletonTable } from "@/components/Skeleton";
 
 type ImportKey = "clientes" | "grupos" | "tiendas";
 
@@ -342,54 +344,29 @@ export default function DashboardLayout() {
   // =========================================================================
   // ESTADO: RESUMEN (datos reales desde grupo_pedidos vía /api/resumen)
   // =========================================================================
-  const [resumenData, setResumenData] = useState<ResumenData | null>(null);
-  const [resumenLoading, setResumenLoading] = useState(false);
-  const [resumenError, setResumenError] = useState<string | null>(null);
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
 
-  useEffect(() => {
-    if (activeTab !== "Resumen") return;
-    let cancelado = false;
-
-    async function cargarResumen() {
-      setResumenLoading(true);
-      setResumenError(null);
-      try {
-        let url = "/api/resumen";
-        const params = new URLSearchParams();
-        if (rangoResumen) {
-          const d = new Date();
-          d.setDate(d.getDate() - (rangoResumen - 1));
-          params.set("desde", d.toISOString().slice(0, 10));
-        }
-        if (filtroTipoResumen !== "TODOS") {
-          params.set("tipoPedido", filtroTipoResumen);
-        }
-        if (params.toString()) url += `?${params.toString()}`;
-        const res = await fetch(url, { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "No se pudo cargar el resumen.");
-        }
-        if (!cancelado) setResumenData(data);
-      } catch (err) {
-        if (!cancelado) setResumenError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setResumenLoading(false);
-      }
+  const urlResumen = useMemo(() => {
+    let url = "/api/resumen";
+    const params = new URLSearchParams();
+    if (rangoResumen) {
+      const d = new Date();
+      d.setDate(d.getDate() - (rangoResumen - 1));
+      params.set("desde", d.toISOString().slice(0, 10));
     }
+    if (filtroTipoResumen !== "TODOS") {
+      params.set("tipoPedido", filtroTipoResumen);
+    }
+    if (params.toString()) url += `?${params.toString()}`;
+    return url;
+  }, [rangoResumen, filtroTipoResumen]);
 
-    cargarResumen();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion, rangoResumen, filtroTipoResumen]);
+  const {
+    data: resumenData,
+    error: resumenError,
+    isLoading: resumenLoading,
+  } = useTabData<ResumenData>(activeTab, "Resumen", urlResumen, dataVersion);
 
   // =========================================================================
   // ESTADO: STATUS DE PREPARACIÓN - PEDIDOS REMA MANUAL
@@ -583,39 +560,16 @@ export default function DashboardLayout() {
     conRemito: boolean;
   }
 
-  const [urgenciasData, setUrgenciasData] = useState<{ filas: UrgenciaFila[]; updatedAt: string | null } | null>(null);
-  const [urgenciasLoading, setUrgenciasLoading] = useState(false);
-  const [urgenciasError, setUrgenciasError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== "PD-Urgencias") return;
-    let cancelado = false;
-
-    async function cargarUrgencias() {
-      setUrgenciasLoading(true);
-      setUrgenciasError(null);
-      try {
-        const res = await fetch("/api/pendiente-despacho/urgencias/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
-        if (!cancelado) setUrgenciasData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setUrgenciasError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setUrgenciasLoading(false);
-      }
-    }
-
-    cargarUrgencias();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  const {
+    data: urgenciasData,
+    error: urgenciasError,
+    isLoading: urgenciasLoading,
+  } = useTabData<{ filas: UrgenciaFila[]; updatedAt: string | null }>(
+    activeTab,
+    "PD-Urgencias",
+    "/api/pendiente-despacho/urgencias/resumen",
+    dataVersion
+  );
 
   const [filtroCanalUrgencias, setFiltroCanalUrgencias] = useState("TODAS");
   const [filtroTipoUrgencias, setFiltroTipoUrgencias] = useState("TODAS");
@@ -785,9 +739,6 @@ export default function DashboardLayout() {
   // =========================================================================
   // ESTADO: POR FECHA (datos reales desde grupo_pedidos vía /api/resumen/por-fecha)
   // =========================================================================
-  const [fechaData, setFechaData] = useState<{ filas: FechaResumen[]; updatedAt: string | null } | null>(null);
-  const [fechaLoading, setFechaLoading] = useState(false);
-  const [fechaError, setFechaError] = useState<string | null>(null);
   const [rangoFecha, setRangoFecha] = useState<7 | 14 | 30>(7);
   const [fechaSeleccionada, setFechaSeleccionada] = useState<string>("");
   const [semanaFecha, setSemanaFecha] = useState<{ desde: string; hasta: string } | null>(null);
@@ -796,37 +747,16 @@ export default function DashboardLayout() {
   const [filtroGrupoFecha, setFiltroGrupoFecha] = useState<string>("TODAS");
   const [filtroTipoFecha, setFiltroTipoFecha] = useState<"TODOS" | "REMA" | "STD">("TODOS");
 
-  useEffect(() => {
-    if (activeTab !== "Por fecha") return;
-    let cancelado = false;
-
-    async function cargarPorFecha() {
-      setFechaLoading(true);
-      setFechaError(null);
-      try {
-        const res = await fetch("/api/resumen/por-fecha", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "No se pudo cargar el detalle por fecha.");
-        }
-        if (!cancelado) setFechaData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setFechaError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setFechaLoading(false);
-      }
-    }
-
-    cargarPorFecha();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  const {
+    data: fechaData,
+    error: fechaError,
+    isLoading: fechaLoading,
+  } = useTabData<{ filas: FechaResumen[]; updatedAt: string | null }>(
+    activeTab,
+    "Por fecha",
+    "/api/resumen/por-fecha",
+    dataVersion
+  );
 
   // Solo mostramos en el desplegable las semanas que efectivamente tienen
   // datos cargados (según el rango real de fechas en grupo_pedidos), en vez
@@ -1008,46 +938,21 @@ export default function DashboardLayout() {
     aRepartir: number;
   }
 
-  const [ciDetalleData, setCiDetalleData] = useState<{ filas: CIDetalleFila[]; updatedAt: string | null } | null>(null);
-  const [ciDetalleLoading, setCiDetalleLoading] = useState(false);
-  const [ciDetalleError, setCiDetalleError] = useState<string | null>(null);
+  const {
+    data: ciDetalleData,
+    error: ciDetalleError,
+    isLoading: ciDetalleLoading,
+  } = useTabData<{ filas: CIDetalleFila[]; updatedAt: string | null }>(
+    activeTab,
+    "CI-Resumen",
+    "/api/carga-inicial/detalle",
+    dataVersion
+  );
 
   const [filtroMarcaCI, setFiltroMarcaCI] = useState("TODAS");
   const [filtroTemporadaCI, setFiltroTemporadaCI] = useState("TODAS");
   const [filtroGrupoCI, setFiltroGrupoCI] = useState("TODAS");
   const [filaExpandidaCI, setFilaExpandidaCI] = useState<{ marca: string; curva: string } | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== "CI-Resumen") return;
-    let cancelado = false;
-
-    async function cargarDetalleCI() {
-      setCiDetalleLoading(true);
-      setCiDetalleError(null);
-      try {
-        const res = await fetch("/api/carga-inicial/detalle", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "No se pudo cargar el detalle.");
-        }
-        if (!cancelado) setCiDetalleData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setCiDetalleError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setCiDetalleLoading(false);
-      }
-    }
-
-    cargarDetalleCI();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
 
   // Orden fijo de curvas: ADELANTO, 1RA ETAPA, SEGUNDA ETAPA, y las que sigan
   // (desconocidas van al final, ordenadas alfabéticamente entre sí).
@@ -1246,9 +1151,19 @@ export default function DashboardLayout() {
     aRepartir: number;
   }
 
-  const [remDetalleData, setRemDetalleData] = useState<{ filas: REMDetalleFila[]; updatedAt: string | null } | null>(null);
-  const [remDetalleLoading, setRemDetalleLoading] = useState(false);
-  const [remDetalleError, setRemDetalleError] = useState<string | null>(null);
+  // remDetalleData también lo usa la tabla "Resumen por Marca / Grupo" de
+  // REM-Avance -- ambas pestañas comparten la misma clave de cache "REM-Resumen".
+  const tabParaRemDetalle = activeTab === "REM-Avance" ? "REM-Resumen" : activeTab;
+  const {
+    data: remDetalleData,
+    error: remDetalleError,
+    isLoading: remDetalleLoading,
+  } = useTabData<{ filas: REMDetalleFila[]; updatedAt: string | null }>(
+    tabParaRemDetalle,
+    "REM-Resumen",
+    "/api/remanentes/detalle",
+    dataVersion
+  );
 
   const [filtroMarcaREM, setFiltroMarcaREM] = useState("TODAS");
   const [filtroTemporadaREM, setFiltroTemporadaREM] = useState("TODAS");
@@ -1278,38 +1193,6 @@ export default function DashboardLayout() {
     }
   };
 
-  useEffect(() => {
-    // remDetalleData también lo usa la tabla "Resumen por Marca / Grupo" de REM-Avance.
-    if (activeTab !== "REM-Resumen" && activeTab !== "REM-Avance") return;
-    let cancelado = false;
-
-    async function cargarDetalleREM() {
-      setRemDetalleLoading(true);
-      setRemDetalleError(null);
-      try {
-        const res = await fetch("/api/remanentes/detalle", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "No se pudo cargar el detalle.");
-        }
-        if (!cancelado) setRemDetalleData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setRemDetalleError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setRemDetalleLoading(false);
-      }
-    }
-
-    cargarDetalleREM();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
 
   const marcasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.marca))).sort();
   const temporadasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.temporada))).sort();
@@ -1524,41 +1407,16 @@ export default function DashboardLayout() {
     cantidad: number;
   }
 
-  const [productividadResumen, setProductividadResumen] = useState<{ filas: ProductividadFila[]; updatedAt: string | null } | null>(null);
-  const [productividadResumenLoading, setProductividadResumenLoading] = useState(false);
-  const [productividadResumenError, setProductividadResumenError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== "PROD-Resumen") return;
-    let cancelado = false;
-
-    async function cargarProductividadResumen() {
-      setProductividadResumenLoading(true);
-      setProductividadResumenError(null);
-      try {
-        const res = await fetch("/api/productividad/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "No se pudo cargar el resumen.");
-        }
-        if (!cancelado) setProductividadResumen({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setProductividadResumenError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setProductividadResumenLoading(false);
-      }
-    }
-
-    cargarProductividadResumen();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  const {
+    data: productividadResumen,
+    error: productividadResumenError,
+    isLoading: productividadResumenLoading,
+  } = useTabData<{ filas: ProductividadFila[]; updatedAt: string | null }>(
+    activeTab,
+    "PROD-Resumen",
+    "/api/productividad/resumen",
+    dataVersion
+  );
 
   // --- Filtros de la tabla de Productividad ---
   const [rangoProductividad, setRangoProductividad] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
@@ -1619,9 +1477,16 @@ export default function DashboardLayout() {
     eficSep: number;
   }
 
-  const [pedidosData, setPedidosData] = useState<{ filas: PedidoResumen[]; updatedAt: string | null } | null>(null);
-  const [pedidosLoading, setPedidosLoading] = useState(false);
-  const [pedidosError, setPedidosError] = useState<string | null>(null);
+  const {
+    data: pedidosData,
+    error: pedidosError,
+    isLoading: pedidosLoading,
+  } = useTabData<{ filas: PedidoResumen[]; updatedAt: string | null }>(
+    activeTab,
+    "Por pedidos",
+    "/api/resumen/pedidos",
+    dataVersion
+  );
 
   const [busquedaPedidos, setBusquedaPedidos] = useState("");
   const [filtroMarcaPedidos, setFiltroMarcaPedidos] = useState("TODAS");
@@ -1647,37 +1512,6 @@ export default function DashboardLayout() {
   const [gruposLoading, setGruposLoading] = useState(false);
   const [gruposError, setGruposError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (activeTab !== "Por pedidos") return;
-    let cancelado = false;
-
-    async function cargarPedidos() {
-      setPedidosLoading(true);
-      setPedidosError(null);
-      try {
-        const res = await fetch("/api/resumen/pedidos", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) {
-          throw new Error(data.error || "No se pudo cargar el detalle por pedidos.");
-        }
-        if (!cancelado) setPedidosData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setPedidosError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setPedidosLoading(false);
-      }
-    }
-
-    cargarPedidos();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
 
   const handleTiendaClick = async (pedido: string) => {
     if (pedidoExpandido === pedido) {
@@ -2963,39 +2797,16 @@ export default function DashboardLayout() {
     unidades: number;
   }
 
-  const [pdPropiosData, setPdPropiosData] = useState<{ filas: PDPropiosFila[]; updatedAt: string | null } | null>(null);
-  const [pdPropiosLoading, setPdPropiosLoading] = useState(false);
-  const [pdPropiosError, setPdPropiosError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== "PD-Propios") return;
-    let cancelado = false;
-
-    async function cargarPDPropios() {
-      setPdPropiosLoading(true);
-      setPdPropiosError(null);
-      try {
-        const res = await fetch("/api/pendiente-despacho/propios/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
-        if (!cancelado) setPdPropiosData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setPdPropiosError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setPdPropiosLoading(false);
-      }
-    }
-
-    cargarPDPropios();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  const {
+    data: pdPropiosData,
+    error: pdPropiosError,
+    isLoading: pdPropiosLoading,
+  } = useTabData<{ filas: PDPropiosFila[]; updatedAt: string | null }>(
+    activeTab,
+    "PD-Propios",
+    "/api/pendiente-despacho/propios/resumen",
+    dataVersion
+  );
 
   const [filtroCanalPDP, setFiltroCanalPDP] = useState("TODAS");
   const [filtroTipoPDP, setFiltroTipoPDP] = useState("TODAS");
@@ -3095,39 +2906,16 @@ export default function DashboardLayout() {
     unidades: number;
   }
 
-  const [pdClientesData, setPdClientesData] = useState<{ filas: PDClienteFila[]; updatedAt: string | null } | null>(null);
-  const [pdClientesLoading, setPdClientesLoading] = useState(false);
-  const [pdClientesError, setPdClientesError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== "PD-Clientes") return;
-    let cancelado = false;
-
-    async function cargarPDClientes() {
-      setPdClientesLoading(true);
-      setPdClientesError(null);
-      try {
-        const res = await fetch("/api/pendiente-despacho/clientes/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
-        if (!cancelado) setPdClientesData({ filas: data.filas, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setPdClientesError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setPdClientesLoading(false);
-      }
-    }
-
-    cargarPDClientes();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  const {
+    data: pdClientesData,
+    error: pdClientesError,
+    isLoading: pdClientesLoading,
+  } = useTabData<{ filas: PDClienteFila[]; updatedAt: string | null }>(
+    activeTab,
+    "PD-Clientes",
+    "/api/pendiente-despacho/clientes/resumen",
+    dataVersion
+  );
 
   const [filtroCanalPD, setFiltroCanalPD] = useState("TODAS");
   const [filtroTipoPD, setFiltroTipoPD] = useState("TODAS");
@@ -3419,43 +3207,16 @@ export default function DashboardLayout() {
     updated_at: string | null;
   }
 
-  const [inboundData, setInboundData] = useState<{
+  const {
+    data: inboundData,
+    error: inboundError,
+    isLoading: inboundLoading,
+    mutate: mutateInboundData,
+  } = useTabData<{
     pendientes: InboundFila[];
     enCd: InboundFila[];
     updatedAt: string | null;
-  } | null>(null);
-  const [inboundLoading, setInboundLoading] = useState(false);
-  const [inboundError, setInboundError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (activeTab !== "INB-Resumen") return;
-    let cancelado = false;
-
-    async function cargarInbound() {
-      setInboundLoading(true);
-      setInboundError(null);
-      try {
-        const res = await fetch("/api/inbound/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar Inbound.");
-        if (!cancelado) setInboundData({ pendientes: data.pendientes, enCd: data.enCd, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setInboundError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setInboundLoading(false);
-      }
-    }
-
-    cargarInbound();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  }>(activeTab, "INB-Resumen", "/api/inbound/resumen", dataVersion);
 
   const [filtroLegajoPendientes, setFiltroLegajoPendientes] = useState("");
   const [filtroSemanaPendientes, setFiltroSemanaPendientes] = useState(""); // "" = todas las semanas
@@ -3551,15 +3312,17 @@ export default function DashboardLayout() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar la fecha.");
-      setInboundData((prev) =>
-        prev
-          ? {
-              ...prev,
-              pendientes: prev.pendientes.map((f) =>
-                f.legajo === legajo ? { ...f, arribo_cd: valorArriboEdit } : f
-              ),
-            }
-          : prev
+      await mutateInboundData(
+        (prev) =>
+          prev
+            ? {
+                ...prev,
+                pendientes: prev.pendientes.map((f) =>
+                  f.legajo === legajo ? { ...f, arribo_cd: valorArriboEdit } : f
+                ),
+              }
+            : prev,
+        { revalidate: false }
       );
       setEditandoArriboLegajo(null);
     } catch (err) {
@@ -3580,17 +3343,20 @@ export default function DashboardLayout() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo actualizar el status.");
-      setInboundData((prev) => {
-        if (!prev) return prev;
-        const fila = prev.pendientes.find((f) => f.legajo === legajo);
-        if (!fila) return prev;
-        const filaCd = { ...fila, status: "CD" };
-        return {
-          ...prev,
-          pendientes: prev.pendientes.filter((f) => f.legajo !== legajo),
-          enCd: [...prev.enCd, filaCd].sort((a, b) => a.legajo - b.legajo),
-        };
-      });
+      await mutateInboundData(
+        (prev) => {
+          if (!prev) return prev;
+          const fila = prev.pendientes.find((f) => f.legajo === legajo);
+          if (!fila) return prev;
+          const filaCd = { ...fila, status: "CD" };
+          return {
+            ...prev,
+            pendientes: prev.pendientes.filter((f) => f.legajo !== legajo),
+            enCd: [...prev.enCd, filaCd].sort((a, b) => a.legajo - b.legajo),
+          };
+        },
+        { revalidate: false }
+      );
     } catch (err) {
       setAccionInboundError(err instanceof Error ? err.message : "Error inesperado.");
     }
@@ -3847,44 +3613,19 @@ export default function DashboardLayout() {
     subrows: AlmacenResumenFila[];
     subtotal: Omit<AlmacenResumenFila, "subzona">;
   }
-  const [almacenResumenData, setAlmacenResumenData] = useState<{
+  const [filtroGrupoAlmacen, setFiltroGrupoAlmacen] = useState("TODOS");
+
+  // Cache por (pestaña, dataVersion) vía SWR -- volver a esta pestaña ya
+  // visitada no vuelve a pegarle a Supabase mientras el cache siga vigente.
+  const {
+    data: almacenResumenData,
+    error: almacenResumenError,
+    isLoading: almacenResumenLoading,
+  } = useTabData<{
     grupos: AlmacenResumenGrupo[];
     total: Omit<AlmacenResumenFila, "subzona">;
     updatedAt: string | null;
-  } | null>(null);
-  const [almacenResumenLoading, setAlmacenResumenLoading] = useState(false);
-  const [almacenResumenError, setAlmacenResumenError] = useState<string | null>(null);
-  const [filtroGrupoAlmacen, setFiltroGrupoAlmacen] = useState("TODOS");
-
-  useEffect(() => {
-    if (activeTab !== "ALM-Resumen") return;
-    let cancelado = false;
-
-    async function cargarAlmacenResumen() {
-      setAlmacenResumenLoading(true);
-      setAlmacenResumenError(null);
-      try {
-        const res = await fetch("/api/almacen/resumen", { cache: "no-store" });
-        let data;
-        try {
-          data = await res.json();
-        } catch {
-          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
-        }
-        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
-        if (!cancelado) setAlmacenResumenData({ grupos: data.grupos, total: data.total, updatedAt: data.updatedAt });
-      } catch (err) {
-        if (!cancelado) setAlmacenResumenError(err instanceof Error ? err.message : "Error inesperado.");
-      } finally {
-        if (!cancelado) setAlmacenResumenLoading(false);
-      }
-    }
-
-    cargarAlmacenResumen();
-    return () => {
-      cancelado = true;
-    };
-  }, [activeTab, dataVersion]);
+  }>(activeTab, "ALM-Resumen", "/api/almacen/resumen", dataVersion);
 
   const gruposAlmacenFiltrados = (almacenResumenData?.grupos ?? []).filter(
     (g) => filtroGrupoAlmacen === "TODOS" || g.grupo === filtroGrupoAlmacen
@@ -4303,8 +4044,8 @@ export default function DashboardLayout() {
           </h1>
         </header>
 
-        <div className="flex-1 overflow-auto p-8 space-y-6">
-          
+        <div key={activeTab} className="tab-fade-in flex-1 overflow-auto p-8 space-y-6">
+
           {/* ================= PESTAÑA: RESUMEN ================= */}
           {activeTab === "Resumen" && (
             <>
@@ -4354,8 +4095,10 @@ export default function DashboardLayout() {
                 </div>
               )}
               {resumenLoading && !resumenData && (
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos de grupo_pedidos...
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
                 </div>
               )}
 
@@ -4783,8 +4526,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {fechaLoading && !fechaData && (
-                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos de grupo_pedidos...
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={5} />
                 </div>
               )}
 
@@ -4988,8 +4731,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {pedidosLoading && !pedidosData && (
-                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos de tiendas_destino...
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={6} />
                 </div>
               )}
 
@@ -5287,8 +5030,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {productividadResumenLoading && !productividadResumen && (
-                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos de productividad...
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={4} />
                 </div>
               )}
 
@@ -5631,8 +5374,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {pdClientesLoading && !pdClientesData && (
-                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos...
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={6} />
                 </div>
               )}
 
@@ -5811,8 +5554,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {pdPropiosLoading && !pdPropiosData && (
-                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos...
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={6} />
                 </div>
               )}
 
@@ -5990,8 +5733,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {urgenciasLoading && !urgenciasData && (
-                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos...
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={6} />
                 </div>
               )}
 
@@ -6358,8 +6101,8 @@ export default function DashboardLayout() {
                 </div>
               )}
               {inboundLoading && !inboundData && (
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando datos de Inbound...
+                <div className="rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={7} />
                 </div>
               )}
 
@@ -6796,8 +6539,8 @@ export default function DashboardLayout() {
                   </div>
                 )}
                 {ciDetalleLoading && !ciDetalleData && (
-                  <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                    Cargando datos de carga_inicial...
+                  <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={5} />
                   </div>
                 )}
 
@@ -7284,8 +7027,8 @@ export default function DashboardLayout() {
                   </div>
                 )}
                 {remDetalleLoading && !remDetalleData && (
-                  <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                    Cargando datos de remanentes...
+                  <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={5} />
                   </div>
                 )}
 
@@ -7896,8 +7639,10 @@ export default function DashboardLayout() {
                 </div>
               )}
               {almacenResumenLoading && !almacenResumenData && (
-                <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
-                  Cargando ocupación del almacén...
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
                 </div>
               )}
 

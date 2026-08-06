@@ -3,6 +3,14 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* Tokens de diseño compartidos -- radio/sombra/transición estándar para
+     que los componentes nuevos (Skeleton, etc.) y las cards existentes
+     (bg-white border-slate-200 rounded-xl/lg shadow-sm) queden consistentes
+     sin tener que repetir los mismos valores sueltos por todos lados. */
+  --card-radius: 0.75rem;
+  --card-border: #e2e8f0; /* slate-200 */
+  --transition-fast: 150ms ease;
 }
 
 @theme inline {
@@ -32,4 +40,22 @@ input,
 textarea,
 select {
   color: #1e293b; /* slate-800 */
+}
+
+/* Transición sutil al cambiar de pestaña -- se aplica con key={activeTab}
+   al contenedor que envuelve todas las pestañas en page.tsx, así cada
+   cambio retriggerea la animación en vez de aparecer de golpe. */
+@keyframes tab-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tab-fade-in {
+  animation: tab-fade-in 180ms ease;
 }
