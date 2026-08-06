@@ -3483,15 +3483,24 @@ export default function DashboardLayout() {
         semanasConDatosInbound = todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
       }
 
-      const pendientesFiltradosInbound = (inboundData?.pendientes ?? []).filter((f) => {
-        if (filtroLegajoPendientes.trim() && !String(f.legajo).includes(filtroLegajoPendientes.trim())) return false;
-        if (filtroSemanaPendientes) {
-          const semana = semanasConDatosInbound.find((s) => s.desde === filtroSemanaPendientes);
-          if (!semana) return false;
-          if (!f.arribo_cd || f.arribo_cd < semana.desde || f.arribo_cd > semana.hasta) return false;
-        }
-        return true;
-      });
+      const pendientesFiltradosInbound = (inboundData?.pendientes ?? [])
+        .filter((f) => {
+          if (filtroLegajoPendientes.trim() && !String(f.legajo).includes(filtroLegajoPendientes.trim())) return false;
+          if (filtroSemanaPendientes) {
+            const semana = semanasConDatosInbound.find((s) => s.desde === filtroSemanaPendientes);
+            if (!semana) return false;
+            if (!f.arribo_cd || f.arribo_cd < semana.desde || f.arribo_cd > semana.hasta) return false;
+          }
+          return true;
+        })
+        // Primero por Arribo CD (sin fecha al final), después por Legajo.
+        .sort((a, b) => {
+          if (!a.arribo_cd && !b.arribo_cd) return a.legajo - b.legajo;
+          if (!a.arribo_cd) return 1;
+          if (!b.arribo_cd) return -1;
+          if (a.arribo_cd !== b.arribo_cd) return a.arribo_cd < b.arribo_cd ? -1 : 1;
+          return a.legajo - b.legajo;
+        });
 
       const enCdFiltradosInbound = (inboundData?.enCd ?? []).filter(
         (f) => !filtroLegajoEnCd.trim() || String(f.legajo).includes(filtroLegajoEnCd.trim())
@@ -3514,6 +3523,39 @@ export default function DashboardLayout() {
       return { semanasConDatosInbound, pendientesFiltradosInbound, enCdFiltradosInbound, subtotalPendientesInbound };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inboundData, filtroLegajoPendientes, filtroSemanaPendientes, filtroLegajoEnCd]);
+
+  const exportarInboundPendientesExcel = async () => {
+    const XLSX = await import("xlsx");
+    const filasResumen = [
+      {
+        Legajos: subtotalPendientesInbound.legajos,
+        Unidades: subtotalPendientesInbound.unidades,
+        Bultos: subtotalPendientesInbound.bultos,
+        CBM: subtotalPendientesInbound.cbm,
+      },
+    ];
+    const filasDetalle = [...pendientesFiltradosInbound]
+      .sort((a, b) => a.legajo - b.legajo)
+      .map((f) => ({
+        Legajo: f.legajo,
+        Etapa: f.etapa,
+        Marca: f.marca,
+        Unidades: f.unidades,
+        "Tipo Carga": f.tipo_carga,
+        Bultos: f.bultos,
+        CBM: f.cbm,
+        ETD: fmtSoloFecha(f.etd),
+        ETA: fmtSoloFecha(f.eta),
+        "Arribo CD": fmtSoloFecha(f.arribo_cd),
+        Status: f.status,
+      }));
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasResumen), "Resumen");
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasDetalle), "Detalle");
+    const fechaArchivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `inbound_por_arribar_cd_${fechaArchivo}.xlsx`);
+  };
 
   // --- Edición de ARRIBO CD + botón "marcar arribado" (solo INB-EditarArribo) ---
   const [editandoArriboLegajo, setEditandoArriboLegajo] = useState<number | null>(null);
@@ -6329,6 +6371,18 @@ export default function DashboardLayout() {
                     className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                   >
                     Limpiar filtros
+                  </button>
+
+                  <button
+                    onClick={exportarInboundPendientesExcel}
+                    disabled={pendientesFiltradosInbound.length === 0}
+                    className={`ml-auto px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      pendientesFiltradosInbound.length === 0
+                        ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    Exportar a Excel
                   </button>
                 </div>
 
