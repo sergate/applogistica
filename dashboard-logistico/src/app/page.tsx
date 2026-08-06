@@ -469,6 +469,244 @@ export default function DashboardLayout() {
     }
   };
 
+  // =========================================================================
+  // ESTADO: PENDIENTE DE DESPACHO - CARGA DE DATOS (contenedores urgentes)
+  // Contenedores cargados a mano por el administrador, que se cruzan con
+  // Pendiente de Despacho y Ocupación Almacén en Seguimiento Urgencias.
+  // =========================================================================
+  interface ContenedorUrgencia {
+    id: string;
+    contenedor: string;
+    nota: string | null;
+    created_at: string;
+  }
+  const [contenedoresUrgencias, setContenedoresUrgencias] = useState<ContenedorUrgencia[]>([]);
+  const [contenedoresUrgenciasLoading, setContenedoresUrgenciasLoading] = useState(false);
+  const [contenedoresUrgenciasError, setContenedoresUrgenciasError] = useState<string | null>(null);
+  const [formContenedoresTexto, setFormContenedoresTexto] = useState("");
+  const [formContenedoresNota, setFormContenedoresNota] = useState("");
+  const [agregandoContenedores, setAgregandoContenedores] = useState(false);
+  const [vaciandoContenedores, setVaciandoContenedores] = useState(false);
+
+  const cargarContenedoresUrgencias = async () => {
+    setContenedoresUrgenciasLoading(true);
+    setContenedoresUrgenciasError(null);
+    try {
+      const res = await fetch("/api/pendiente-despacho/urgencias/contenedores", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los contenedores.");
+      setContenedoresUrgencias(data.contenedores);
+    } catch (err) {
+      setContenedoresUrgenciasError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setContenedoresUrgenciasLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "PD-CargaDatos") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarContenedoresUrgencias();
+  }, [activeTab, dataVersion]);
+
+  const agregarContenedoresUrgencias = async () => {
+    // Acepta contenedores separados por salto de línea, coma o espacio.
+    const contenedores = Array.from(
+      new Set(formContenedoresTexto.split(/[\s,]+/).map((c) => c.trim()).filter(Boolean))
+    );
+    if (contenedores.length === 0) return;
+    setAgregandoContenedores(true);
+    setContenedoresUrgenciasError(null);
+    try {
+      const res = await fetch("/api/pendiente-despacho/urgencias/contenedores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contenedores, nota: formContenedoresNota.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron agregar los contenedores.");
+      setFormContenedoresTexto("");
+      setFormContenedoresNota("");
+      await cargarContenedoresUrgencias();
+      setDataVersion((v) => v + 1); // refresca Seguimiento Urgencias
+    } catch (err) {
+      setContenedoresUrgenciasError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setAgregandoContenedores(false);
+    }
+  };
+
+  const eliminarContenedorUrgencia = async (id: string, contenedor: string) => {
+    if (!confirm(`¿Seguro que querés borrar el contenedor "${contenedor}"?`)) return;
+    setContenedoresUrgenciasError(null);
+    try {
+      const res = await fetch(`/api/pendiente-despacho/urgencias/contenedores/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo eliminar el contenedor.");
+      await cargarContenedoresUrgencias();
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setContenedoresUrgenciasError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  const vaciarContenedoresUrgencias = async () => {
+    if (!confirm("¿Seguro que querés borrar TODOS los contenedores cargados? Esta acción no se puede deshacer.")) return;
+    setVaciandoContenedores(true);
+    setContenedoresUrgenciasError(null);
+    try {
+      const res = await fetch("/api/pendiente-despacho/urgencias/contenedores", { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo limpiar la lista.");
+      await cargarContenedoresUrgencias();
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setContenedoresUrgenciasError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setVaciandoContenedores(false);
+    }
+  };
+
+  // =========================================================================
+  // ESTADO: PENDIENTE DE DESPACHO - SEGUIMIENTO URGENCIAS (resumen)
+  // =========================================================================
+  interface UrgenciaFila {
+    contenedor: string;
+    nota: string | null;
+    cargadoEn: string;
+    codigoCliente: string;
+    cliente: string;
+    canal: string;
+    tipo: string;
+    curva: string;
+    posicion: string | null;
+    conRemito: boolean;
+  }
+
+  const [urgenciasData, setUrgenciasData] = useState<{ filas: UrgenciaFila[]; updatedAt: string | null } | null>(null);
+  const [urgenciasLoading, setUrgenciasLoading] = useState(false);
+  const [urgenciasError, setUrgenciasError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab !== "PD-Urgencias") return;
+    let cancelado = false;
+
+    async function cargarUrgencias() {
+      setUrgenciasLoading(true);
+      setUrgenciasError(null);
+      try {
+        const res = await fetch("/api/pendiente-despacho/urgencias/resumen", { cache: "no-store" });
+        let data;
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+        }
+        if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el resumen.");
+        if (!cancelado) setUrgenciasData({ filas: data.filas, updatedAt: data.updatedAt });
+      } catch (err) {
+        if (!cancelado) setUrgenciasError(err instanceof Error ? err.message : "Error inesperado.");
+      } finally {
+        if (!cancelado) setUrgenciasLoading(false);
+      }
+    }
+
+    cargarUrgencias();
+    return () => {
+      cancelado = true;
+    };
+  }, [activeTab, dataVersion]);
+
+  const [filtroCanalUrgencias, setFiltroCanalUrgencias] = useState("TODAS");
+  const [filtroTipoUrgencias, setFiltroTipoUrgencias] = useState("TODAS");
+  const [filtroCurvaUrgencias, setFiltroCurvaUrgencias] = useState("TODAS");
+  const [filtroClienteUrgencias, setFiltroClienteUrgencias] = useState("");
+  const [clienteExpandidoUrgencias, setClienteExpandidoUrgencias] = useState<string | null>(null);
+
+  const canalesDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.canal))).sort();
+  const tiposDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.tipo))).sort();
+  const curvasDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.curva))).sort();
+
+  const { filasFiltradasUrgencias, filasTablaUrgencias, subtotalUrgencias } = useMemo(() => {
+    const filasFiltradasUrgencias = (urgenciasData?.filas ?? []).filter(
+      (f) =>
+        (filtroCanalUrgencias === "TODAS" || f.canal === filtroCanalUrgencias) &&
+        (filtroTipoUrgencias === "TODAS" || f.tipo === filtroTipoUrgencias) &&
+        (filtroCurvaUrgencias === "TODAS" || f.curva === filtroCurvaUrgencias) &&
+        (!filtroClienteUrgencias.trim() || f.cliente.toLowerCase().includes(filtroClienteUrgencias.trim().toLowerCase()))
+    );
+
+    const consolidadoClientesUrgencias = new Map<
+      string,
+      { codigoCliente: string; cliente: string; canal: string; cajas: number; conRemito: number }
+    >();
+    for (const f of filasFiltradasUrgencias) {
+      if (!consolidadoClientesUrgencias.has(f.codigoCliente)) {
+        consolidadoClientesUrgencias.set(f.codigoCliente, {
+          codigoCliente: f.codigoCliente,
+          cliente: f.cliente,
+          canal: f.canal,
+          cajas: 0,
+          conRemito: 0,
+        });
+      }
+      const acc = consolidadoClientesUrgencias.get(f.codigoCliente)!;
+      acc.cajas += 1;
+      if (f.conRemito) acc.conRemito += 1;
+    }
+
+    const filasTablaUrgencias = Array.from(consolidadoClientesUrgencias.values()).sort((a, b) =>
+      a.canal !== b.canal ? a.canal.localeCompare(b.canal) : a.cliente.localeCompare(b.cliente)
+    );
+
+    const subtotalUrgencias = filasTablaUrgencias.reduce(
+      (acc, f) => ({ cajas: acc.cajas + f.cajas, conRemito: acc.conRemito + f.conRemito }),
+      { cajas: 0, conRemito: 0 }
+    );
+
+    return { filasFiltradasUrgencias, filasTablaUrgencias, subtotalUrgencias };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urgenciasData, filtroCanalUrgencias, filtroTipoUrgencias, filtroCurvaUrgencias, filtroClienteUrgencias]);
+
+  const detalleClienteExpandidoUrgencias = useMemo(
+    () =>
+      clienteExpandidoUrgencias
+        ? filasFiltradasUrgencias.filter((f) => f.codigoCliente === clienteExpandidoUrgencias)
+        : [],
+    [filasFiltradasUrgencias, clienteExpandidoUrgencias]
+  );
+
+  const handleClienteClickUrgencias = (codigoCliente: string) => {
+    setClienteExpandidoUrgencias(clienteExpandidoUrgencias === codigoCliente ? null : codigoCliente);
+  };
+
+  const exportarUrgenciasExcel = async () => {
+    const XLSX = await import("xlsx");
+    const filasResumen = filasTablaUrgencias.map((f) => ({
+      Canal: f.canal,
+      Cliente: f.cliente,
+      Cajas: f.cajas,
+      "Con Remito": f.conRemito,
+    }));
+    const filasDetalle = [...filasFiltradasUrgencias]
+      .sort((a, b) => a.cliente.localeCompare(b.cliente))
+      .map((f) => ({
+        Contenedor: f.contenedor,
+        Cliente: f.cliente,
+        Canal: f.canal,
+        Tipo: f.tipo,
+        Curva: f.curva,
+        Posición: f.posicion || "SIN POSICIÓN",
+        "Con Remito": f.conRemito ? "Sí" : "No",
+      }));
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasResumen), "Resumen");
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filasDetalle), "Detalle");
+    const fechaArchivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `seguimiento_urgencias_${fechaArchivo}.xlsx`);
+  };
+
   // Paleta de colores para el "dot" de cada marca (seller), asignados por orden de aparición
   const DOT_PALETTE = [
     "bg-purple-400", "bg-emerald-500", "bg-blue-400", "bg-red-400",
@@ -639,6 +877,8 @@ export default function DashboardLayout() {
     { key: "PD-Importar", label: "Importar Datos" },
     { key: "PD-Clientes", label: "Clientes" },
     { key: "PD-Propios", label: "Propios" },
+    { key: "PD-Urgencias", label: "Seguimiento Urgencias" },
+    { key: "PD-CargaDatos", label: "Carga de Datos" },
   ];
 
   // "INB-EditarArribo" NO va acá -- es un permiso de capacidad (habilita
@@ -3971,6 +4211,8 @@ export default function DashboardLayout() {
              activeTab === "PD-Importar" ? "Pendiente de Despacho - Importar Datos" :
              activeTab === "PD-Clientes" ? "Pendiente de Despacho - Clientes" :
              activeTab === "PD-Propios" ? "Pendiente de Despacho - Propios" :
+             activeTab === "PD-Urgencias" ? "Pendiente de Despacho - Seguimiento Urgencias" :
+             activeTab === "PD-CargaDatos" ? "Pendiente de Despacho - Carga de Datos" :
              activeTab === "INB-Importar" ? "Inbound - Importar Datos" :
              activeTab === "INB-Resumen" ? "Inbound - Resumen" :
              activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
@@ -5573,6 +5815,287 @@ export default function DashboardLayout() {
                 {filasTablaPDP.length === 0 && !pdPropiosLoading && (
                   <p className="text-sm text-slate-400 text-center py-8">No hay datos que coincidan con los filtros aplicados.</p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: PENDIENTE DE DESPACHO - SEGUIMIENTO URGENCIAS ================= */}
+          {activeTab === "PD-Urgencias" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                <h2 className="text-lg font-bold text-slate-800">Seguimiento Urgencias</h2>
+                {urgenciasData && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización: <span className="font-medium text-slate-700">{fmtFecha(urgenciasData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-slate-500 mb-4">
+                Contenedores cargados en &quot;Carga de Datos&quot;, cruzados con Pendiente de Despacho y Ocupación
+                Almacén. Hacé click en un cliente para ver el detalle por contenedor.
+              </p>
+
+              {/* FILTROS */}
+              <div className="flex items-center gap-3 mb-6 flex-wrap">
+                <select
+                  value={filtroCanalUrgencias}
+                  onChange={(e) => setFiltroCanalUrgencias(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los canales</option>
+                  {canalesDisponiblesUrgencias.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroTipoUrgencias}
+                  onChange={(e) => setFiltroTipoUrgencias(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los tipos</option>
+                  {tiposDisponiblesUrgencias.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroCurvaUrgencias}
+                  onChange={(e) => setFiltroCurvaUrgencias(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todas las curvas</option>
+                  {curvasDisponiblesUrgencias.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <input
+                  type="text"
+                  value={filtroClienteUrgencias}
+                  onChange={(e) => setFiltroClienteUrgencias(e.target.value)}
+                  placeholder="Buscar por cliente..."
+                  className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-56"
+                />
+
+                <button
+                  onClick={() => {
+                    setFiltroCanalUrgencias("TODAS");
+                    setFiltroTipoUrgencias("TODAS");
+                    setFiltroCurvaUrgencias("TODAS");
+                    setFiltroClienteUrgencias("");
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+
+                <button
+                  onClick={exportarUrgenciasExcel}
+                  disabled={filasFiltradasUrgencias.length === 0}
+                  className={`ml-auto px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    filasFiltradasUrgencias.length === 0
+                      ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  }`}
+                >
+                  Exportar a Excel
+                </button>
+              </div>
+
+              {urgenciasError && (
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el resumen: {urgenciasError}
+                </div>
+              )}
+              {urgenciasLoading && !urgenciasData && (
+                <div className="mb-4 p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                  Cargando datos...
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead>
+                    {filasTablaUrgencias.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                        <td className="py-3 px-4 text-left" colSpan={2}>
+                          Subtotal — {filasTablaUrgencias.length} cliente{filasTablaUrgencias.length === 1 ? "" : "s"}
+                        </td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalUrgencias.cajas)}</td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalUrgencias.conRemito)}</td>
+                      </tr>
+                    )}
+                    <tr className="text-slate-500 font-medium border-b border-slate-200">
+                      <th className="py-3 px-4 text-left">Canal</th>
+                      <th className="py-3 px-4 text-left">Cliente</th>
+                      <th className="py-3 px-4 text-left">Cajas</th>
+                      <th className="py-3 px-4 text-left">Con Remito</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filasTablaUrgencias.map((row) => {
+                      const estaExpandido = clienteExpandidoUrgencias === row.codigoCliente;
+                      return (
+                        <>
+                        <tr
+                          key={row.codigoCliente}
+                          onClick={() => handleClienteClickUrgencias(row.codigoCliente)}
+                          className={`cursor-pointer transition-colors ${estaExpandido ? "bg-slate-100" : "hover:bg-slate-50"}`}
+                        >
+                          <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.conRemito)}</td>
+                        </tr>
+
+                        {estaExpandido && (
+                          <tr>
+                            <td colSpan={4} className="bg-slate-50 px-4 py-4">
+                              <p className="text-xs font-semibold text-slate-500 mb-2">
+                                Detalle por contenedor — {row.cliente}
+                              </p>
+                              <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
+                                <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                  <tr>
+                                    <th className="py-2 px-3 text-left">Contenedor</th>
+                                    <th className="py-2 px-3 text-left">Tipo</th>
+                                    <th className="py-2 px-3 text-left">Curva</th>
+                                    <th className="py-2 px-3 text-left">Posición</th>
+                                    <th className="py-2 px-3 text-left">Con Remito</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {detalleClienteExpandidoUrgencias.map((d) => (
+                                    <tr key={d.contenedor}>
+                                      <td className="py-2 px-3 text-left font-medium text-slate-700">{d.contenedor}</td>
+                                      <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
+                                      <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
+                                      <td className="py-2 px-3 text-left text-slate-600">{d.posicion || "—"}</td>
+                                      <td className="py-2 px-3 text-left">
+                                        <span
+                                          className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                            d.conRemito ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                                          }`}
+                                        >
+                                          {d.conRemito ? "Sí" : "No"}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                        </>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {filasTablaUrgencias.length === 0 && !urgenciasLoading && (
+                  <p className="text-sm text-slate-400 text-center py-8">No hay contenedores cargados todavía.</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: PENDIENTE DE DESPACHO - CARGA DE DATOS ================= */}
+          {activeTab === "PD-CargaDatos" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-3xl">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Cargar contenedores urgentes</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Los contenedores que cargues acá se cruzan con Pendiente de Despacho y Ocupación Almacén en
+                  Seguimiento Urgencias. Pegá uno o varios códigos de contenedor separados por espacio, coma o salto
+                  de línea.
+                </p>
+                {contenedoresUrgenciasError && (
+                  <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    {contenedoresUrgenciasError}
+                  </div>
+                )}
+                <textarea
+                  value={formContenedoresTexto}
+                  onChange={(e) => setFormContenedoresTexto(e.target.value)}
+                  placeholder={"Ej: CONT001\nCONT002\nCONT003"}
+                  rows={4}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none mb-3"
+                />
+                <input
+                  type="text"
+                  value={formContenedoresNota}
+                  onChange={(e) => setFormContenedoresNota(e.target.value)}
+                  placeholder="Nota (opcional)"
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none mb-4"
+                />
+                <button
+                  onClick={agregarContenedoresUrgencias}
+                  disabled={!formContenedoresTexto.trim() || agregandoContenedores}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    !formContenedoresTexto.trim() || agregandoContenedores
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {agregandoContenedores ? "Guardando..." : "Agregar contenedores"}
+                </button>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                  <h2 className="text-lg font-bold text-slate-800">Contenedores cargados</h2>
+                  <button
+                    onClick={vaciarContenedoresUrgencias}
+                    disabled={vaciandoContenedores || contenedoresUrgencias.length === 0}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                      vaciandoContenedores || contenedoresUrgencias.length === 0
+                        ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                        : "bg-red-50 text-red-700 hover:bg-red-100"
+                    }`}
+                  >
+                    {vaciandoContenedores ? "Borrando..." : "Vaciar todo"}
+                  </button>
+                </div>
+                {contenedoresUrgenciasLoading && contenedoresUrgencias.length === 0 && (
+                  <p className="text-sm text-slate-400">Cargando...</p>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Contenedor</th>
+                        <th className="py-3 px-4 text-left">Nota</th>
+                        <th className="py-3 px-4 text-left">Cargado</th>
+                        <th className="py-3 px-4 text-left">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {contenedoresUrgencias.map((c) => (
+                        <tr key={c.id}>
+                          <td className="py-3 px-4 text-left font-semibold text-slate-800">{c.contenedor}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{c.nota || "—"}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(c.created_at)}</td>
+                          <td className="py-3 px-4 text-left">
+                            <button
+                              onClick={() => eliminarContenedorUrgencia(c.id, c.contenedor)}
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              Eliminar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {contenedoresUrgencias.length === 0 && !contenedoresUrgenciasLoading && (
+                    <p className="text-sm text-slate-400 text-center py-8">No hay contenedores cargados todavía.</p>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -7795,7 +8318,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
