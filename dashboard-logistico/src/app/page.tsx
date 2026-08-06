@@ -4044,8 +4044,8 @@ export default function DashboardLayout() {
           </h1>
         </header>
 
-        <div className="flex-1 overflow-auto p-8 space-y-6">
-          
+        <div key={activeTab} className="tab-fade-in flex-1 overflow-auto p-8 space-y-6">
+
           {/* ================= PESTAÑA: RESUMEN ================= */}
           {activeTab === "Resumen" && (
             <>
