@@ -817,6 +817,25 @@ export default function DashboardLayout() {
     }
     return semanas;
   }
+
+  // Dado un listado de fechas "YYYY-MM-DD", arma las semanas del año que
+  // efectivamente tienen algún dato dentro de su rango (evita generar las
+  // ~52 semanas de todo el año si no hace falta, y evita huecos en el medio).
+  function semanasConDatosDe(fechas: string[]): SemanaDelMes[] {
+    const fechasValidas = fechas.filter((f) => f !== "SIN FECHA");
+    if (fechasValidas.length === 0) return [];
+
+    const minFecha = fechasValidas.reduce((a, b) => (a < b ? a : b));
+    const maxFecha = fechasValidas.reduce((a, b) => (a > b ? a : b));
+    const anioMin = Number(minFecha.slice(0, 4));
+    const anioMax = Number(maxFecha.slice(0, 4));
+
+    let todas: SemanaDelMes[] = [];
+    for (let y = anioMin; y <= anioMax; y++) {
+      todas = todas.concat(semanasDelAnio(y));
+    }
+    return todas.filter((s) => fechasValidas.some((f) => f >= s.desde && f <= s.hasta));
+  }
   // =========================================================================
   // ESTADO: POR FECHA (datos reales desde grupo_pedidos vía /api/resumen/por-fecha)
   // =========================================================================
@@ -842,26 +861,7 @@ export default function DashboardLayout() {
   // Solo mostramos en el desplegable las semanas que efectivamente tienen
   // datos cargados (según el rango real de fechas en grupo_pedidos), en vez
   // de generar las ~52 semanas de todo el año.
-  const semanasConDatos = (() => {
-    const fechas = (fechaData?.filas ?? [])
-      .map((f) => f.fecha)
-      .filter((f) => f !== "SIN FECHA");
-    if (fechas.length === 0) return [] as SemanaDelMes[];
-
-    const minFecha = fechas.reduce((a, b) => (a < b ? a : b));
-    const maxFecha = fechas.reduce((a, b) => (a > b ? a : b));
-    const anioMin = Number(minFecha.slice(0, 4));
-    const anioMax = Number(maxFecha.slice(0, 4));
-
-    let todas: SemanaDelMes[] = [];
-    for (let y = anioMin; y <= anioMax; y++) {
-      todas = todas.concat(semanasDelAnio(y));
-    }
-    // No alcanza con que la semana esté dentro del rango [minFecha, maxFecha]:
-    // puede haber semanas sin ningún dato en el medio (huecos). Solo mostramos
-    // las que tienen al menos una fecha real cargada dentro de su rango.
-    return todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
-  })();
+  const semanasConDatos = semanasConDatosDe((fechaData?.filas ?? []).map((f) => f.fecha));
 
   const prepNoEcomSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
 
@@ -1622,6 +1622,11 @@ export default function DashboardLayout() {
     dataVersion
   );
 
+  // Semanas para el selector de "Por pedidos" -- calculadas sobre los datos
+  // de ESTA pestaña (no sobre "Por fecha", que solo se pide a la API cuando
+  // esa otra pestaña está activa y por eso quedaba vacío acá).
+  const semanasConDatosPedidos = semanasConDatosDe((pedidosData?.filas ?? []).map((f) => f.fecha));
+
   const [busquedaPedidos, setBusquedaPedidos] = useState("");
   const [filtroMarcaPedidos, setFiltroMarcaPedidos] = useState("TODAS");
   const [filtroCanalPedidos, setFiltroCanalPedidos] = useState("TODAS");
@@ -1876,19 +1881,7 @@ export default function DashboardLayout() {
     dataVersion
   );
 
-  const semanasConDatosEcom = (() => {
-    const fechas = (fechaEcomData?.filas ?? []).map((f) => f.fecha).filter((f) => f !== "SIN FECHA");
-    if (fechas.length === 0) return [] as SemanaDelMes[];
-    const minFecha = fechas.reduce((a, b) => (a < b ? a : b));
-    const maxFecha = fechas.reduce((a, b) => (a > b ? a : b));
-    const anioMin = Number(minFecha.slice(0, 4));
-    const anioMax = Number(maxFecha.slice(0, 4));
-    let todas: SemanaDelMes[] = [];
-    for (let y = anioMin; y <= anioMax; y++) {
-      todas = todas.concat(semanasDelAnio(y));
-    }
-    return todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
-  })();
+  const semanasConDatosEcom = semanasConDatosDe((fechaEcomData?.filas ?? []).map((f) => f.fecha));
 
   const hoyISOEcom = new Date().toISOString().slice(0, 10);
   const limiteFechaISOEcom = (() => {
@@ -1977,6 +1970,8 @@ export default function DashboardLayout() {
     "/api/ecom/resumen/pedidos",
     dataVersion
   );
+
+  const semanasConDatosPedidosEcom = semanasConDatosDe((pedidosEcomData?.filas ?? []).map((f) => f.fecha));
 
   const [busquedaPedidosEcom, setBusquedaPedidosEcom] = useState("");
   const [filtroMarcaPedidosEcom, setFiltroMarcaPedidosEcom] = useState("TODAS");
@@ -5143,7 +5138,7 @@ export default function DashboardLayout() {
                 <select
                   value={semanaPedidos ? semanaPedidos.desde : ""}
                   onChange={(e) => {
-                    const semana = semanasConDatos.find((s) => s.desde === e.target.value);
+                    const semana = semanasConDatosPedidos.find((s) => s.desde === e.target.value);
                     if (semana) setSemanaPedidos({ desde: semana.desde, hasta: semana.hasta });
                   }}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
@@ -5151,7 +5146,7 @@ export default function DashboardLayout() {
                   }`}
                 >
                   <option value="">Semana del año...</option>
-                  {semanasConDatos.map((s) => (
+                  {semanasConDatosPedidos.map((s) => (
                     <option key={s.desde} value={s.desde}>{s.label}</option>
                   ))}
                 </select>
@@ -5897,7 +5892,7 @@ export default function DashboardLayout() {
                 <select
                   value={semanaPedidosEcom ? semanaPedidosEcom.desde : ""}
                   onChange={(e) => {
-                    const semana = semanasConDatosEcom.find((s) => s.desde === e.target.value);
+                    const semana = semanasConDatosPedidosEcom.find((s) => s.desde === e.target.value);
                     if (semana) setSemanaPedidosEcom({ desde: semana.desde, hasta: semana.hasta });
                   }}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
@@ -5905,7 +5900,7 @@ export default function DashboardLayout() {
                   }`}
                 >
                   <option value="">Semana del año...</option>
-                  {semanasConDatosEcom.map((s) => (
+                  {semanasConDatosPedidosEcom.map((s) => (
                     <option key={s.desde} value={s.desde}>{s.label}</option>
                   ))}
                 </select>
