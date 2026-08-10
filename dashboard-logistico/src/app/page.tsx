@@ -8,7 +8,7 @@ import { REGISTRO_SECCIONES } from "@/lib/secciones";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonCard, SkeletonTable } from "@/components/Skeleton";
 
-type ImportKey = "clientes" | "grupos" | "tiendas";
+type ImportKey = "clientes" | "grupos" | "tiendas" | "ecom";
 
 interface ImportFileResult {
   archivo: ImportKey;
@@ -69,6 +69,37 @@ interface ResumenData {
   };
   marcas: MarcaResumen[];
   updatedAt: string | null;
+}
+
+// Ecom no agrupa por "grupo" ni distingue REMA/STD -- mismos campos que los
+// equivalentes del general, sin esas dos columnas.
+interface FechaResumenEcom {
+  fecha: string;
+  marca: string;
+  canal: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  eficPick: number;
+  eficSep: number;
+}
+
+interface PedidoResumenEcom {
+  pedido: string;
+  nombrePedido: string;
+  marca: string;
+  canal: string;
+  sector: string;
+  fecha: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  eficPick: number;
+  eficSep: number;
 }
 
 export default function DashboardLayout() {
@@ -133,6 +164,8 @@ export default function DashboardLayout() {
 
   // Estados de navegación del Sidebar
   const [isPrepOpen, setIsPrepOpen] = useState(true);
+  const [isPrepNoEcomOpen, setIsPrepNoEcomOpen] = useState(true);
+  const [isPrepEcomOpen, setIsPrepEcomOpen] = useState(true);
 
   // Si un import anterior guardó una pestaña de destino antes de recargar la
   // página (window.location.reload), arrancamos ya posicionados ahí.
@@ -209,7 +242,7 @@ export default function DashboardLayout() {
   const CHUNK_SIZE = 500; // registros por request, para no chocar con el límite de 4.5MB de Vercel
 
   async function enviarArchivoEnLotes(
-    archivo: "clientes" | "grupos" | "tiendas",
+    archivo: ImportKey,
     records: Record<string, unknown>[],
     onProgresoRegistros: (cantidad: number) => void
   ): Promise<{ filasInsertadas: number }> {
@@ -336,6 +369,54 @@ export default function DashboardLayout() {
     if (inputClientesRef.current) inputClientesRef.current.value = "";
     if (inputGruposRef.current) inputGruposRef.current.value = "";
     if (inputTiendasRef.current) inputTiendasRef.current.value = "";
+  };
+
+  // =========================================================================
+  // ESTADO: IMPORTAR DATOS ECOM (pedidos_ecom, un solo archivo CSV)
+  // =========================================================================
+  const [archivoEcom, setArchivoEcom] = useState<File | null>(null);
+  const [isProcesandoEcom, setIsProcesandoEcom] = useState(false);
+  const [progresoImportEcom, setProgresoImportEcom] = useState(0);
+  const [resultadoImportEcom, setResultadoImportEcom] = useState<ImportFileResult | null>(null);
+  const [errorImportEcom, setErrorImportEcom] = useState<string | null>(null);
+  const inputEcomRef = useRef<HTMLInputElement>(null);
+
+  const handleProcesarDatosEcom = async () => {
+    if (!archivoEcom) return;
+
+    setIsProcesandoEcom(true);
+    setProgresoImportEcom(0);
+    setErrorImportEcom(null);
+    setResultadoImportEcom(null);
+
+    try {
+      const records = await parseCsvFile(archivoEcom);
+      if (records.length === 0) {
+        setResultadoImportEcom({ archivo: "ecom", filasLeidas: 0, filasInsertadas: 0, error: "El archivo no tiene filas de datos." });
+        return;
+      }
+      const { filasInsertadas } = await enviarArchivoEnLotes("ecom", records, (cantidad) => {
+        setProgresoImportEcom((prev) => {
+          const procesados = Math.round((prev / 100) * records.length) + cantidad;
+          return Math.min(100, Math.round((procesados / records.length) * 100));
+        });
+      });
+      setProgresoImportEcom(100);
+      setResultadoImportEcom({ archivo: "ecom", filasLeidas: records.length, filasInsertadas, error: null });
+      setDataVersion((v) => v + 1);
+      setTimeout(() => setActiveTab("ECOM-Resumen"), 800);
+    } catch (err) {
+      setErrorImportEcom(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setIsProcesandoEcom(false);
+    }
+  };
+
+  const resetImportEcomState = () => {
+    setArchivoEcom(null);
+    setResultadoImportEcom(null);
+    setErrorImportEcom(null);
+    if (inputEcomRef.current) inputEcomRef.current.value = "";
   };
 
   // Estados para la interactividad de las tablas en "Resumen"
@@ -782,7 +863,14 @@ export default function DashboardLayout() {
     return todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
   })();
 
-  const prepSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
+  const prepNoEcomSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
+
+  const prepEcomSubSections = [
+    { key: "ECOM-Importar", label: "Importar Datos" },
+    { key: "ECOM-Resumen", label: "Resumen" },
+    { key: "ECOM-PorFecha", label: "Por Fecha" },
+    { key: "ECOM-PorPedidos", label: "Por Pedidos" },
+  ];
 
   const cargaInicialSubSections = [
     { key: "CI-Importar", label: "Importar Datos" },
@@ -1696,6 +1784,281 @@ export default function DashboardLayout() {
   };
 
   // =========================================================================
+  // ESTADO: ECOM - RESUMEN (datos reales desde pedidos_ecom vía /api/ecom/resumen)
+  // =========================================================================
+  const [rangoResumenEcom, setRangoResumenEcom] = useState<7 | 14 | 30 | null>(null);
+  const [selectedMarcaEcom, setSelectedMarcaEcom] = useState<string | null>(null);
+
+  const urlResumenEcom = useMemo(() => {
+    let url = "/api/ecom/resumen";
+    if (rangoResumenEcom) {
+      const d = new Date();
+      d.setDate(d.getDate() - (rangoResumenEcom - 1));
+      url += `?desde=${d.toISOString().slice(0, 10)}`;
+    }
+    return url;
+  }, [rangoResumenEcom]);
+
+  const {
+    data: resumenEcomData,
+    error: resumenEcomError,
+    isLoading: resumenEcomLoading,
+  } = useTabData<ResumenData>(activeTab, "ECOM-Resumen", urlResumenEcom, dataVersion);
+
+  const marcasDataEcom = (resumenEcomData?.marcas ?? []).map((m, idx) => ({
+    name: m.name,
+    dot: dotForMarca(idx),
+    uni: fmtNum(m.uni),
+    pick: fmtNum(m.pick),
+    sep: fmtNum(m.sep),
+    pendPick: fmtNum(m.pendPick),
+    pendSep: fmtNum(m.pendSep),
+    eficPick: fmtPct(m.eficPick),
+    eficSep: fmtPct(m.eficSep),
+    reg: fmtNum(m.reg),
+  }));
+
+  const [canalRowsEcom, setCanalRowsEcom] = useState<CanalResumen[] | null>(null);
+  const [canalLoadingEcom, setCanalLoadingEcom] = useState(false);
+  const [canalErrorEcom, setCanalErrorEcom] = useState<string | null>(null);
+
+  const cargarCanalPorMarcaEcom = async (marca: string) => {
+    setCanalLoadingEcom(true);
+    setCanalErrorEcom(null);
+    setCanalRowsEcom(null);
+    try {
+      const res = await fetch(`/api/ecom/resumen/canal?marca=${encodeURIComponent(marca)}`, { cache: "no-store" });
+      let data;
+      try {
+        data = await res.json();
+      } catch {
+        throw new Error(`El servidor respondió con un error inesperado (status ${res.status}).`);
+      }
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "No se pudo cargar el desglose por canal.");
+      }
+      setCanalRowsEcom(data.canales);
+    } catch (err) {
+      setCanalErrorEcom(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setCanalLoadingEcom(false);
+    }
+  };
+
+  const handleMarcaClickEcom = (marca: string) => {
+    if (marca === selectedMarcaEcom) {
+      setSelectedMarcaEcom(null);
+      setCanalRowsEcom(null);
+      setCanalErrorEcom(null);
+      return;
+    }
+    setSelectedMarcaEcom(marca);
+    void cargarCanalPorMarcaEcom(marca);
+  };
+
+  // =========================================================================
+  // ESTADO: ECOM - POR FECHA (datos reales desde pedidos_ecom vía /api/ecom/resumen/por-fecha)
+  // =========================================================================
+  const [rangoFechaEcom, setRangoFechaEcom] = useState<7 | 14 | 30>(7);
+  const [fechaSeleccionadaEcom, setFechaSeleccionadaEcom] = useState<string>("");
+  const [semanaFechaEcom, setSemanaFechaEcom] = useState<{ desde: string; hasta: string } | null>(null);
+  const [filtroMarcaFechaEcom, setFiltroMarcaFechaEcom] = useState<string>("TODAS");
+  const [filtroCanalFechaEcom, setFiltroCanalFechaEcom] = useState<string>("TODAS");
+
+  const {
+    data: fechaEcomData,
+    error: fechaEcomError,
+    isLoading: fechaEcomLoading,
+  } = useTabData<{ filas: FechaResumenEcom[]; updatedAt: string | null }>(
+    activeTab,
+    "ECOM-PorFecha",
+    "/api/ecom/resumen/por-fecha",
+    dataVersion
+  );
+
+  const semanasConDatosEcom = (() => {
+    const fechas = (fechaEcomData?.filas ?? []).map((f) => f.fecha).filter((f) => f !== "SIN FECHA");
+    if (fechas.length === 0) return [] as SemanaDelMes[];
+    const minFecha = fechas.reduce((a, b) => (a < b ? a : b));
+    const maxFecha = fechas.reduce((a, b) => (a > b ? a : b));
+    const anioMin = Number(minFecha.slice(0, 4));
+    const anioMax = Number(maxFecha.slice(0, 4));
+    let todas: SemanaDelMes[] = [];
+    for (let y = anioMin; y <= anioMax; y++) {
+      todas = todas.concat(semanasDelAnio(y));
+    }
+    return todas.filter((s) => fechas.some((f) => f >= s.desde && f <= s.hasta));
+  })();
+
+  const hoyISOEcom = new Date().toISOString().slice(0, 10);
+  const limiteFechaISOEcom = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - (rangoFechaEcom - 1));
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const marcasDisponiblesFechaEcom = Array.from(new Set((fechaEcomData?.filas ?? []).map((f) => f.marca))).sort();
+  const canalesDisponiblesFechaEcom = Array.from(new Set((fechaEcomData?.filas ?? []).map((f) => f.canal))).sort();
+
+  const { fechasDataEcom, subtotalFechaEcomCalculado } = useMemo(() => {
+    const filasConFecha = (fechaEcomData?.filas ?? []).filter((f) => {
+      if (f.fecha === "SIN FECHA") return false;
+      if (semanaFechaEcom) return f.fecha >= semanaFechaEcom.desde && f.fecha <= semanaFechaEcom.hasta;
+      if (fechaSeleccionadaEcom) return f.fecha === fechaSeleccionadaEcom;
+      return f.fecha >= limiteFechaISOEcom && f.fecha <= hoyISOEcom;
+    });
+    const filasSinFecha =
+      rangoFechaEcom === 30 && !fechaSeleccionadaEcom && !semanaFechaEcom
+        ? (fechaEcomData?.filas ?? []).filter((f) => f.fecha === "SIN FECHA")
+        : [];
+
+    const filasFiltradas = [...filasConFecha, ...filasSinFecha].filter(
+      (f) =>
+        (filtroMarcaFechaEcom === "TODAS" || f.marca === filtroMarcaFechaEcom) &&
+        (filtroCanalFechaEcom === "TODAS" || f.canal === filtroCanalFechaEcom)
+    );
+
+    const consolidadoPorFechaMarca = new Map<
+      string,
+      { fecha: string; marca: string; uni: number; pick: number; sep: number }
+    >();
+    for (const f of filasFiltradas) {
+      const key = `${f.fecha}__${f.marca}`;
+      if (!consolidadoPorFechaMarca.has(key)) {
+        consolidadoPorFechaMarca.set(key, { fecha: f.fecha, marca: f.marca, uni: 0, pick: 0, sep: 0 });
+      }
+      const acc = consolidadoPorFechaMarca.get(key)!;
+      acc.uni += f.uni;
+      acc.pick += f.pick;
+      acc.sep += f.sep;
+    }
+
+    const fechasDataEcom = Array.from(consolidadoPorFechaMarca.values())
+      .sort((a, b) => (a.fecha < b.fecha ? 1 : a.fecha > b.fecha ? -1 : b.uni - a.uni))
+      .map((f) => ({
+        fecha: f.fecha,
+        marca: f.marca,
+        dot: dotForMarcaName(f.marca),
+        uni: fmtNum(f.uni),
+        pick: fmtNum(f.pick),
+        sep: fmtNum(f.sep),
+        pendPick: fmtNum(f.uni - f.pick),
+        pendSep: fmtNum(f.uni - f.sep),
+        eficPick: fmtPct(f.uni > 0 ? (f.pick / f.uni) * 100 : 0),
+        eficSep: fmtPct(f.uni > 0 ? (f.sep / f.uni) * 100 : 0),
+      }));
+
+    const subtotalFecha = filasFiltradas.reduce(
+      (acc, f) => ({ uni: acc.uni + f.uni, pick: acc.pick + f.pick, sep: acc.sep + f.sep }),
+      { uni: 0, pick: 0, sep: 0 }
+    );
+    const subtotalFechaEcomCalculado = {
+      ...subtotalFecha,
+      pendPick: subtotalFecha.uni - subtotalFecha.pick,
+      pendSep: subtotalFecha.uni - subtotalFecha.sep,
+      eficPick: subtotalFecha.uni > 0 ? (subtotalFecha.pick / subtotalFecha.uni) * 100 : 0,
+      eficSep: subtotalFecha.uni > 0 ? (subtotalFecha.sep / subtotalFecha.uni) * 100 : 0,
+    };
+
+    return { fechasDataEcom, subtotalFechaEcomCalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fechaEcomData, rangoFechaEcom, fechaSeleccionadaEcom, semanaFechaEcom, filtroMarcaFechaEcom, filtroCanalFechaEcom, hoyISOEcom, limiteFechaISOEcom]);
+
+  // =========================================================================
+  // ESTADO: ECOM - POR PEDIDOS (datos reales desde pedidos_ecom vía /api/ecom/resumen/pedidos)
+  // =========================================================================
+  const {
+    data: pedidosEcomData,
+    error: pedidosEcomError,
+    isLoading: pedidosEcomLoading,
+  } = useTabData<{ filas: PedidoResumenEcom[]; updatedAt: string | null }>(
+    activeTab,
+    "ECOM-PorPedidos",
+    "/api/ecom/resumen/pedidos",
+    dataVersion
+  );
+
+  const [busquedaPedidosEcom, setBusquedaPedidosEcom] = useState("");
+  const [filtroMarcaPedidosEcom, setFiltroMarcaPedidosEcom] = useState("TODAS");
+  const [filtroCanalPedidosEcom, setFiltroCanalPedidosEcom] = useState("TODAS");
+  const [rangoFechaPedidosEcom, setRangoFechaPedidosEcom] = useState<7 | 14 | 30>(7);
+  const [semanaPedidosEcom, setSemanaPedidosEcom] = useState<{ desde: string; hasta: string } | null>(null);
+
+  const hoyPedidosISOEcom = new Date().toISOString().slice(0, 10);
+  const limitePedidosISOEcom = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - (rangoFechaPedidosEcom - 1));
+    return d.toISOString().slice(0, 10);
+  })();
+
+  const marcasDisponiblesPedidosEcom = Array.from(new Set((pedidosEcomData?.filas ?? []).map((f) => f.marca))).sort();
+  const canalesDisponiblesPedidosEcom = Array.from(new Set((pedidosEcomData?.filas ?? []).map((f) => f.canal))).sort();
+
+  const busquedaNormalizadaEcom = busquedaPedidosEcom.trim().toLowerCase();
+
+  const { filasFiltradasPedidosEcom, subtotalPedidosEcomCalculado } = useMemo(() => {
+    const filasFiltradasPedidosEcom = (pedidosEcomData?.filas ?? []).filter((f) => {
+      const enRango = semanaPedidosEcom
+        ? f.fecha !== "SIN FECHA" && f.fecha >= semanaPedidosEcom.desde && f.fecha <= semanaPedidosEcom.hasta
+        : f.fecha !== "SIN FECHA" && f.fecha >= limitePedidosISOEcom && f.fecha <= hoyPedidosISOEcom;
+      if (!enRango) return false;
+      if (filtroMarcaPedidosEcom !== "TODAS" && f.marca !== filtroMarcaPedidosEcom) return false;
+      if (filtroCanalPedidosEcom !== "TODAS" && f.canal !== filtroCanalPedidosEcom) return false;
+      if (busquedaNormalizadaEcom) {
+        const matchPedido = f.pedido.toLowerCase().includes(busquedaNormalizadaEcom);
+        if (!matchPedido) return false;
+      }
+      return true;
+    });
+
+    const subtotal = filasFiltradasPedidosEcom.reduce(
+      (acc, f) => ({ uni: acc.uni + f.uni, pick: acc.pick + f.pick, sep: acc.sep + f.sep }),
+      { uni: 0, pick: 0, sep: 0 }
+    );
+    const subtotalPedidosEcomCalculado = {
+      ...subtotal,
+      pendPick: subtotal.uni - subtotal.pick,
+      pendSep: subtotal.uni - subtotal.sep,
+      eficPick: subtotal.uni > 0 ? (subtotal.pick / subtotal.uni) * 100 : 0,
+      eficSep: subtotal.uni > 0 ? (subtotal.sep / subtotal.uni) * 100 : 0,
+    };
+
+    return { filasFiltradasPedidosEcom, subtotalPedidosEcomCalculado };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    pedidosEcomData,
+    semanaPedidosEcom,
+    limitePedidosISOEcom,
+    hoyPedidosISOEcom,
+    filtroMarcaPedidosEcom,
+    filtroCanalPedidosEcom,
+    busquedaNormalizadaEcom,
+  ]);
+
+  const exportarPedidosEcomAExcel = async () => {
+    const XLSX = await import("xlsx");
+    const filasExport = filasFiltradasPedidosEcom.map((f) => ({
+      "N° Pedido": f.pedido,
+      Marca: f.marca,
+      Canal: f.canal,
+      Sector: f.sector,
+      Fecha: f.fecha,
+      Unidades: f.uni,
+      Pickeadas: f.pick,
+      Separadas: f.sep,
+      "Pend. Pick": f.pendPick,
+      "Pend. Sep": f.pendSep,
+      "Efic Pick %": Number(f.eficPick.toFixed(1)),
+      "Efic Sep %": Number(f.eficSep.toFixed(1)),
+    }));
+    const hoja = XLSX.utils.json_to_sheet(filasExport);
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Ecom - Por Pedidos");
+    const fechaArchivo = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(libro, `pedidos_ecom_${fechaArchivo}.xlsx`);
+  };
+
+  // =========================================================================
   // DATOS MOCK - STATUS DE PREPARACIÓN
   // =========================================================================
   const kpiData = [
@@ -1721,6 +2084,17 @@ export default function DashboardLayout() {
     eficSep: fmtPct(m.eficSep),
     reg: fmtNum(m.reg),
   }));
+
+  const kpiDataEcom = [
+    { title: "Total Unidades", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalUni) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> },
+    { title: "Unidades Pickeadas", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><polyline strokeLinecap="round" strokeLinejoin="round" points="22 4 12 14.01 9 11.01" /></svg> },
+    { title: "Unidades Separadas", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
+    { title: "Pendiente Picking", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendPick) : "—", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
+    { title: "Pendiente Separación", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendSep) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
+    { title: "Efic. Picking", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
+    { title: "Efic. Separación", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
+    { title: "Total Registros", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalRegistros) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
+  ];
 
   const hoyISO = new Date().toISOString().slice(0, 10);
   const limiteFechaISO = (() => {
@@ -3858,7 +4232,7 @@ export default function DashboardLayout() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
-          {seccionVisible(prepSubSections) && (
+          {seccionVisible([...prepNoEcomSubSections, ...prepEcomSubSections.map((s) => s.key)]) && (
           <div className="pt-2">
             <button onClick={() => setIsPrepOpen(!isPrepOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
               <div className="flex items-center">
@@ -3869,12 +4243,34 @@ export default function DashboardLayout() {
             </button>
             {isPrepOpen && (
               <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
-                {prepSubSections.filter(tienePermiso).map((sub, idx) => (
-                  <button key={idx} onClick={() => irA(sub)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
-                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
-                    {sub}
+                {seccionVisible(prepNoEcomSubSections) && (
+                <div>
+                  <button onClick={() => setIsPrepNoEcomOpen(!isPrepNoEcomOpen)} className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-800/50 transition-colors text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    No Ecom
+                    <svg className={`w-3 h-3 transition-transform duration-200 ${isPrepNoEcomOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
                   </button>
-                ))}
+                  {isPrepNoEcomOpen && prepNoEcomSubSections.filter(tienePermiso).map((sub, idx) => (
+                    <button key={idx} onClick={() => irA(sub)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                      {sub}
+                    </button>
+                  ))}
+                </div>
+                )}
+                {seccionVisible(prepEcomSubSections.map((s) => s.key)) && (
+                <div className="mt-1">
+                  <button onClick={() => setIsPrepEcomOpen(!isPrepEcomOpen)} className="w-full flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-slate-800/50 transition-colors text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Ecom
+                    <svg className={`w-3 h-3 transition-transform duration-200 ${isPrepEcomOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                  </button>
+                  {isPrepEcomOpen && prepEcomSubSections.filter((sub) => tienePermiso(sub.key)).map((sub) => (
+                    <button key={sub.key} onClick={() => irA(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                      <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                      {sub.label}
+                    </button>
+                  ))}
+                </div>
+                )}
               </div>
             )}
           </div>
@@ -4062,6 +4458,10 @@ export default function DashboardLayout() {
              activeTab === "Por pedidos" ? "Status de Preparación - Por Pedidos" :
              activeTab === "Importar datos" ? "Status de Preparación - Importar Datos" :
              activeTab === "REMA Manual" ? "Status de Preparación - Pedidos REMA Manual" :
+             activeTab === "ECOM-Resumen" ? "Status de Preparación (Ecom) - Resumen" :
+             activeTab === "ECOM-PorFecha" ? "Status de Preparación (Ecom) - Por Fecha" :
+             activeTab === "ECOM-PorPedidos" ? "Status de Preparación (Ecom) - Por Pedidos" :
+             activeTab === "ECOM-Importar" ? "Status de Preparación (Ecom) - Importar Datos" :
              activeTab === "CI-Importar" ? "Status Carga Inicial - Importar Datos" :
              activeTab === "CI-Resumen" ? "Status Carga Inicial - Resumen" :
              activeTab === "CI-Avance" ? "Status Carga Inicial - Avance Plan" :
@@ -4965,6 +5365,629 @@ export default function DashboardLayout() {
                     <p className="text-sm text-slate-400 text-center py-8">No hay pedidos cargados como REMA manual todavía.</p>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: ECOM - RESUMEN ================= */}
+          {activeTab === "ECOM-Resumen" && (
+            <>
+              <div className="flex items-center gap-2 flex-wrap">
+                {([
+                  { label: "Última semana", dias: 7 as const },
+                  { label: "Últimos 14 días", dias: 14 as const },
+                  { label: "Último mes", dias: 30 as const },
+                ]).map((opcion) => (
+                  <button
+                    key={opcion.dias}
+                    onClick={() => setRangoResumenEcom(opcion.dias)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      rangoResumenEcom === opcion.dias
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {opcion.label}
+                  </button>
+                ))}
+
+                <button
+                  onClick={() => setRangoResumenEcom(null)}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+
+              {resumenEcomError && (
+                <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el resumen: {resumenEcomError}
+                </div>
+              )}
+              {resumenEcomLoading && !resumenEcomData && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <SkeletonCard key={i} />
+                  ))}
+                </div>
+              )}
+
+              {resumenEcomData && (
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                    <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(resumenEcomData.updatedAt)}</span>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {kpiDataEcom.map((kpi, index) => {
+                  const themeClasses = getThemeClasses(kpi.theme);
+                  return (
+                    <div key={index} className="relative overflow-hidden bg-white rounded-xl border border-slate-200 p-5 h-32 flex flex-col justify-center">
+                      <div className={`absolute -right-8 -bottom-12 w-40 h-40 rounded-[100%] ${themeClasses.blob} opacity-80`}></div>
+                      <div className="relative z-10 w-full flex justify-between items-center">
+                        <div>
+                          <h3 className="text-sm font-medium text-slate-500 mb-1">{kpi.title}</h3>
+                          <p className={`text-[32px] font-bold tracking-tight ${themeClasses.text} leading-none`}>{kpi.value}</p>
+                        </div>
+                        <div className={`w-[46px] h-[46px] rounded-xl flex items-center justify-center ${themeClasses.bgIcon} ${themeClasses.textIcon}`}>{kpi.icon}</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800">Detalle por Marca</h2>
+                <p className="text-sm text-slate-500 mb-6">Haz click en una marca para ver el desglose por canal</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">Unidades</th>
+                        <th className="py-3 px-4 text-left">Pickeadas</th>
+                        <th className="py-3 px-4 text-left">Separadas</th>
+                        <th className="py-3 px-4 text-left">Pend. Picking</th>
+                        <th className="py-3 px-4 text-left">Pend. Sep.</th>
+                        <th className="py-3 px-4 text-left">Efic. Pick.</th>
+                        <th className="py-3 px-4 text-left">Efic. Sep.</th>
+                        <th className="py-3 px-4 text-left">Registros</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {marcasDataEcom.map((marca, i) => (
+                        <tr key={i} onClick={() => handleMarcaClickEcom(marca.name)} className={`cursor-pointer transition-colors ${selectedMarcaEcom === marca.name ? 'bg-slate-100' : 'hover:bg-slate-50'}`}>
+                          <td className="py-3 px-4 text-left flex items-center gap-3 font-semibold text-slate-800"><span className={`w-2.5 h-2.5 rounded-full ${marca.dot}`}></span> {marca.name}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.uni}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.pick}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.sep}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-orange-500">{marca.pendPick}</td>
+                          <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficPick}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficSep}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.reg}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {selectedMarcaEcom && (
+                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-slate-800">
+                    Desglose por Canal — {selectedMarcaEcom}
+                  </h2>
+                  <p className="text-sm text-slate-500 mb-6">
+                    Canal de venta de cada pedido, según &quot;OOLL asignado&quot;.
+                  </p>
+
+                  {canalLoadingEcom && (
+                    <div className="p-4 rounded-lg bg-slate-50 border border-slate-200 text-sm text-slate-500">
+                      Cargando desglose por canal...
+                    </div>
+                  )}
+
+                  {canalErrorEcom && (
+                    <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      Error al cargar el desglose: {canalErrorEcom}
+                    </div>
+                  )}
+
+                  {!canalLoadingEcom && !canalErrorEcom && canalRowsEcom && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm text-left">
+                        <thead className="text-slate-500 font-medium border-b border-slate-200">
+                          <tr>
+                            <th className="py-3 px-4 text-left">Canal</th>
+                            <th className="py-3 px-4 text-left">Unidades</th>
+                            <th className="py-3 px-4 text-left">Pickeadas</th>
+                            <th className="py-3 px-4 text-left">Separadas</th>
+                            <th className="py-3 px-4 text-left">Pend. Picking</th>
+                            <th className="py-3 px-4 text-left">Pend. Sep.</th>
+                            <th className="py-3 px-4 text-left">Efic. Pick.</th>
+                            <th className="py-3 px-4 text-left">Efic. Sep.</th>
+                            <th className="py-3 px-4 text-left">Registros</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {canalRowsEcom.map((canal, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="py-3 px-4 text-left flex items-center gap-3 font-semibold text-slate-800">
+                                <span className={`w-2.5 h-2.5 rounded-full ${dotForMarca(i)}`}></span>
+                                {canal.name}
+                              </td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.uni)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.pick)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.sep)}</td>
+                              <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(canal.pendPick)}</td>
+                              <td className="py-3 px-4 text-left font-semibold text-red-500">{fmtNum(canal.pendSep)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficPick)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficSep)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.reg)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ================= PESTAÑA: ECOM - IMPORTAR DATOS ================= */}
+          {activeTab === "ECOM-Importar" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Pedidos Ecom</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Subí el archivo de pedidos de e-commerce (CSV). Al procesar, reemplaza por completo los datos de Ecom en Supabase.
+              </p>
+
+              <div className="space-y-4">
+                <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
+                  <div>
+                    <p className="font-semibold text-slate-800">Pedidos Ecom</p>
+                    <p className="text-xs text-slate-500">Formato CSV (.csv)</p>
+                    {archivoEcom && (
+                      <p className="text-xs text-emerald-600 font-medium mt-1">{archivoEcom.name}</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      ref={inputEcomRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => setArchivoEcom(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      onClick={() => inputEcomRef.current?.click()}
+                      className="px-4 py-2 rounded-lg text-sm font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                    >
+                      {archivoEcom ? "Cambiar archivo" : "Seleccionar archivo"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3 mt-6">
+                <button
+                  onClick={handleProcesarDatosEcom}
+                  disabled={!archivoEcom || isProcesandoEcom}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    !archivoEcom || isProcesandoEcom
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {isProcesandoEcom ? "Procesando..." : "Procesar datos"}
+                </button>
+                <button
+                  onClick={resetImportEcomState}
+                  disabled={isProcesandoEcom}
+                  className="px-5 py-2.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 transition-colors"
+                >
+                  Limpiar
+                </button>
+              </div>
+
+              {isProcesandoEcom && (
+                <div className="mt-6">
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span>Procesando datos...</span>
+                    <span className="font-semibold text-slate-700">{progresoImportEcom}%</span>
+                  </div>
+                  <div className="w-full h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full bg-blue-600 rounded-full transition-all duration-300 ease-out"
+                      style={{ width: `${progresoImportEcom}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {errorImportEcom && (
+                <div className="mt-6 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {errorImportEcom}
+                </div>
+              )}
+
+              {resultadoImportEcom && (
+                <div className="mt-6 space-y-2">
+                  <div
+                    className={`p-4 rounded-lg border text-sm ${
+                      resultadoImportEcom.error
+                        ? "bg-red-50 border-red-200 text-red-700"
+                        : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    }`}
+                  >
+                    <span className="font-semibold">Pedidos Ecom:</span>{" "}
+                    {resultadoImportEcom.error
+                      ? resultadoImportEcom.error
+                      : `${resultadoImportEcom.filasInsertadas} de ${resultadoImportEcom.filasLeidas} filas cargadas correctamente.`}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: ECOM - POR FECHA ================= */}
+          {activeTab === "ECOM-PorFecha" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xl font-bold text-slate-800">Detalle por Fecha (Ecom)</h2>
+                {fechaEcomData && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(fechaEcomData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 mb-6 flex-wrap">
+                <div className="flex items-center gap-2">
+                  {([
+                    { label: "Última semana", dias: 7 as const },
+                    { label: "Últimos 14 días", dias: 14 as const },
+                    { label: "Último mes", dias: 30 as const },
+                  ]).map((opcion) => (
+                    <button
+                      key={opcion.dias}
+                      onClick={() => {
+                        setRangoFechaEcom(opcion.dias);
+                        setFechaSeleccionadaEcom("");
+                        setSemanaFechaEcom(null);
+                      }}
+                      className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                        !fechaSeleccionadaEcom && !semanaFechaEcom && rangoFechaEcom === opcion.dias
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      }`}
+                    >
+                      {opcion.label}
+                    </button>
+                  ))}
+                </div>
+
+                <input
+                  type="date"
+                  value={fechaSeleccionadaEcom}
+                  onChange={(e) => {
+                    setFechaSeleccionadaEcom(e.target.value);
+                    setSemanaFechaEcom(null);
+                  }}
+                  max={hoyISOEcom}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    fechaSeleccionadaEcom ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                />
+
+                <select
+                  value={semanaFechaEcom ? semanaFechaEcom.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatosEcom.find((s) => s.desde === e.target.value);
+                    if (semana) {
+                      setSemanaFechaEcom({ desde: semana.desde, hasta: semana.hasta });
+                      setFechaSeleccionadaEcom("");
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaFechaEcom ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatosEcom.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroMarcaFechaEcom}
+                  onChange={(e) => setFiltroMarcaFechaEcom(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todas las marcas</option>
+                  {marcasDisponiblesFechaEcom.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroCanalFechaEcom}
+                  onChange={(e) => setFiltroCanalFechaEcom(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los canales</option>
+                  {canalesDisponiblesFechaEcom.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => {
+                    setRangoFechaEcom(7);
+                    setFechaSeleccionadaEcom("");
+                    setSemanaFechaEcom(null);
+                    setFiltroMarcaFechaEcom("TODAS");
+                    setFiltroCanalFechaEcom("TODAS");
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+
+              {fechaEcomError && (
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el detalle por fecha: {fechaEcomError}
+                </div>
+              )}
+              {fechaEcomLoading && !fechaEcomData && (
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={5} />
+                </div>
+              )}
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead>
+                    {fechasDataEcom.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                        <td className="py-3 px-4 text-left" colSpan={2}>
+                          Subtotal
+                          {filtroMarcaFechaEcom !== "TODAS" ? ` — ${filtroMarcaFechaEcom}` : " — Todas las marcas"}
+                          {filtroCanalFechaEcom !== "TODAS" ? ` — ${filtroCanalFechaEcom}` : ""}
+                        </td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaEcomCalculado.uni)}</td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaEcomCalculado.pick)}</td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalFechaEcomCalculado.sep)}</td>
+                        <td className="py-3 px-4 text-left text-orange-600">{fmtNum(subtotalFechaEcomCalculado.pendPick)}</td>
+                        <td className="py-3 px-4 text-left text-red-600">{fmtNum(subtotalFechaEcomCalculado.pendSep)}</td>
+                        <td className="py-3 px-4 text-left">{fmtPct(subtotalFechaEcomCalculado.eficPick)}</td>
+                        <td className="py-3 px-4 text-left">{fmtPct(subtotalFechaEcomCalculado.eficSep)}</td>
+                      </tr>
+                    )}
+                    <tr className="text-slate-500 font-medium border-b border-slate-200">
+                      <th className="py-4 px-4 text-left">Fecha</th>
+                      <th className="py-4 px-4 text-left">Marca</th>
+                      <th className="py-4 px-4 text-left">Unidades</th>
+                      <th className="py-4 px-4 text-left">Pickeadas</th>
+                      <th className="py-4 px-4 text-left">Separadas</th>
+                      <th className="py-4 px-4 text-left">Pend. Picking</th>
+                      <th className="py-4 px-4 text-left">Pend. Sep.</th>
+                      <th className="py-4 px-4 text-left">Efic. Pick.</th>
+                      <th className="py-4 px-4 text-left">Efic. Sep.</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {fechasDataEcom.map((row, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
+                        <td className="py-4 px-4 text-left flex items-center gap-3 font-bold text-slate-900"><span className={`w-2 h-2 rounded-full ${row.dot}`}></span>{row.marca}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.uni}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.pick}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.sep}</td>
+                        <td className="py-4 px-4 text-left font-semibold text-orange-500">{row.pendPick}</td>
+                        <td className="py-4 px-4 text-left font-semibold text-red-500">{row.pendSep}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.eficPick}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.eficSep}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: ECOM - POR PEDIDOS ================= */}
+          {activeTab === "ECOM-PorPedidos" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h2 className="text-xl font-bold text-slate-800">Detalle por Pedidos (Ecom)</h2>
+                {pedidosEcomData && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización de datos: <span className="font-medium text-slate-700">{fmtFecha(pedidosEcomData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
+                <input
+                  type="text"
+                  value={busquedaPedidosEcom}
+                  onChange={(e) => setBusquedaPedidosEcom(e.target.value)}
+                  placeholder="Buscar por número de pedido..."
+                  className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 min-w-[260px]"
+                />
+
+                <select
+                  value={filtroMarcaPedidosEcom}
+                  onChange={(e) => setFiltroMarcaPedidosEcom(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todas las marcas</option>
+                  {marcasDisponiblesPedidosEcom.map((m) => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+
+                <select
+                  value={filtroCanalPedidosEcom}
+                  onChange={(e) => setFiltroCanalPedidosEcom(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODAS">Todos los canales</option>
+                  {canalesDisponiblesPedidosEcom.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={exportarPedidosEcomAExcel}
+                  disabled={filasFiltradasPedidosEcom.length === 0}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ml-auto ${
+                    filasFiltradasPedidosEcom.length === 0
+                      ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                      : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline strokeLinecap="round" strokeLinejoin="round" points="7 10 12 15 17 10" />
+                    <line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                  Exportar a Excel
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 mb-6 flex-wrap">
+                {([
+                  { label: "Última semana", dias: 7 as const },
+                  { label: "Últimos 14 días", dias: 14 as const },
+                  { label: "Último mes", dias: 30 as const },
+                ]).map((opcion) => (
+                  <button
+                    key={opcion.dias}
+                    onClick={() => {
+                      setRangoFechaPedidosEcom(opcion.dias);
+                      setSemanaPedidosEcom(null);
+                    }}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      !semanaPedidosEcom && rangoFechaPedidosEcom === opcion.dias
+                        ? "bg-blue-600 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {opcion.label}
+                  </button>
+                ))}
+
+                <select
+                  value={semanaPedidosEcom ? semanaPedidosEcom.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatosEcom.find((s) => s.desde === e.target.value);
+                    if (semana) setSemanaPedidosEcom({ desde: semana.desde, hasta: semana.hasta });
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaPedidosEcom ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatosEcom.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
+
+                <button
+                  onClick={() => {
+                    setRangoFechaPedidosEcom(7);
+                    setSemanaPedidosEcom(null);
+                    setFiltroMarcaPedidosEcom("TODAS");
+                    setFiltroCanalPedidosEcom("TODAS");
+                    setBusquedaPedidosEcom("");
+                  }}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+
+              {pedidosEcomError && (
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar el detalle por pedidos: {pedidosEcomError}
+                </div>
+              )}
+              {pedidosEcomLoading && !pedidosEcomData && (
+                <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={6} />
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 mb-6">
+                {[
+                  { label: "Unidades", value: fmtNum(subtotalPedidosEcomCalculado.uni), color: "text-slate-800" },
+                  { label: "Pickeado", value: fmtNum(subtotalPedidosEcomCalculado.pick), color: "text-slate-800" },
+                  { label: "Separado", value: fmtNum(subtotalPedidosEcomCalculado.sep), color: "text-slate-800" },
+                  { label: "Pend. Pick", value: fmtNum(subtotalPedidosEcomCalculado.pendPick), color: "text-orange-600" },
+                  { label: "Pend. Sep.", value: fmtNum(subtotalPedidosEcomCalculado.pendSep), color: "text-red-600" },
+                ].map((card) => (
+                  <div key={card.label} className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-center">
+                    <p className="text-xs font-medium text-slate-500 mb-2">{card.label}</p>
+                    <p className={`text-xl font-bold ${card.color}`}>{card.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-4 px-4 text-left">N° Pedido</th>
+                      <th className="py-4 px-4 text-left">Marca</th>
+                      <th className="py-4 px-4 text-left">Canal</th>
+                      <th className="py-4 px-4 text-left">Sector</th>
+                      <th className="py-4 px-4 text-left">Unidades</th>
+                      <th className="py-4 px-4 text-left">Pickeadas</th>
+                      <th className="py-4 px-4 text-left">Separadas</th>
+                      <th className="py-4 px-4 text-left">Pend. Pick</th>
+                      <th className="py-4 px-4 text-left">Pend. Sep</th>
+                      <th className="py-4 px-4 text-left">Efic. Pick %</th>
+                      <th className="py-4 px-4 text-left">Efic. Sep %</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filasFiltradasPedidosEcom.map((row, i) => (
+                      <tr key={`${row.pedido}-${i}`} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-4 px-4 text-left font-semibold text-slate-800">{row.pedido}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.marca}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.canal}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{row.sector}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.uni)}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.pick)}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.sep)}</td>
+                        <td className="py-4 px-4 text-left font-semibold text-orange-500">{fmtNum(row.pendPick)}</td>
+                        <td className="py-4 px-4 text-left font-semibold text-red-500">{fmtNum(row.pendSep)}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{fmtPct(row.eficPick)}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{fmtPct(row.eficSep)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {filasFiltradasPedidosEcom.length === 0 && !pedidosEcomLoading && (
+                  <p className="text-sm text-slate-400 text-center py-8">No hay pedidos que coincidan con los filtros aplicados.</p>
+                )}
               </div>
             </div>
           )}
@@ -8258,7 +9281,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

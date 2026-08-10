@@ -27,6 +27,7 @@ const CAMPOS_NUMERICOS = new Set([
   "uni_sep",
   "uni_plan",
   "uni_pend",
+  "uni_nc",
   "pedidas",
   "distribuidas",
   "pendientes",

@@ -22,12 +22,13 @@ const IMPORT_CONFIG = {
   clientes: { table: "clientes", mode: "upsert", conflictColumn: "codigo" },
   grupos: { table: "grupo_pedidos", mode: "full_replace" },
   tiendas: { table: "tiendas_destino", mode: "full_replace" },
+  ecom: { table: "pedidos_ecom", mode: "full_replace" },
 } as const;
 
 type ImportKey = keyof typeof IMPORT_CONFIG;
 
 function esImportKey(v: unknown): v is ImportKey {
-  return v === "clientes" || v === "grupos" || v === "tiendas";
+  return v === "clientes" || v === "grupos" || v === "tiendas" || v === "ecom";
 }
 
 async function insertarLote(table: string, batch: Record<string, unknown>[]): Promise<number> {
