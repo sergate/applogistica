@@ -18,6 +18,15 @@ interface CargaInicialRow {
 
 const num = (v: number | null): number => Number(v) || 0;
 
+// Algunas filas traen un stock_total absurdo (error de carga en el archivo
+// origen) -- si supera el millón de unidades, se lo trata como dato inválido
+// y se cuenta como 0 en vez de inflar el stock real.
+const STOCK_MAX_VALIDO = 1_000_000;
+const numStock = (v: number | null): number => {
+  const n = Number(v) || 0;
+  return n > STOCK_MAX_VALIDO ? 0 : n;
+};
+
 // -----------------------------------------------------------------------
 // El "numero" trae codificados la marca y la temporada, ej: CI_CQQ_VER_001
 // CI = Carga Inicial (prefijo, se ignora)
@@ -92,6 +101,7 @@ export async function GET() {
         pedidas: number;
         distribuidas: number;
         aRepartir: number;
+        stock: number;
       }
     >();
 
@@ -104,23 +114,45 @@ export async function GET() {
       const key = `${marca}__${curva}__${grupoNombre}__${temporada}`;
 
       if (!grupos.has(key)) {
-        grupos.set(key, { marca, curva, grupo: grupoNombre, temporada, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+        grupos.set(key, { marca, curva, grupo: grupoNombre, temporada, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
       }
       const acc = grupos.get(key)!;
 
       const pendientes = num(r.pendientes);
-      const stockTotal = num(r.stock_total);
+      const stockTotal = numStock(r.stock_total);
 
       acc.pedidas += num(r.pedidas);
       acc.distribuidas += num(r.distribuidas);
       acc.aRepartir += Math.min(pendientes, stockTotal);
+      acc.stock += stockTotal;
 
       if (r.created_at && (!updatedAt || r.created_at > updatedAt)) updatedAt = r.created_at;
     }
 
     const filas = Array.from(grupos.values());
 
-    return NextResponse.json({ success: true, filas, updatedAt });
+    // Agregamos también por archivo (= "numero" tal cual viene, un valor por
+    // cada importación) para poder listar y borrar archivos individuales
+    // desde Carga Inicial - Resumen, igual que ya se puede en Remanentes.
+    const porArchivo = new Map<
+      string,
+      { archivo: string; pedidas: number; distribuidas: number; aRepartir: number; stock: number }
+    >();
+    for (const r of rows) {
+      if (!porArchivo.has(r.numero)) {
+        porArchivo.set(r.numero, { archivo: r.numero, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
+      }
+      const acc = porArchivo.get(r.numero)!;
+      const pendientes = num(r.pendientes);
+      const stockTotal = numStock(r.stock_total);
+      acc.pedidas += num(r.pedidas);
+      acc.distribuidas += num(r.distribuidas);
+      acc.aRepartir += Math.min(pendientes, stockTotal);
+      acc.stock += stockTotal;
+    }
+    const archivos = Array.from(porArchivo.values()).sort((a, b) => a.archivo.localeCompare(b.archivo));
+
+    return NextResponse.json({ success: true, filas, archivos, updatedAt });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
