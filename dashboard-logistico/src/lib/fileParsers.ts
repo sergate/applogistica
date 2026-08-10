@@ -211,11 +211,24 @@ export async function parseCsvFile(
     dynamicTyping: false,
   });
 
-  if (result.errors.length > 0) {
-    const firstError = result.errors[0];
+  // Algunos exports traen una columna de más (o de menos) en ciertas filas,
+  // sin que sea un error real de formato -- Papa Parse ya lo tolera solo
+  // (recorta el string a la fila y sigue), así que no hace falta abortar
+  // el import entero por esto. Solo frenamos ante errores realmente fatales
+  // (delimitador roto, comillas sin cerrar, etc).
+  const erroresFatales = result.errors.filter((e) => e.type !== "FieldMismatch");
+  if (erroresFatales.length > 0) {
+    const firstError = erroresFatales[0];
     throw new Error(
       `Error parseando CSV (fila ${firstError.row ?? "?"}): ${firstError.message}`
     );
+  }
+
+  // Cuando una fila trae MÁS columnas que el header, Papa Parse junta el
+  // sobrante en una clave especial "__parsed_extra" -- no corresponde a
+  // ninguna columna real, así que se descarta antes de insertar.
+  for (const row of result.data) {
+    delete row.__parsed_extra;
   }
 
   return normalizeRecordKeys(result.data);
