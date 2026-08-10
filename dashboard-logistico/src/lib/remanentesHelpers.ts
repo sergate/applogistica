@@ -10,8 +10,7 @@ export interface RemanenteRow {
   distribuidas: number | null;
   pendientes: number | null;
   stock_total: number | null;
-  master: string | null;
-  cod_color: string | null;
+  sku: string | null;
   created_at: string | null;
 }
 
@@ -56,7 +55,7 @@ export async function fetchAllRemanentes(): Promise<RemanenteRow[]> {
     while (true) {
       const { data, error } = await supabaseAdmin
         .from("remanentes")
-        .select("numero, grupo, pedidas, distribuidas, pendientes, stock_total, master, cod_color, created_at")
+        .select("numero, grupo, pedidas, distribuidas, pendientes, stock_total, sku, created_at")
         .range(from, from + PAGE_SIZE - 1);
 
       if (error) {

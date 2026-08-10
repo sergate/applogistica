@@ -18,33 +18,27 @@ const numStock = (v: number | null): number => {
 };
 
 // El archivo origen repite el mismo stock_total en TODAS las filas de un
-// mismo Master (una fila por cada Color), en vez de traerlo una sola vez --
-// si se suma tal cual, el stock queda multiplicado por la cantidad de
-// colores. Se cuenta el stock_total una sola vez por combinación
-// Master+Color (el color siempre son 2 dígitos, se completa con un 0
-// adelante si vino con uno solo), sin importar en qué archivo/numero esté
-// -- el resto de las filas de esa combinación cuentan 0 de stock.
-const padColor = (color: string): string => (color.length === 1 ? `0${color}` : color);
-
-function stockDedupPorMasterColor(rows: RemanenteRow[]): Map<RemanenteRow, number> {
+// mismo #SKU, en vez de traerlo una sola vez -- si se suma tal cual, el
+// stock queda multiplicado por la cantidad de filas repetidas. Se cuenta el
+// stock_total una sola vez por SKU, sin importar en qué archivo/numero esté
+// -- el resto de las filas de ese SKU cuentan 0 de stock.
+function stockDedupPorSku(rows: RemanenteRow[]): Map<RemanenteRow, number> {
   const stockPorFila = new Map<RemanenteRow, number>();
   const vistos = new Set<string>();
 
   for (const r of rows) {
-    const master = (r.master || "").trim().toUpperCase();
-    const color = (r.cod_color || "").trim().toUpperCase();
+    const sku = (r.sku || "").trim().toUpperCase();
 
-    if (!master || !color) {
-      // Sin Master o Color no hay combinación que deduplicar -- se cuenta tal cual.
+    if (!sku) {
+      // Sin SKU no hay combinación que deduplicar -- se cuenta tal cual.
       stockPorFila.set(r, numStock(r.stock_total));
       continue;
     }
 
-    const key = `${master}__${padColor(color)}`;
-    if (vistos.has(key)) {
+    if (vistos.has(sku)) {
       stockPorFila.set(r, 0);
     } else {
-      vistos.add(key);
+      vistos.add(sku);
       stockPorFila.set(r, numStock(r.stock_total));
     }
   }
@@ -66,11 +60,11 @@ export async function GET() {
     // Agregamos por (marca, numero/archivo, grupo, temporada). Solo cuentan
     // las filas cuyo "numero" indica REMA -- si un archivo distinto se
     // sube a esta tabla sin ese marcador, se ignora para los cálculos. El
-    // dedup de stock por Master+Color se calcula solo sobre esas filas, para
-    // que un archivo no-REMA con el mismo Master+Color no le "robe" el
-    // stock a una fila REMA real.
+    // dedup de stock por SKU se calcula solo sobre esas filas, para que un
+    // archivo no-REMA con el mismo SKU no le "robe" el stock a una fila
+    // REMA real.
     const rowsRema = rows.filter((r) => parseNumeroRemanente(r.numero).esRemanente);
-    const stockPorFila = stockDedupPorMasterColor(rowsRema);
+    const stockPorFila = stockDedupPorSku(rowsRema);
 
     const grupos = new Map<
       string,
