@@ -31,6 +31,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "CI-Resumen", label: "Resumen" },
       { key: "CI-Avance", label: "Avance Plan" },
       { key: "CI-Carga", label: "Carga Datos" },
+      { key: "CI-EliminarArchivo", label: "Eliminar Archivo (en Resumen)" },
     ],
   },
   {

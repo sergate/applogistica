@@ -939,11 +939,19 @@ export default function DashboardLayout() {
     stock: number;
   }
 
+  interface CIArchivoResumen {
+    archivo: string;
+    pedidas: number;
+    distribuidas: number;
+    aRepartir: number;
+    stock: number;
+  }
+
   const {
     data: ciDetalleData,
     error: ciDetalleError,
     isLoading: ciDetalleLoading,
-  } = useTabData<{ filas: CIDetalleFila[]; updatedAt: string | null }>(
+  } = useTabData<{ filas: CIDetalleFila[]; archivos: CIArchivoResumen[]; updatedAt: string | null }>(
     activeTab,
     "CI-Resumen",
     "/api/carga-inicial/detalle",
@@ -954,6 +962,28 @@ export default function DashboardLayout() {
   const [filtroTemporadaCI, setFiltroTemporadaCI] = useState("TODAS");
   const [filtroGrupoCI, setFiltroGrupoCI] = useState("TODAS");
   const [filaExpandidaCI, setFilaExpandidaCI] = useState<{ marca: string; curva: string } | null>(null);
+  const [eliminandoArchivoCI, setEliminandoArchivoCI] = useState<string | null>(null);
+  const [eliminarArchivoErrorCI, setEliminarArchivoErrorCI] = useState<string | null>(null);
+
+  const eliminarArchivoCI = async (archivo: string) => {
+    if (!confirm(`¿Confirmás que querés borrar de la base de datos todos los registros del archivo "${archivo}"? Esta acción no se puede deshacer.`)) return;
+    setEliminandoArchivoCI(archivo);
+    setEliminarArchivoErrorCI(null);
+    try {
+      const res = await fetch("/api/carga-inicial/eliminar-archivo", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ numero: archivo }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo borrar el archivo.");
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setEliminarArchivoErrorCI(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setEliminandoArchivoCI(null);
+    }
+  };
 
   // Orden fijo de curvas: ADELANTO, 1RA ETAPA, SEGUNDA ETAPA, y las que sigan
   // (desconocidas van al final, ordenadas alfabéticamente entre sí).
@@ -6653,6 +6683,56 @@ export default function DashboardLayout() {
                   )}
                 </div>
               </div>
+
+              {tienePermiso("CI-EliminarArchivo") && (
+                <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                  <h2 className="text-lg font-bold text-slate-800 mb-4">Archivos cargados</h2>
+
+                  {eliminarArchivoErrorCI && (
+                    <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                      {eliminarArchivoErrorCI}
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left whitespace-nowrap">
+                      <thead>
+                        <tr className="text-slate-500 font-medium border-b border-slate-200">
+                          <th className="py-3 px-4 text-left">Archivo</th>
+                          <th className="py-3 px-4 text-left">Unidades Pedidas</th>
+                          <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
+                          <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                          <th className="py-3 px-4 text-left">Unidades en Stock</th>
+                          <th className="py-3 px-4 text-left">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(ciDetalleData?.archivos ?? []).map((a) => (
+                          <tr key={a.archivo} className="hover:bg-slate-50">
+                            <td className="py-3 px-4 text-left font-medium text-slate-700">{a.archivo}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(a.pedidas)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(a.distribuidas)}</td>
+                            <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(a.aRepartir)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(a.stock)}</td>
+                            <td className="py-3 px-4 text-left">
+                              <button
+                                onClick={() => eliminarArchivoCI(a.archivo)}
+                                disabled={eliminandoArchivoCI === a.archivo}
+                                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                              >
+                                {eliminandoArchivoCI === a.archivo ? "Borrando..." : "Borrar archivo"}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {(ciDetalleData?.archivos ?? []).length === 0 && !ciDetalleLoading && (
+                      <p className="text-sm text-slate-400 text-center py-8">No hay archivos cargados.</p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

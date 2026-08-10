@@ -131,7 +131,28 @@ export async function GET() {
 
     const filas = Array.from(grupos.values());
 
-    return NextResponse.json({ success: true, filas, updatedAt });
+    // Agregamos también por archivo (= "numero" tal cual viene, un valor por
+    // cada importación) para poder listar y borrar archivos individuales
+    // desde Carga Inicial - Resumen, igual que ya se puede en Remanentes.
+    const porArchivo = new Map<
+      string,
+      { archivo: string; pedidas: number; distribuidas: number; aRepartir: number; stock: number }
+    >();
+    for (const r of rows) {
+      if (!porArchivo.has(r.numero)) {
+        porArchivo.set(r.numero, { archivo: r.numero, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
+      }
+      const acc = porArchivo.get(r.numero)!;
+      const pendientes = num(r.pendientes);
+      const stockTotal = numStock(r.stock_total);
+      acc.pedidas += num(r.pedidas);
+      acc.distribuidas += num(r.distribuidas);
+      acc.aRepartir += Math.min(pendientes, stockTotal);
+      acc.stock += stockTotal;
+    }
+    const archivos = Array.from(porArchivo.values()).sort((a, b) => a.archivo.localeCompare(b.archivo));
+
+    return NextResponse.json({ success: true, filas, archivos, updatedAt });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
