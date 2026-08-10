@@ -936,6 +936,7 @@ export default function DashboardLayout() {
     pedidas: number;
     distribuidas: number;
     aRepartir: number;
+    stock: number;
   }
 
   const {
@@ -977,16 +978,17 @@ export default function DashboardLayout() {
     );
 
     // Consolidamos por (marca, curva) para la tabla principal
-    const consolidadoMarcaCurva = new Map<string, { marca: string; curva: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    const consolidadoMarcaCurva = new Map<string, { marca: string; curva: string; pedidas: number; distribuidas: number; aRepartir: number; stock: number }>();
     for (const f of filasFiltradasCI) {
       const key = `${f.marca}__${f.curva}`;
       if (!consolidadoMarcaCurva.has(key)) {
-        consolidadoMarcaCurva.set(key, { marca: f.marca, curva: f.curva, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+        consolidadoMarcaCurva.set(key, { marca: f.marca, curva: f.curva, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
       }
       const acc = consolidadoMarcaCurva.get(key)!;
       acc.pedidas += f.pedidas;
       acc.distribuidas += f.distribuidas;
       acc.aRepartir += f.aRepartir;
+      acc.stock += f.stock;
     }
 
     // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
@@ -1009,8 +1011,13 @@ export default function DashboardLayout() {
 
     // Subtotal general sobre los datos filtrados
     const subtotalCI = filasFiltradasCI.reduce(
-      (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
-      { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+      (acc, f) => ({
+        pedidas: acc.pedidas + f.pedidas,
+        distribuidas: acc.distribuidas + f.distribuidas,
+        aRepartir: acc.aRepartir + f.aRepartir,
+        stock: acc.stock + f.stock,
+      }),
+      { pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 }
     );
     const subtotalCICalculado = {
       ...subtotalCI,
@@ -1025,16 +1032,17 @@ export default function DashboardLayout() {
   // sobre los mismos datos ya filtrados por temporada/grupo/marca.
   const desgloseGrupoCI = useMemo(() => {
     if (!filaExpandidaCI) return [];
-    const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number; stock: number }>();
     for (const f of filasFiltradasCI) {
       if (f.marca !== filaExpandidaCI.marca || f.curva !== filaExpandidaCI.curva) continue;
       if (!porGrupo.has(f.grupo)) {
-        porGrupo.set(f.grupo, { grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+        porGrupo.set(f.grupo, { grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
       }
       const acc = porGrupo.get(f.grupo)!;
       acc.pedidas += f.pedidas;
       acc.distribuidas += f.distribuidas;
       acc.aRepartir += f.aRepartir;
+      acc.stock += f.stock;
     }
     return Array.from(porGrupo.values())
       .map((acc) => ({ ...acc, completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0 }))
@@ -1149,6 +1157,7 @@ export default function DashboardLayout() {
     pedidas: number;
     distribuidas: number;
     aRepartir: number;
+    stock: number;
   }
 
   // remDetalleData también lo usa la tabla "Resumen por Marca / Grupo" de
@@ -1209,16 +1218,17 @@ export default function DashboardLayout() {
     );
 
     // Consolidamos por (marca, archivo) para la tabla principal
-    const consolidadoMarcaArchivo = new Map<string, { marca: string; archivo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    const consolidadoMarcaArchivo = new Map<string, { marca: string; archivo: string; pedidas: number; distribuidas: number; aRepartir: number; stock: number }>();
     for (const f of filasFiltradasREM) {
       const key = `${f.marca}__${f.archivo}`;
       if (!consolidadoMarcaArchivo.has(key)) {
-        consolidadoMarcaArchivo.set(key, { marca: f.marca, archivo: f.archivo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+        consolidadoMarcaArchivo.set(key, { marca: f.marca, archivo: f.archivo, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
       }
       const acc = consolidadoMarcaArchivo.get(key)!;
       acc.pedidas += f.pedidas;
       acc.distribuidas += f.distribuidas;
       acc.aRepartir += f.aRepartir;
+      acc.stock += f.stock;
     }
 
     // Total de pedidas por marca (para ordenar las marcas de mayor a menor)
@@ -1241,8 +1251,13 @@ export default function DashboardLayout() {
 
     // Subtotal general sobre los datos filtrados
     const subtotalREM = filasFiltradasREM.reduce(
-      (acc, f) => ({ pedidas: acc.pedidas + f.pedidas, distribuidas: acc.distribuidas + f.distribuidas, aRepartir: acc.aRepartir + f.aRepartir }),
-      { pedidas: 0, distribuidas: 0, aRepartir: 0 }
+      (acc, f) => ({
+        pedidas: acc.pedidas + f.pedidas,
+        distribuidas: acc.distribuidas + f.distribuidas,
+        aRepartir: acc.aRepartir + f.aRepartir,
+        stock: acc.stock + f.stock,
+      }),
+      { pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 }
     );
     const subtotalREMCalculado = {
       ...subtotalREM,
@@ -1257,16 +1272,17 @@ export default function DashboardLayout() {
   // sobre los mismos datos ya filtrados por temporada/grupo/marca.
   const desgloseGrupoREM = useMemo(() => {
     if (!filaExpandidaREM) return [];
-    const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number }>();
+    const porGrupo = new Map<string, { grupo: string; pedidas: number; distribuidas: number; aRepartir: number; stock: number }>();
     for (const f of filasFiltradasREM) {
       if (f.marca !== filaExpandidaREM.marca || f.archivo !== filaExpandidaREM.archivo) continue;
       if (!porGrupo.has(f.grupo)) {
-        porGrupo.set(f.grupo, { grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0 });
+        porGrupo.set(f.grupo, { grupo: f.grupo, pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0 });
       }
       const acc = porGrupo.get(f.grupo)!;
       acc.pedidas += f.pedidas;
       acc.distribuidas += f.distribuidas;
       acc.aRepartir += f.aRepartir;
+      acc.stock += f.stock;
     }
     return Array.from(porGrupo.values())
       .map((acc) => ({ ...acc, completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0 }))
@@ -6558,6 +6574,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{fmtNum(subtotalCICalculado.pedidas)}</td>
                           <td className="py-3 px-4 text-left">{fmtNum(subtotalCICalculado.distribuidas)}</td>
                           <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalCICalculado.aRepartir)}</td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalCICalculado.stock)}</td>
                           <td className="py-3 px-4 text-left">{fmtPct(subtotalCICalculado.completitud)}</td>
                         </tr>
                       )}
@@ -6567,6 +6584,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Unidades Pedidas</th>
                         <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
                         <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                        <th className="py-3 px-4 text-left">Unidades en Stock</th>
                         <th className="py-3 px-4 text-left">% Completitud</th>
                       </tr>
                     </thead>
@@ -6588,12 +6606,13 @@ export default function DashboardLayout() {
                             <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
                             <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
                             <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.stock)}</td>
                             <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
                           </tr>
 
                           {estaExpandida && (
                               <tr>
-                                <td colSpan={6} className="bg-slate-50 px-4 py-4">
+                                <td colSpan={7} className="bg-slate-50 px-4 py-4">
                                   <p className="text-xs font-semibold text-slate-500 mb-2">
                                     Desglose por grupo — {row.marca} / {row.curva}
                                   </p>
@@ -6604,6 +6623,7 @@ export default function DashboardLayout() {
                                         <th className="py-2 px-3 text-left">Unidades Pedidas</th>
                                         <th className="py-2 px-3 text-left">Unidades Distribuidas</th>
                                         <th className="py-2 px-3 text-left">Unidades a Repartir</th>
+                                        <th className="py-2 px-3 text-left">Unidades en Stock</th>
                                         <th className="py-2 px-3 text-left">% Completitud</th>
                                       </tr>
                                     </thead>
@@ -6614,6 +6634,7 @@ export default function DashboardLayout() {
                                           <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.pedidas)}</td>
                                           <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.distribuidas)}</td>
                                           <td className="py-2 px-3 text-left font-semibold text-orange-500">{fmtNum(g.aRepartir)}</td>
+                                          <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.stock)}</td>
                                           <td className="py-2 px-3 text-left text-slate-600">{fmtPct(g.completitud)}</td>
                                         </tr>
                                       ))}
@@ -7046,6 +7067,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{fmtNum(subtotalREMCalculado.pedidas)}</td>
                           <td className="py-3 px-4 text-left">{fmtNum(subtotalREMCalculado.distribuidas)}</td>
                           <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalREMCalculado.aRepartir)}</td>
+                          <td className="py-3 px-4 text-left">{fmtNum(subtotalREMCalculado.stock)}</td>
                           <td className="py-3 px-4 text-left">{fmtPct(subtotalREMCalculado.completitud)}</td>
                           {tienePermiso("REM-EliminarArchivo") && <td className="py-3 px-4 text-left"></td>}
                         </tr>
@@ -7056,6 +7078,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Unidades Pedidas</th>
                         <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
                         <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                        <th className="py-3 px-4 text-left">Unidades en Stock</th>
                         <th className="py-3 px-4 text-left">% Completitud</th>
                         {tienePermiso("REM-EliminarArchivo") && <th className="py-3 px-4 text-left">Acción</th>}
                       </tr>
@@ -7078,6 +7101,7 @@ export default function DashboardLayout() {
                             <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
                             <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
                             <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.stock)}</td>
                             <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
                             {tienePermiso("REM-EliminarArchivo") && (
                               <td className="py-3 px-4 text-left" onClick={(e) => e.stopPropagation()}>
@@ -7094,7 +7118,7 @@ export default function DashboardLayout() {
 
                           {estaExpandida && (
                               <tr>
-                                <td colSpan={tienePermiso("REM-EliminarArchivo") ? 7 : 6} className="bg-slate-50 px-4 py-4">
+                                <td colSpan={tienePermiso("REM-EliminarArchivo") ? 8 : 7} className="bg-slate-50 px-4 py-4">
                                   <p className="text-xs font-semibold text-slate-500 mb-2">
                                     Desglose por grupo — {row.marca} / {row.archivo}
                                   </p>
@@ -7105,6 +7129,7 @@ export default function DashboardLayout() {
                                         <th className="py-2 px-3 text-left">Unidades Pedidas</th>
                                         <th className="py-2 px-3 text-left">Unidades Distribuidas</th>
                                         <th className="py-2 px-3 text-left">Unidades a Repartir</th>
+                                        <th className="py-2 px-3 text-left">Unidades en Stock</th>
                                         <th className="py-2 px-3 text-left">% Completitud</th>
                                       </tr>
                                     </thead>
@@ -7115,6 +7140,7 @@ export default function DashboardLayout() {
                                           <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.pedidas)}</td>
                                           <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.distribuidas)}</td>
                                           <td className="py-2 px-3 text-left font-semibold text-orange-500">{fmtNum(g.aRepartir)}</td>
+                                          <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.stock)}</td>
                                           <td className="py-2 px-3 text-left text-slate-600">{fmtPct(g.completitud)}</td>
                                         </tr>
                                       ))}
