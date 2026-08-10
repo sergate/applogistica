@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllRemanentes, parseNumeroRemanente } from "@/lib/remanentesHelpers";
+import { fetchAllRemanentes, parseNumeroRemanente, RemanenteRow } from "@/lib/remanentesHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +17,41 @@ const numStock = (v: number | null): number => {
   return n > STOCK_MAX_VALIDO ? 0 : n;
 };
 
+// El archivo origen repite el mismo stock_total en TODAS las filas de un
+// mismo Master (una fila por cada Color), en vez de traerlo una sola vez --
+// si se suma tal cual, el stock queda multiplicado por la cantidad de
+// colores. Se cuenta el stock_total una sola vez por combinación
+// Master+Color (el color siempre son 2 dígitos, se completa con un 0
+// adelante si vino con uno solo), sin importar en qué archivo/numero esté
+// -- el resto de las filas de esa combinación cuentan 0 de stock.
+const padColor = (color: string): string => (color.length === 1 ? `0${color}` : color);
+
+function stockDedupPorMasterColor(rows: RemanenteRow[]): Map<RemanenteRow, number> {
+  const stockPorFila = new Map<RemanenteRow, number>();
+  const vistos = new Set<string>();
+
+  for (const r of rows) {
+    const master = (r.master || "").trim().toUpperCase();
+    const color = (r.cod_color || "").trim().toUpperCase();
+
+    if (!master || !color) {
+      // Sin Master o Color no hay combinación que deduplicar -- se cuenta tal cual.
+      stockPorFila.set(r, numStock(r.stock_total));
+      continue;
+    }
+
+    const key = `${master}__${padColor(color)}`;
+    if (vistos.has(key)) {
+      stockPorFila.set(r, 0);
+    } else {
+      vistos.add(key);
+      stockPorFila.set(r, numStock(r.stock_total));
+    }
+  }
+
+  return stockPorFila;
+}
+
 export async function GET() {
   if (!supabaseEnvOk) {
     return NextResponse.json(
@@ -30,7 +65,13 @@ export async function GET() {
 
     // Agregamos por (marca, numero/archivo, grupo, temporada). Solo cuentan
     // las filas cuyo "numero" indica REMA -- si un archivo distinto se
-    // sube a esta tabla sin ese marcador, se ignora para los cálculos.
+    // sube a esta tabla sin ese marcador, se ignora para los cálculos. El
+    // dedup de stock por Master+Color se calcula solo sobre esas filas, para
+    // que un archivo no-REMA con el mismo Master+Color no le "robe" el
+    // stock a una fila REMA real.
+    const rowsRema = rows.filter((r) => parseNumeroRemanente(r.numero).esRemanente);
+    const stockPorFila = stockDedupPorMasterColor(rowsRema);
+
     const grupos = new Map<
       string,
       {
@@ -47,9 +88,8 @@ export async function GET() {
 
     let updatedAt: string | null = null;
 
-    for (const r of rows) {
-      const { marca, temporada, esRemanente } = parseNumeroRemanente(r.numero);
-      if (!esRemanente) continue;
+    for (const r of rowsRema) {
+      const { marca, temporada } = parseNumeroRemanente(r.numero);
 
       const grupoNombre = (r.grupo || "").trim() || "SIN GRUPO";
       const key = `${marca}__${r.numero}__${grupoNombre}__${temporada}`;
@@ -60,7 +100,7 @@ export async function GET() {
       const acc = grupos.get(key)!;
 
       const pendientes = num(r.pendientes);
-      const stockTotal = numStock(r.stock_total);
+      const stockTotal = stockPorFila.get(r) ?? 0;
 
       acc.pedidas += num(r.pedidas);
       acc.distribuidas += num(r.distribuidas);
