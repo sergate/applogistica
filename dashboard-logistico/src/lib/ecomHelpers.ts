@@ -3,9 +3,11 @@ import { getCached } from "@/lib/queryCache";
 
 const ECOM_TTL_MS = 20_000;
 
-// Pedidos con este estado, o marcados como cancelados, no cuentan para los
-// cálculos de la sección Ecom (equivalente a OD_TERMINADO en el general).
-export const ESTADOS_EXCLUIDOS_ECOM = ["OD_CANCELADA"];
+// Pedidos con alguno de estos estados, o marcados como cancelados, no
+// cuentan para los cálculos de la sección Ecom (equivalente a OD_TERMINADO
+// en el general): cancelados, ya despachados, ya cargados al camión o ya
+// recibidos como devolución -- ninguno de estos tiene pendiente real.
+export const ESTADOS_EXCLUIDOS_ECOM = ["OD_CANCELADA", "OD_DESPACHADO", "OD_CARGA_CAMION", "OD_RECIBIDO_DEV"];
 
 export interface PedidoEcomRow {
   pedido: string;
