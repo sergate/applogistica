@@ -17,11 +17,15 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
   {
     nombre: "Status de Preparación",
     subsecciones: [
-      { key: "Importar datos", label: "Importar Datos" },
-      { key: "Resumen", label: "Resumen" },
-      { key: "Por fecha", label: "Por Fecha" },
-      { key: "Por pedidos", label: "Por Pedidos" },
-      { key: "REMA Manual", label: "Pedidos REMA Manual" },
+      { key: "Importar datos", label: "Importar Datos (No Ecom)" },
+      { key: "Resumen", label: "Resumen (No Ecom)" },
+      { key: "Por fecha", label: "Por Fecha (No Ecom)" },
+      { key: "Por pedidos", label: "Por Pedidos (No Ecom)" },
+      { key: "REMA Manual", label: "Pedidos REMA Manual (No Ecom)" },
+      { key: "ECOM-Importar", label: "Importar Datos (Ecom)" },
+      { key: "ECOM-Resumen", label: "Resumen (Ecom)" },
+      { key: "ECOM-PorFecha", label: "Por Fecha (Ecom)" },
+      { key: "ECOM-PorPedidos", label: "Por Pedidos (Ecom)" },
     ],
   },
   {
