@@ -89,7 +89,7 @@ export async function GET(request: NextRequest) {
       const acc = porCanalCancelados.get(canal)!;
       if (debeExcluirseDePickSepPendEcom(r)) acc.unidadesCanceladas += num(r.uni);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
-      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni);
+      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni) - num(r.uni_sep);
     }
 
     const canales = Array.from(porCanal.entries())

@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
       .reduce((acc, r) => acc + num(r.uni), 0);
     const unidadesCanceladasSinStock = filasFecha
       .filter(esCanceladaSinStockEcom)
-      .reduce((acc, r) => acc + num(r.uni), 0);
+      .reduce((acc, r) => acc + (num(r.uni) - num(r.uni_sep)), 0);
 
     let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
     if (desde || hasta) {
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
       const acc = porMarcaCancelados.get(marca)!;
       if (debeExcluirseDePickSepPendEcom(r)) acc.unidadesCanceladas += num(r.uni);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
-      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni);
+      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni) - num(r.uni_sep);
     }
 
     const marcas = Array.from(porMarca.entries())
