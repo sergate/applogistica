@@ -55,12 +55,14 @@ export async function GET(request: NextRequest) {
     const totalPick = contables.reduce((acc, r) => acc + pickEfectivoResumenEcom(r), 0);
     const totalSep = contables.reduce((acc, r) => acc + sepEfectivoResumenEcom(r), 0);
 
+    // Pendiente = total - canceladas - lo ya hecho (las canceladas ya están
+    // "resueltas", no pueden quedar pendientes de picking/separación).
     const kpis = {
       totalUni,
       totalPick,
       totalSep,
-      pendPick: totalUni - totalPick,
-      pendSep: totalUni - totalSep,
+      pendPick: totalUni - unidadesCanceladas - totalPick,
+      pendSep: totalUni - unidadesCanceladas - totalSep,
       eficPick: totalUni > 0 ? (totalPick / totalUni) * 100 : 0,
       eficSep: totalUni > 0 ? (totalSep / totalUni) * 100 : 0,
       unidadesCanceladas,
@@ -90,8 +92,8 @@ export async function GET(request: NextRequest) {
         uni: acc.uni,
         pick: acc.pick,
         sep: acc.sep,
-        pendPick: acc.uni - acc.pick,
-        pendSep: acc.uni - acc.sep,
+        pendPick: acc.uni - acc.unidadesCanceladas - acc.pick,
+        pendSep: acc.uni - acc.unidadesCanceladas - acc.sep,
         eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
         eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
         unidadesCanceladas: acc.unidadesCanceladas,
