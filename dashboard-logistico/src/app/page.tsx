@@ -162,10 +162,38 @@ export default function DashboardLayout() {
     router.refresh();
   };
 
+  // Claves de las subsecciones de Status de Preparación (No Ecom / Ecom) --
+  // se declaran acá arriba (y no más abajo junto al resto de *SubSections)
+  // porque hacen falta para decidir, ya en el estado inicial del sidebar, si
+  // esta sección debe arrancar abierta o cerrada.
+  const prepNoEcomSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
+  const prepEcomSubSectionKeys = ["ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos"];
+
   // Estados de navegación del Sidebar
-  const [isPrepOpen, setIsPrepOpen] = useState(true);
-  const [isPrepNoEcomOpen, setIsPrepNoEcomOpen] = useState(true);
-  const [isPrepEcomOpen, setIsPrepEcomOpen] = useState(true);
+  // Igual que el resto de las secciones (CI/REM/PROD/PD/INB/ALM/ADMIN):
+  // arranca abierta solo si la pestaña de destino (guardada antes de un
+  // reload tras un import, o la de aterrizaje por defecto) es de esta
+  // sección -- si el import fue de OTRA sección, Status de Preparación debe
+  // quedar cerrada, no abierta "porque sí".
+  const [isPrepOpen, setIsPrepOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const tab = sessionStorage.getItem("tabDespuesDeRefresh") || "";
+    if (!tab) return true; // sin flag guardada -> aterrizaje por defecto en "Resumen"
+    return prepNoEcomSubSections.includes(tab) || prepEcomSubSectionKeys.includes(tab);
+  });
+  // Solo se abre automáticamente el subgrupo (No Ecom / Ecom) que corresponde
+  // a la pestaña actual -- no los dos juntos.
+  const [isPrepNoEcomOpen, setIsPrepNoEcomOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const tab = sessionStorage.getItem("tabDespuesDeRefresh") || "";
+    if (!tab) return true;
+    return prepNoEcomSubSections.includes(tab);
+  });
+  const [isPrepEcomOpen, setIsPrepEcomOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const tab = sessionStorage.getItem("tabDespuesDeRefresh") || "";
+    return prepEcomSubSectionKeys.includes(tab);
+  });
 
   // Si un import anterior guardó una pestaña de destino antes de recargar la
   // página (window.location.reload), arrancamos ya posicionados ahí.
@@ -869,14 +897,31 @@ export default function DashboardLayout() {
   // de generar las ~52 semanas de todo el año.
   const semanasConDatos = semanasConDatosDe((fechaData?.filas ?? []).map((f) => f.fecha));
 
-  const prepNoEcomSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
-
   const prepEcomSubSections = [
     { key: "ECOM-Importar", label: "Importar Datos" },
     { key: "ECOM-Resumen", label: "Resumen" },
     { key: "ECOM-PorFecha", label: "Por Fecha" },
     { key: "ECOM-PorPedidos", label: "Por Pedidos" },
   ];
+
+  // Mantiene abierto solo el subgrupo (No Ecom / Ecom) de la pestaña activa
+  // -- así, al terminar un import (que cambia activeTab a "Resumen" o
+  // "ECOM-Resumen") o al navegar manualmente, se abre nada más el que
+  // corresponde en vez de los dos juntos.
+  useEffect(() => {
+    if (prepNoEcomSubSections.includes(activeTab)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepNoEcomOpen(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepEcomOpen(false);
+    } else if (prepEcomSubSections.some((s) => s.key === activeTab)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepEcomOpen(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepNoEcomOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const cargaInicialSubSections = [
     { key: "CI-Importar", label: "Importar Datos" },
