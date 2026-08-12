@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllPedidosEcom, esContableEcom, num, canalDeOoll } from "@/lib/ecomHelpers";
+import { fetchAllPedidosEcom, esContableEcomResumen, num, canalDeOoll } from "@/lib/ecomHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,12 +18,14 @@ export async function GET(request: NextRequest) {
   if (!marca) {
     return NextResponse.json({ success: false, error: 'Falta el parámetro "marca".' }, { status: 400 });
   }
+  // Mismo filtro "Demanda Total" que Resumen: ?incluirTodos=1.
+  const incluirTodos = request.nextUrl.searchParams.get("incluirTodos") === "1";
 
   try {
     const rows = await fetchAllPedidosEcom();
     const marcaTrim = marca.trim();
     const contables = rows.filter(
-      (r) => esContableEcom(r) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
+      (r) => esContableEcomResumen(r, incluirTodos) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
     );
 
     const porCanal = new Map<

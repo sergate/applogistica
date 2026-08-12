@@ -34,6 +34,28 @@ export function esContableEcom(row: PedidoEcomRow): boolean {
   return !ESTADOS_EXCLUIDOS_ECOM.includes(estado);
 }
 
+// Solo para la pestaña Resumen: a diferencia de Por Fecha/Por Pedidos,
+// OD_CANCELADA y OD_RECIBIDO_DEV SÍ cuentan acá (hay una tarjeta dedicada a
+// mostrarlos, "Unidades Canceladas"), y el flag "Cancelado" tampoco excluye
+// -- solo quedan afuera los pedidos ya despachados o cargados al camión
+// (que ya no tienen pendiente real), salvo que "Demanda Total" esté en Sí.
+export const ESTADOS_EXCLUIDOS_ECOM_RESUMEN = ["OD_DESPACHADO", "OD_CARGA_CAMION"];
+
+export function esContableEcomResumen(row: PedidoEcomRow, incluirTodos = false): boolean {
+  if (incluirTodos) return true;
+  const estado = (row.estado_pedido || "").trim().toUpperCase();
+  return !ESTADOS_EXCLUIDOS_ECOM_RESUMEN.includes(estado);
+}
+
+// Cuenta para la tarjeta "Unidades Canceladas" tanto por Estado pedido
+// (OD_CANCELADA / OD_RECIBIDO_DEV) como por el flag Cancelado="true" --
+// son señales independientes, cualquiera de las dos marca la fila.
+export function esFilaCanceladaEcom(row: PedidoEcomRow): boolean {
+  const estado = (row.estado_pedido || "").trim().toUpperCase();
+  if (estado === "OD_CANCELADA" || estado === "OD_RECIBIDO_DEV") return true;
+  return (row.cancelado || "").trim().toLowerCase() === "true";
+}
+
 /** "OOLL asignado" hace de Canal para Ecom -- se normaliza para que
  * variantes de mayúscula/minúscula (ej. "Intralog" / "INTRALOG") no cuenten
  * como canales distintos. */

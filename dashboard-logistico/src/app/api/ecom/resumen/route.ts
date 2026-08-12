@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllPedidosEcom, esContableEcom, num, ultimaActualizacionEcom } from "@/lib/ecomHelpers";
+import { fetchAllPedidosEcom, esContableEcomResumen, esFilaCanceladaEcom, num, ultimaActualizacionEcom } from "@/lib/ecomHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,10 +16,13 @@ export async function GET(request: NextRequest) {
 
   // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante).
   const desde = request.nextUrl.searchParams.get("desde");
+  // "Demanda Total": ?incluirTodos=1 no excluye ningún estado (ni siquiera
+  // OD_DESPACHADO/OD_CARGA_CAMION).
+  const incluirTodos = request.nextUrl.searchParams.get("incluirTodos") === "1";
 
   try {
     const rows = await fetchAllPedidosEcom();
-    let contables = rows.filter(esContableEcom);
+    let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
     }
@@ -27,7 +30,7 @@ export async function GET(request: NextRequest) {
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
     const totalPick = contables.reduce((acc, r) => acc + num(r.uni_pick), 0);
     const totalSep = contables.reduce((acc, r) => acc + num(r.uni_sep), 0);
-    const totalRegistros = new Set(contables.map((r) => r.pedido)).size;
+    const unidadesCanceladas = contables.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
 
     const kpis = {
       totalUni,
@@ -37,7 +40,7 @@ export async function GET(request: NextRequest) {
       pendSep: totalUni - totalSep,
       eficPick: totalUni > 0 ? (totalPick / totalUni) * 100 : 0,
       eficSep: totalUni > 0 ? (totalSep / totalUni) * 100 : 0,
-      totalRegistros,
+      unidadesCanceladas,
     };
 
     // Agrupado por marca (= columna "seller")

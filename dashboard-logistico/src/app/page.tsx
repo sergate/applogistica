@@ -71,6 +71,24 @@ interface ResumenData {
   updatedAt: string | null;
 }
 
+// Igual que ResumenData, pero la última tarjeta es "Unidades Canceladas" en
+// vez de "Total Registros" (no se puede reusar ResumenData: ese tipo también
+// lo usa el useTabData de Resumen No Ecom).
+interface ResumenEcomData {
+  kpis: {
+    totalUni: number;
+    totalPick: number;
+    totalSep: number;
+    pendPick: number;
+    pendSep: number;
+    eficPick: number;
+    eficSep: number;
+    unidadesCanceladas: number;
+  };
+  marcas: MarcaResumen[];
+  updatedAt: string | null;
+}
+
 // Ecom no agrupa por "grupo" ni distingue REMA/STD -- mismos campos que los
 // equivalentes del general, sin esas dos columnas.
 interface FechaResumenEcom {
@@ -1844,22 +1862,31 @@ export default function DashboardLayout() {
   // =========================================================================
   const [rangoResumenEcom, setRangoResumenEcom] = useState<7 | 14 | 30 | null>(null);
   const [selectedMarcaEcom, setSelectedMarcaEcom] = useState<string | null>(null);
+  // "Demanda Total": No (default) = excluye solo OD_DESPACHADO/OD_CARGA_CAMION
+  // (OD_CANCELADA/OD_RECIBIDO_DEV ya cuentan siempre en Resumen). Sí = no
+  // excluye ningún estado.
+  const [filtroDemandaTotalEcom, setFiltroDemandaTotalEcom] = useState(false);
 
   const urlResumenEcom = useMemo(() => {
     let url = "/api/ecom/resumen";
+    const params = new URLSearchParams();
     if (rangoResumenEcom) {
       const d = new Date();
       d.setDate(d.getDate() - (rangoResumenEcom - 1));
-      url += `?desde=${d.toISOString().slice(0, 10)}`;
+      params.set("desde", d.toISOString().slice(0, 10));
     }
+    if (filtroDemandaTotalEcom) {
+      params.set("incluirTodos", "1");
+    }
+    if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumenEcom]);
+  }, [rangoResumenEcom, filtroDemandaTotalEcom]);
 
   const {
     data: resumenEcomData,
     error: resumenEcomError,
     isLoading: resumenEcomLoading,
-  } = useTabData<ResumenData>(activeTab, "ECOM-Resumen", urlResumenEcom, dataVersion);
+  } = useTabData<ResumenEcomData>(activeTab, "ECOM-Resumen", urlResumenEcom, dataVersion);
 
   const marcasDataEcom = (resumenEcomData?.marcas ?? []).map((m, idx) => ({
     name: m.name,
@@ -1883,7 +1910,9 @@ export default function DashboardLayout() {
     setCanalErrorEcom(null);
     setCanalRowsEcom(null);
     try {
-      const res = await fetch(`/api/ecom/resumen/canal?marca=${encodeURIComponent(marca)}`, { cache: "no-store" });
+      let url = `/api/ecom/resumen/canal?marca=${encodeURIComponent(marca)}`;
+      if (filtroDemandaTotalEcom) url += `&incluirTodos=1`;
+      const res = await fetch(url, { cache: "no-store" });
       let data;
       try {
         data = await res.json();
@@ -1911,6 +1940,15 @@ export default function DashboardLayout() {
     setSelectedMarcaEcom(marca);
     void cargarCanalPorMarcaEcom(marca);
   };
+
+  // Si cambia "Demanda Total" mientras el desglose por canal de una marca
+  // está abierto, lo recarga para que coincida con la tabla de arriba.
+  useEffect(() => {
+    if (!selectedMarcaEcom) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void cargarCanalPorMarcaEcom(selectedMarcaEcom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroDemandaTotalEcom]);
 
   // =========================================================================
   // ESTADO: ECOM - POR FECHA (datos reales desde pedidos_ecom vía /api/ecom/resumen/por-fecha)
@@ -2139,7 +2177,7 @@ export default function DashboardLayout() {
     { title: "Pendiente Separación", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendSep) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
     { title: "Efic. Picking", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
     { title: "Efic. Separación", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
-    { title: "Total Registros", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalRegistros) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
+    { title: "Unidades Canceladas", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.unidadesCanceladas) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="15" y1="9" x2="9" y2="15" /><line strokeLinecap="round" strokeLinejoin="round" x1="9" y1="9" x2="15" y2="15" /></svg> }
   ];
 
   const hoyISO = new Date().toISOString().slice(0, 10);
@@ -5452,8 +5490,23 @@ export default function DashboardLayout() {
                   </button>
                 ))}
 
+                <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
+                  Demanda Total
+                  <select
+                    value={filtroDemandaTotalEcom ? "SI" : "NO"}
+                    onChange={(e) => setFiltroDemandaTotalEcom(e.target.value === "SI")}
+                    className="bg-transparent border-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-semibold"
+                  >
+                    <option value="NO">No</option>
+                    <option value="SI">Sí</option>
+                  </select>
+                </label>
+
                 <button
-                  onClick={() => setRangoResumenEcom(null)}
+                  onClick={() => {
+                    setRangoResumenEcom(null);
+                    setFiltroDemandaTotalEcom(false);
+                  }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Limpiar filtros
