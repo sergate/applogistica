@@ -34,12 +34,14 @@ export async function GET(request: NextRequest) {
   // que Resumen, para que el desglose por canal muestre lo mismo que ya se
   // ve arriba en vez de siempre todos los pedidos de la marca).
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
+  // Mismo filtro "Demanda Total" que Resumen: ?incluirTerminados=1.
+  const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
 
   try {
     const rows = await fetchAllGrupoPedidos();
     const marcaTrim = marca.trim();
     let contables = rows.filter(
-      (r) => esContable(r) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
+      (r) => esContable(r, incluirTerminados) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
     );
     if (tipoPedidoParam === "REMA" || tipoPedidoParam === "STD") {
       const pedidosRemaManual = await fetchPedidosRemaManual();

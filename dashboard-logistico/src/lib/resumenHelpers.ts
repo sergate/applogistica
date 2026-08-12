@@ -92,13 +92,14 @@ export function esGrupoContable(grupo: string | null): boolean {
   return !GRUPOS_EXCLUIDOS.includes(grupo.trim().toUpperCase());
 }
 
-export function esEstadoContable(estado: string | null): boolean {
+export function esEstadoContable(estado: string | null, incluirTerminados = false): boolean {
+  if (incluirTerminados) return true;
   if (!estado) return true;
   return !ESTADOS_EXCLUIDOS.includes(estado.trim().toUpperCase());
 }
 
-export function esContable(row: GrupoPedidoRow): boolean {
-  return esGrupoContable(row.grupo) && esEstadoContable(row.estado_pedido);
+export function esContable(row: GrupoPedidoRow, incluirTerminados = false): boolean {
+  return esGrupoContable(row.grupo) && esEstadoContable(row.estado_pedido, incluirTerminados);
 }
 
 export const num = (v: number | null): number => Number(v) || 0;

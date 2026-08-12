@@ -427,6 +427,9 @@ export default function DashboardLayout() {
   // =========================================================================
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
+  // "Demanda Total": No (default) = igual que hoy, excluye OD_TERMINADO.
+  // Sí = incluye también los pedidos OD_TERMINADO.
+  const [filtroDemandaTotal, setFiltroDemandaTotal] = useState(false);
 
   const urlResumen = useMemo(() => {
     let url = "/api/resumen";
@@ -439,9 +442,12 @@ export default function DashboardLayout() {
     if (filtroTipoResumen !== "TODOS") {
       params.set("tipoPedido", filtroTipoResumen);
     }
+    if (filtroDemandaTotal) {
+      params.set("incluirTerminados", "1");
+    }
     if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumen, filtroTipoResumen]);
+  }, [rangoResumen, filtroTipoResumen, filtroDemandaTotal]);
 
   const {
     data: resumenData,
@@ -2228,6 +2234,7 @@ export default function DashboardLayout() {
     try {
       let url = `/api/resumen/canal?marca=${encodeURIComponent(marca)}`;
       if (filtroTipoResumen !== "TODOS") url += `&tipoPedido=${filtroTipoResumen}`;
+      if (filtroDemandaTotal) url += `&incluirTerminados=1`;
       const res = await fetch(url, {
         cache: "no-store",
       });
@@ -2248,14 +2255,15 @@ export default function DashboardLayout() {
     }
   };
 
-  // Si cambia el filtro REMA/STD de Resumen mientras el desglose por canal
-  // de una marca está abierto, lo recarga para que muestre lo mismo que la
-  // tabla de arriba (en vez de quedarse con los datos del filtro anterior).
+  // Si cambia el filtro REMA/STD o Demanda Total de Resumen mientras el
+  // desglose por canal de una marca está abierto, lo recarga para que
+  // muestre lo mismo que la tabla de arriba (en vez de quedarse con los
+  // datos del filtro anterior).
   useEffect(() => {
     if (!selectedMarca) return;
     void cargarCanalPorMarca(selectedMarca);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroTipoResumen]);
+  }, [filtroTipoResumen, filtroDemandaTotal]);
 
   // =========================================================================
   // ESTADO: ADMINISTRACIÓN - PERFILES
@@ -4519,10 +4527,23 @@ export default function DashboardLayout() {
                   <option value="STD">STD</option>
                 </select>
 
+                <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
+                  Demanda Total
+                  <select
+                    value={filtroDemandaTotal ? "SI" : "NO"}
+                    onChange={(e) => setFiltroDemandaTotal(e.target.value === "SI")}
+                    className="bg-transparent border-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-semibold"
+                  >
+                    <option value="NO">No</option>
+                    <option value="SI">Sí</option>
+                  </select>
+                </label>
+
                 <button
                   onClick={() => {
                     setRangoResumen(null);
                     setFiltroTipoResumen("TODOS");
+                    setFiltroDemandaTotal(false);
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
