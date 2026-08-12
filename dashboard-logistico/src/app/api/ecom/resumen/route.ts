@@ -22,30 +22,41 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante).
+  // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante)
+  // y opcionalmente ?hasta=YYYY-MM-DD (para acotar a una semana puntual).
   const desde = request.nextUrl.searchParams.get("desde");
+  const hasta = request.nextUrl.searchParams.get("hasta");
   // "Demanda Total": ?incluirTodos=1 no excluye ningún estado (ni siquiera
   // OD_DESPACHADO/OD_CARGA_CAMION).
   const incluirTodos = request.nextUrl.searchParams.get("incluirTodos") === "1";
 
+  const enRango = (r: { fecha_creacion: string | null }) => {
+    if (!r.fecha_creacion) return false;
+    const fecha = r.fecha_creacion.slice(0, 10);
+    if (desde && fecha < desde) return false;
+    if (hasta && fecha > hasta) return false;
+    return true;
+  };
+
   try {
     const rows = await fetchAllPedidosEcom();
+
+    // Fechas únicas de TODA la tabla (sin filtrar), para que el frontend
+    // arme el selector de "Semana del año" sin depender de otras pestañas.
+    const fechasDisponibles = Array.from(
+      new Set(rows.map((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) : "SIN FECHA")))
+    );
 
     // "Unidades Canceladas" se calcula siempre sobre el mismo conjunto de
     // filas (todas, solo acotadas por el rango de fecha) -- "Demanda Total"
     // únicamente decide si OD_DESPACHADO/OD_CARGA_CAMION entran en el resto
     // de los KPIs, no cambia qué cuenta como cancelado.
-    let filasParaCancelados = rows;
-    if (desde) {
-      filasParaCancelados = filasParaCancelados.filter((r) =>
-        r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false
-      );
-    }
+    const filasParaCancelados = desde || hasta ? rows.filter(enRango) : rows;
     const unidadesCanceladas = filasParaCancelados.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
 
     let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
-    if (desde) {
-      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+    if (desde || hasta) {
+      contables = contables.filter(enRango);
     }
 
     // Las filas canceladas/devueltas siguen sumando a "Total Unidades", pero
@@ -100,7 +111,7 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.uni - a.uni);
 
-    return NextResponse.json({ success: true, kpis, marcas, updatedAt: ultimaActualizacionEcom(rows) });
+    return NextResponse.json({ success: true, kpis, marcas, fechasDisponibles, updatedAt: ultimaActualizacionEcom(rows) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

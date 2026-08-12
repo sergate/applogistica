@@ -112,6 +112,9 @@ interface ResumenEcomData {
     unidadesCanceladas: number;
   };
   marcas: MarcaResumenEcom[];
+  // Fechas únicas presentes en la tabla (sin filtrar), para poder armar el
+  // selector de "Semana del año" sin depender de los datos de otras pestañas.
+  fechasDisponibles: string[];
   updatedAt: string | null;
 }
 
@@ -1887,6 +1890,7 @@ export default function DashboardLayout() {
   // ESTADO: ECOM - RESUMEN (datos reales desde pedidos_ecom vía /api/ecom/resumen)
   // =========================================================================
   const [rangoResumenEcom, setRangoResumenEcom] = useState<7 | 14 | 30 | null>(null);
+  const [semanaResumenEcom, setSemanaResumenEcom] = useState<{ desde: string; hasta: string } | null>(null);
   const [selectedMarcaEcom, setSelectedMarcaEcom] = useState<string | null>(null);
   // "Demanda Total": No (default) = excluye solo OD_DESPACHADO/OD_CARGA_CAMION
   // (OD_CANCELADA/OD_RECIBIDO_DEV ya cuentan siempre en Resumen). Sí = no
@@ -1896,7 +1900,10 @@ export default function DashboardLayout() {
   const urlResumenEcom = useMemo(() => {
     let url = "/api/ecom/resumen";
     const params = new URLSearchParams();
-    if (rangoResumenEcom) {
+    if (semanaResumenEcom) {
+      params.set("desde", semanaResumenEcom.desde);
+      params.set("hasta", semanaResumenEcom.hasta);
+    } else if (rangoResumenEcom) {
       const d = new Date();
       d.setDate(d.getDate() - (rangoResumenEcom - 1));
       params.set("desde", d.toISOString().slice(0, 10));
@@ -1906,13 +1913,18 @@ export default function DashboardLayout() {
     }
     if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumenEcom, filtroDemandaTotalEcom]);
+  }, [rangoResumenEcom, semanaResumenEcom, filtroDemandaTotalEcom]);
 
   const {
     data: resumenEcomData,
     error: resumenEcomError,
     isLoading: resumenEcomLoading,
   } = useTabData<ResumenEcomData>(activeTab, "ECOM-Resumen", urlResumenEcom, dataVersion);
+
+  // Semanas para el selector de Resumen -- calculadas sobre las fechas que
+  // devuelve la propia API (fechasDisponibles), no sobre los datos de Por
+  // Fecha/Por Pedidos (que solo se piden cuando esas pestañas están activas).
+  const semanasConDatosResumenEcom = semanasConDatosDe(resumenEcomData?.fechasDisponibles ?? []);
 
   const marcasDataEcom = (resumenEcomData?.marcas ?? []).map((m, idx) => ({
     name: m.name,
@@ -1938,6 +1950,13 @@ export default function DashboardLayout() {
     try {
       let url = `/api/ecom/resumen/canal?marca=${encodeURIComponent(marca)}`;
       if (filtroDemandaTotalEcom) url += `&incluirTodos=1`;
+      if (semanaResumenEcom) {
+        url += `&desde=${semanaResumenEcom.desde}&hasta=${semanaResumenEcom.hasta}`;
+      } else if (rangoResumenEcom) {
+        const d = new Date();
+        d.setDate(d.getDate() - (rangoResumenEcom - 1));
+        url += `&desde=${d.toISOString().slice(0, 10)}`;
+      }
       const res = await fetch(url, { cache: "no-store" });
       let data;
       try {
@@ -1967,14 +1986,15 @@ export default function DashboardLayout() {
     void cargarCanalPorMarcaEcom(marca);
   };
 
-  // Si cambia "Demanda Total" mientras el desglose por canal de una marca
-  // está abierto, lo recarga para que coincida con la tabla de arriba.
+  // Si cambia "Demanda Total", el rango de fecha o la semana mientras el
+  // desglose por canal de una marca está abierto, lo recarga para que
+  // coincida con la tabla de arriba.
   useEffect(() => {
     if (!selectedMarcaEcom) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void cargarCanalPorMarcaEcom(selectedMarcaEcom);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroDemandaTotalEcom]);
+  }, [filtroDemandaTotalEcom, rangoResumenEcom, semanaResumenEcom]);
 
   // =========================================================================
   // ESTADO: ECOM - POR FECHA (datos reales desde pedidos_ecom vía /api/ecom/resumen/por-fecha)
@@ -5505,9 +5525,12 @@ export default function DashboardLayout() {
                 ]).map((opcion) => (
                   <button
                     key={opcion.dias}
-                    onClick={() => setRangoResumenEcom(opcion.dias)}
+                    onClick={() => {
+                      setRangoResumenEcom(opcion.dias);
+                      setSemanaResumenEcom(null);
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      rangoResumenEcom === opcion.dias
+                      !semanaResumenEcom && rangoResumenEcom === opcion.dias
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -5515,6 +5538,25 @@ export default function DashboardLayout() {
                     {opcion.label}
                   </button>
                 ))}
+
+                <select
+                  value={semanaResumenEcom ? semanaResumenEcom.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatosResumenEcom.find((s) => s.desde === e.target.value);
+                    if (semana) {
+                      setSemanaResumenEcom({ desde: semana.desde, hasta: semana.hasta });
+                      setRangoResumenEcom(null);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaResumenEcom ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatosResumenEcom.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
 
                 <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
                   Demanda Total
@@ -5531,6 +5573,7 @@ export default function DashboardLayout() {
                 <button
                   onClick={() => {
                     setRangoResumenEcom(null);
+                    setSemanaResumenEcom(null);
                     setFiltroDemandaTotalEcom(false);
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"

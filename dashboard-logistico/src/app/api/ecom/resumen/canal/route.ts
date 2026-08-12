@@ -28,13 +28,22 @@ export async function GET(request: NextRequest) {
   }
   // Mismo filtro "Demanda Total" que Resumen: ?incluirTodos=1.
   const incluirTodos = request.nextUrl.searchParams.get("incluirTodos") === "1";
+  // Mismo rango/semana que Resumen: ?desde=YYYY-MM-DD (y opcionalmente ?hasta=YYYY-MM-DD).
+  const desde = request.nextUrl.searchParams.get("desde");
+  const hasta = request.nextUrl.searchParams.get("hasta");
 
   try {
     const rows = await fetchAllPedidosEcom();
     const marcaTrim = marca.trim();
-    const contables = rows.filter(
+    let contables = rows.filter(
       (r) => esContableEcomResumen(r, incluirTodos) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
     );
+    if (desde) {
+      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+    }
+    if (hasta) {
+      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) <= hasta : false));
+    }
 
     const porCanal = new Map<
       string,
