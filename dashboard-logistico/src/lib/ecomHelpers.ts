@@ -34,15 +34,69 @@ export function esContableEcom(row: PedidoEcomRow): boolean {
   return !ESTADOS_EXCLUIDOS_ECOM.includes(estado);
 }
 
-/** "OOLL asignado" hace de Canal para Ecom -- se normaliza para que
- * variantes de mayúscula/minúscula (ej. "Intralog" / "INTRALOG") no cuenten
- * como canales distintos. */
+// Solo para la pestaña Resumen: a diferencia de Por Fecha/Por Pedidos,
+// OD_CANCELADA y OD_RECIBIDO_DEV SÍ cuentan acá (hay una tarjeta dedicada a
+// mostrarlos, "Unidades Canceladas"), y el flag "Cancelado" tampoco excluye
+// -- solo quedan afuera los pedidos ya despachados o cargados al camión
+// (que ya no tienen pendiente real), salvo que "Demanda Total" esté en Sí.
+export const ESTADOS_EXCLUIDOS_ECOM_RESUMEN = ["OD_DESPACHADO", "OD_CARGA_CAMION"];
+
+export function esContableEcomResumen(row: PedidoEcomRow, incluirTodos = false): boolean {
+  if (incluirTodos) return true;
+  const estado = (row.estado_pedido || "").trim().toUpperCase();
+  return !ESTADOS_EXCLUIDOS_ECOM_RESUMEN.includes(estado);
+}
+
+// Cuenta para la tarjeta "Unidades Canceladas" tanto por Estado pedido
+// (OD_CANCELADA / OD_RECIBIDO_DEV) como por el flag Cancelado="true" --
+// son señales independientes, cualquiera de las dos marca la fila.
+export function esFilaCanceladaEcom(row: PedidoEcomRow): boolean {
+  const estado = (row.estado_pedido || "").trim().toUpperCase();
+  if (estado === "OD_CANCELADA" || estado === "OD_RECIBIDO_DEV") return true;
+  return (row.cancelado || "").trim().toLowerCase() === "true";
+}
+
+/** Tarjeta "Unidades Canceladas por Clientes": solo estado OD_CANCELADA. */
+export function esCanceladaPorClienteEcom(row: PedidoEcomRow): boolean {
+  return (row.estado_pedido || "").trim().toUpperCase() === "OD_CANCELADA";
+}
+
+/** Tarjeta "Unidades Canceladas sin stock": ya cargado al camión, pero
+ * todavía con pendiente de separación (Uni - Uni.Sep > 0). */
+export function esCanceladaSinStockEcom(row: PedidoEcomRow): boolean {
+  const estado = (row.estado_pedido || "").trim().toUpperCase();
+  if (estado !== "OD_CARGA_CAMION") return false;
+  return num(row.uni) - num(row.uni_sep) > 0;
+}
+
+// Estas filas quedan marcadas/afuera de Unidades Pickeadas, Unidades
+// Separadas, Pendiente Picking y Pendiente Separación (siguen sumando a
+// Total Unidades y a las tarjetas de canceladas que corresponda).
+export function debeExcluirseDePickSepPendEcom(row: PedidoEcomRow): boolean {
+  return esFilaCanceladaEcom(row) || esCanceladaSinStockEcom(row);
+}
+
+/** "OOLL asignado" hace de Canal para Ecom. Solo existen dos canales
+ * posibles: MELI o INTRALOG -- cualquier otro valor (variantes de
+ * mayúscula/minúscula, vacío, "ECOM", etc.) se considera INTRALOG. */
 export function canalDeOoll(ooll: string | null): string {
   const v = (ooll || "").trim().toUpperCase();
-  return v || "SIN CANAL";
+  return v === "MELI" ? "MELI" : "INTRALOG";
 }
 
 export const num = (v: number | null): number => Number(v) || 0;
+
+// Una fila cancelada/devuelta o "sin stock" se sigue mostrando (aporta a
+// "Unidades Canceladas..." y al total de Uni), pero sus unidades
+// pickeadas/separadas NO entran en el resto de los cálculos de Resumen
+// (KPIs, tabla por marca, desglose por canal) -- solo cuentan para el total
+// de unidades.
+export function pickEfectivoResumenEcom(row: PedidoEcomRow): number {
+  return debeExcluirseDePickSepPendEcom(row) ? 0 : num(row.uni_pick);
+}
+export function sepEfectivoResumenEcom(row: PedidoEcomRow): number {
+  return debeExcluirseDePickSepPendEcom(row) ? 0 : num(row.uni_sep);
+}
 
 /** Devuelve el created_at más reciente entre todas las filas (o null si no hay filas). */
 export function ultimaActualizacionEcom(rows: PedidoEcomRow[]): string | null {

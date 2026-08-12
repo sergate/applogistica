@@ -19,13 +19,16 @@ export async function GET(request: NextRequest) {
 
   // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante).
   // Filtro opcional por tipo de pedido: ?tipoPedido=REMA|STD.
+  // Filtro opcional "Demanda Total": ?incluirTerminados=1 incluye también los
+  // pedidos OD_TERMINADO (que por defecto se excluyen de todos los cálculos).
   // Sin estos parámetros, se muestran todos los datos sin filtrar.
   const desde = request.nextUrl.searchParams.get("desde");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
+  const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
 
   try {
     const rows = await fetchAllGrupoPedidos();
-    let contables = rows.filter(esContable);
+    let contables = rows.filter((r) => esContable(r, incluirTerminados));
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
     }

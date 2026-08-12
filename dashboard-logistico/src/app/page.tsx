@@ -71,6 +71,55 @@ interface ResumenData {
   updatedAt: string | null;
 }
 
+// Igual que MarcaResumen/CanalResumen, pero en vez de Efic. Pick./Efic.
+// Sep./Registros muestra Unidades Canceladas por Clientes/sin stock y
+// Cantidad de Pedidos (columnas de Detalle por Marca / desglose por Canal).
+interface MarcaResumenEcom {
+  name: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  unidadesCanceladasPorClientes: number;
+  unidadesCanceladasSinStock: number;
+  cantidadPedidos: number;
+}
+
+interface CanalResumenEcom {
+  name: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  unidadesCanceladasPorClientes: number;
+  unidadesCanceladasSinStock: number;
+  cantidadPedidos: number;
+}
+
+// Igual que ResumenData, pero en vez de Efic. Pick./Efic. Sep./Total
+// Registros expone Unidades Canceladas por Clientes/sin stock y Cantidad de
+// Pedidos (no se puede reusar ResumenData: ese tipo también lo usa el
+// useTabData de Resumen No Ecom).
+interface ResumenEcomData {
+  kpis: {
+    totalUni: number;
+    totalPick: number;
+    totalSep: number;
+    pendPick: number;
+    pendSep: number;
+    unidadesCanceladasPorClientes: number;
+    unidadesCanceladasSinStock: number;
+    cantidadPedidos: number;
+  };
+  marcas: MarcaResumenEcom[];
+  // Fechas únicas presentes en la tabla (sin filtrar), para poder armar el
+  // selector de "Semana del año" sin depender de los datos de otras pestañas.
+  fechasDisponibles: string[];
+  updatedAt: string | null;
+}
+
 // Ecom no agrupa por "grupo" ni distingue REMA/STD -- mismos campos que los
 // equivalentes del general, sin esas dos columnas.
 interface FechaResumenEcom {
@@ -162,10 +211,38 @@ export default function DashboardLayout() {
     router.refresh();
   };
 
+  // Claves de las subsecciones de Status de Preparación (No Ecom / Ecom) --
+  // se declaran acá arriba (y no más abajo junto al resto de *SubSections)
+  // porque hacen falta para decidir, ya en el estado inicial del sidebar, si
+  // esta sección debe arrancar abierta o cerrada.
+  const prepNoEcomSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
+  const prepEcomSubSectionKeys = ["ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos"];
+
   // Estados de navegación del Sidebar
-  const [isPrepOpen, setIsPrepOpen] = useState(true);
-  const [isPrepNoEcomOpen, setIsPrepNoEcomOpen] = useState(true);
-  const [isPrepEcomOpen, setIsPrepEcomOpen] = useState(true);
+  // Igual que el resto de las secciones (CI/REM/PROD/PD/INB/ALM/ADMIN):
+  // arranca abierta solo si la pestaña de destino (guardada antes de un
+  // reload tras un import, o la de aterrizaje por defecto) es de esta
+  // sección -- si el import fue de OTRA sección, Status de Preparación debe
+  // quedar cerrada, no abierta "porque sí".
+  const [isPrepOpen, setIsPrepOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const tab = sessionStorage.getItem("tabDespuesDeRefresh") || "";
+    if (!tab) return true; // sin flag guardada -> aterrizaje por defecto en "Resumen"
+    return prepNoEcomSubSections.includes(tab) || prepEcomSubSectionKeys.includes(tab);
+  });
+  // Solo se abre automáticamente el subgrupo (No Ecom / Ecom) que corresponde
+  // a la pestaña actual -- no los dos juntos.
+  const [isPrepNoEcomOpen, setIsPrepNoEcomOpen] = useState(() => {
+    if (typeof window === "undefined") return true;
+    const tab = sessionStorage.getItem("tabDespuesDeRefresh") || "";
+    if (!tab) return true;
+    return prepNoEcomSubSections.includes(tab);
+  });
+  const [isPrepEcomOpen, setIsPrepEcomOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const tab = sessionStorage.getItem("tabDespuesDeRefresh") || "";
+    return prepEcomSubSectionKeys.includes(tab);
+  });
 
   // Si un import anterior guardó una pestaña de destino antes de recargar la
   // página (window.location.reload), arrancamos ya posicionados ahí.
@@ -427,6 +504,9 @@ export default function DashboardLayout() {
   // =========================================================================
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
+  // "Demanda Total": No (default) = igual que hoy, excluye OD_TERMINADO.
+  // Sí = incluye también los pedidos OD_TERMINADO.
+  const [filtroDemandaTotal, setFiltroDemandaTotal] = useState(false);
 
   const urlResumen = useMemo(() => {
     let url = "/api/resumen";
@@ -439,9 +519,12 @@ export default function DashboardLayout() {
     if (filtroTipoResumen !== "TODOS") {
       params.set("tipoPedido", filtroTipoResumen);
     }
+    if (filtroDemandaTotal) {
+      params.set("incluirTerminados", "1");
+    }
     if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumen, filtroTipoResumen]);
+  }, [rangoResumen, filtroTipoResumen, filtroDemandaTotal]);
 
   const {
     data: resumenData,
@@ -863,14 +946,31 @@ export default function DashboardLayout() {
   // de generar las ~52 semanas de todo el año.
   const semanasConDatos = semanasConDatosDe((fechaData?.filas ?? []).map((f) => f.fecha));
 
-  const prepNoEcomSubSections = ["Importar datos", "Resumen", "Por fecha", "Por pedidos", "REMA Manual"];
-
   const prepEcomSubSections = [
     { key: "ECOM-Importar", label: "Importar Datos" },
     { key: "ECOM-Resumen", label: "Resumen" },
     { key: "ECOM-PorFecha", label: "Por Fecha" },
     { key: "ECOM-PorPedidos", label: "Por Pedidos" },
   ];
+
+  // Mantiene abierto solo el subgrupo (No Ecom / Ecom) de la pestaña activa
+  // -- así, al terminar un import (que cambia activeTab a "Resumen" o
+  // "ECOM-Resumen") o al navegar manualmente, se abre nada más el que
+  // corresponde en vez de los dos juntos.
+  useEffect(() => {
+    if (prepNoEcomSubSections.includes(activeTab)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepNoEcomOpen(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepEcomOpen(false);
+    } else if (prepEcomSubSections.some((s) => s.key === activeTab)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepEcomOpen(true);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setIsPrepNoEcomOpen(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
 
   const cargaInicialSubSections = [
     { key: "CI-Importar", label: "Importar Datos" },
@@ -1792,23 +1892,41 @@ export default function DashboardLayout() {
   // ESTADO: ECOM - RESUMEN (datos reales desde pedidos_ecom vía /api/ecom/resumen)
   // =========================================================================
   const [rangoResumenEcom, setRangoResumenEcom] = useState<7 | 14 | 30 | null>(null);
+  const [semanaResumenEcom, setSemanaResumenEcom] = useState<{ desde: string; hasta: string } | null>(null);
   const [selectedMarcaEcom, setSelectedMarcaEcom] = useState<string | null>(null);
+  // "Demanda Total": No (default) = excluye solo OD_DESPACHADO/OD_CARGA_CAMION
+  // (OD_CANCELADA/OD_RECIBIDO_DEV ya cuentan siempre en Resumen). Sí = no
+  // excluye ningún estado.
+  const [filtroDemandaTotalEcom, setFiltroDemandaTotalEcom] = useState(false);
 
   const urlResumenEcom = useMemo(() => {
     let url = "/api/ecom/resumen";
-    if (rangoResumenEcom) {
+    const params = new URLSearchParams();
+    if (semanaResumenEcom) {
+      params.set("desde", semanaResumenEcom.desde);
+      params.set("hasta", semanaResumenEcom.hasta);
+    } else if (rangoResumenEcom) {
       const d = new Date();
       d.setDate(d.getDate() - (rangoResumenEcom - 1));
-      url += `?desde=${d.toISOString().slice(0, 10)}`;
+      params.set("desde", d.toISOString().slice(0, 10));
     }
+    if (filtroDemandaTotalEcom) {
+      params.set("incluirTodos", "1");
+    }
+    if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumenEcom]);
+  }, [rangoResumenEcom, semanaResumenEcom, filtroDemandaTotalEcom]);
 
   const {
     data: resumenEcomData,
     error: resumenEcomError,
     isLoading: resumenEcomLoading,
-  } = useTabData<ResumenData>(activeTab, "ECOM-Resumen", urlResumenEcom, dataVersion);
+  } = useTabData<ResumenEcomData>(activeTab, "ECOM-Resumen", urlResumenEcom, dataVersion);
+
+  // Semanas para el selector de Resumen -- calculadas sobre las fechas que
+  // devuelve la propia API (fechasDisponibles), no sobre los datos de Por
+  // Fecha/Por Pedidos (que solo se piden cuando esas pestañas están activas).
+  const semanasConDatosResumenEcom = semanasConDatosDe(resumenEcomData?.fechasDisponibles ?? []);
 
   const marcasDataEcom = (resumenEcomData?.marcas ?? []).map((m, idx) => ({
     name: m.name,
@@ -1818,12 +1936,12 @@ export default function DashboardLayout() {
     sep: fmtNum(m.sep),
     pendPick: fmtNum(m.pendPick),
     pendSep: fmtNum(m.pendSep),
-    eficPick: fmtPct(m.eficPick),
-    eficSep: fmtPct(m.eficSep),
-    reg: fmtNum(m.reg),
+    unidadesCanceladasPorClientes: fmtNum(m.unidadesCanceladasPorClientes),
+    unidadesCanceladasSinStock: fmtNum(m.unidadesCanceladasSinStock),
+    cantidadPedidos: fmtNum(m.cantidadPedidos),
   }));
 
-  const [canalRowsEcom, setCanalRowsEcom] = useState<CanalResumen[] | null>(null);
+  const [canalRowsEcom, setCanalRowsEcom] = useState<CanalResumenEcom[] | null>(null);
   const [canalLoadingEcom, setCanalLoadingEcom] = useState(false);
   const [canalErrorEcom, setCanalErrorEcom] = useState<string | null>(null);
 
@@ -1832,7 +1950,16 @@ export default function DashboardLayout() {
     setCanalErrorEcom(null);
     setCanalRowsEcom(null);
     try {
-      const res = await fetch(`/api/ecom/resumen/canal?marca=${encodeURIComponent(marca)}`, { cache: "no-store" });
+      let url = `/api/ecom/resumen/canal?marca=${encodeURIComponent(marca)}`;
+      if (filtroDemandaTotalEcom) url += `&incluirTodos=1`;
+      if (semanaResumenEcom) {
+        url += `&desde=${semanaResumenEcom.desde}&hasta=${semanaResumenEcom.hasta}`;
+      } else if (rangoResumenEcom) {
+        const d = new Date();
+        d.setDate(d.getDate() - (rangoResumenEcom - 1));
+        url += `&desde=${d.toISOString().slice(0, 10)}`;
+      }
+      const res = await fetch(url, { cache: "no-store" });
       let data;
       try {
         data = await res.json();
@@ -1860,6 +1987,16 @@ export default function DashboardLayout() {
     setSelectedMarcaEcom(marca);
     void cargarCanalPorMarcaEcom(marca);
   };
+
+  // Si cambia "Demanda Total", el rango de fecha o la semana mientras el
+  // desglose por canal de una marca está abierto, lo recarga para que
+  // coincida con la tabla de arriba.
+  useEffect(() => {
+    if (!selectedMarcaEcom) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void cargarCanalPorMarcaEcom(selectedMarcaEcom);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtroDemandaTotalEcom, rangoResumenEcom, semanaResumenEcom]);
 
   // =========================================================================
   // ESTADO: ECOM - POR FECHA (datos reales desde pedidos_ecom vía /api/ecom/resumen/por-fecha)
@@ -2086,9 +2223,9 @@ export default function DashboardLayout() {
     { title: "Unidades Separadas", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
     { title: "Pendiente Picking", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendPick) : "—", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
     { title: "Pendiente Separación", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendSep) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
-    { title: "Efic. Picking", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
-    { title: "Efic. Separación", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
-    { title: "Total Registros", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalRegistros) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
+    { title: "Unidades Canceladas por Clientes", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.unidadesCanceladasPorClientes) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="15" y1="9" x2="9" y2="15" /><line strokeLinecap="round" strokeLinejoin="round" x1="9" y1="9" x2="15" y2="15" /></svg> },
+    { title: "Unidades Canceladas sin stock", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.unidadesCanceladasSinStock) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="15" y1="9" x2="9" y2="15" /><line strokeLinecap="round" strokeLinejoin="round" x1="9" y1="9" x2="15" y2="15" /></svg> },
+    { title: "Cantidad de Pedidos", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.cantidadPedidos) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
   ];
 
   const hoyISO = new Date().toISOString().slice(0, 10);
@@ -2228,6 +2365,7 @@ export default function DashboardLayout() {
     try {
       let url = `/api/resumen/canal?marca=${encodeURIComponent(marca)}`;
       if (filtroTipoResumen !== "TODOS") url += `&tipoPedido=${filtroTipoResumen}`;
+      if (filtroDemandaTotal) url += `&incluirTerminados=1`;
       const res = await fetch(url, {
         cache: "no-store",
       });
@@ -2248,14 +2386,15 @@ export default function DashboardLayout() {
     }
   };
 
-  // Si cambia el filtro REMA/STD de Resumen mientras el desglose por canal
-  // de una marca está abierto, lo recarga para que muestre lo mismo que la
-  // tabla de arriba (en vez de quedarse con los datos del filtro anterior).
+  // Si cambia el filtro REMA/STD o Demanda Total de Resumen mientras el
+  // desglose por canal de una marca está abierto, lo recarga para que
+  // muestre lo mismo que la tabla de arriba (en vez de quedarse con los
+  // datos del filtro anterior).
   useEffect(() => {
     if (!selectedMarca) return;
     void cargarCanalPorMarca(selectedMarca);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroTipoResumen]);
+  }, [filtroTipoResumen, filtroDemandaTotal]);
 
   // =========================================================================
   // ESTADO: ADMINISTRACIÓN - PERFILES
@@ -4519,10 +4658,23 @@ export default function DashboardLayout() {
                   <option value="STD">STD</option>
                 </select>
 
+                <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
+                  Demanda Total
+                  <select
+                    value={filtroDemandaTotal ? "SI" : "NO"}
+                    onChange={(e) => setFiltroDemandaTotal(e.target.value === "SI")}
+                    className="bg-transparent border-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-semibold"
+                  >
+                    <option value="NO">No</option>
+                    <option value="SI">Sí</option>
+                  </select>
+                </label>
+
                 <button
                   onClick={() => {
                     setRangoResumen(null);
                     setFiltroTipoResumen("TODOS");
+                    setFiltroDemandaTotal(false);
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
@@ -5375,9 +5527,12 @@ export default function DashboardLayout() {
                 ]).map((opcion) => (
                   <button
                     key={opcion.dias}
-                    onClick={() => setRangoResumenEcom(opcion.dias)}
+                    onClick={() => {
+                      setRangoResumenEcom(opcion.dias);
+                      setSemanaResumenEcom(null);
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      rangoResumenEcom === opcion.dias
+                      !semanaResumenEcom && rangoResumenEcom === opcion.dias
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -5386,8 +5541,43 @@ export default function DashboardLayout() {
                   </button>
                 ))}
 
+                <select
+                  value={semanaResumenEcom ? semanaResumenEcom.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatosResumenEcom.find((s) => s.desde === e.target.value);
+                    if (semana) {
+                      setSemanaResumenEcom({ desde: semana.desde, hasta: semana.hasta });
+                      setRangoResumenEcom(null);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaResumenEcom ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatosResumenEcom.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
+
+                <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
+                  Demanda Total
+                  <select
+                    value={filtroDemandaTotalEcom ? "SI" : "NO"}
+                    onChange={(e) => setFiltroDemandaTotalEcom(e.target.value === "SI")}
+                    className="bg-transparent border-none focus:ring-2 focus:ring-blue-500 cursor-pointer font-semibold"
+                  >
+                    <option value="NO">No</option>
+                    <option value="SI">Sí</option>
+                  </select>
+                </label>
+
                 <button
-                  onClick={() => setRangoResumenEcom(null)}
+                  onClick={() => {
+                    setRangoResumenEcom(null);
+                    setSemanaResumenEcom(null);
+                    setFiltroDemandaTotalEcom(false);
+                  }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Limpiar filtros
@@ -5448,9 +5638,9 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Separadas</th>
                         <th className="py-3 px-4 text-left">Pend. Picking</th>
                         <th className="py-3 px-4 text-left">Pend. Sep.</th>
-                        <th className="py-3 px-4 text-left">Efic. Pick.</th>
-                        <th className="py-3 px-4 text-left">Efic. Sep.</th>
-                        <th className="py-3 px-4 text-left">Registros</th>
+                        <th className="py-3 px-4 text-left">Unidades Canceladas por Clientes</th>
+                        <th className="py-3 px-4 text-left">Unidades Canceladas sin stock</th>
+                        <th className="py-3 px-4 text-left">Cantidad de Pedidos</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -5462,9 +5652,9 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left text-slate-600">{marca.sep}</td>
                           <td className="py-3 px-4 text-left font-semibold text-orange-500">{marca.pendPick}</td>
                           <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficPick}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficSep}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.reg}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladasPorClientes}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladasSinStock}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.cantidadPedidos}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -5504,9 +5694,9 @@ export default function DashboardLayout() {
                             <th className="py-3 px-4 text-left">Separadas</th>
                             <th className="py-3 px-4 text-left">Pend. Picking</th>
                             <th className="py-3 px-4 text-left">Pend. Sep.</th>
-                            <th className="py-3 px-4 text-left">Efic. Pick.</th>
-                            <th className="py-3 px-4 text-left">Efic. Sep.</th>
-                            <th className="py-3 px-4 text-left">Registros</th>
+                            <th className="py-3 px-4 text-left">Unidades Canceladas por Clientes</th>
+                            <th className="py-3 px-4 text-left">Unidades Canceladas sin stock</th>
+                            <th className="py-3 px-4 text-left">Cantidad de Pedidos</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -5521,9 +5711,9 @@ export default function DashboardLayout() {
                               <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.sep)}</td>
                               <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(canal.pendPick)}</td>
                               <td className="py-3 px-4 text-left font-semibold text-red-500">{fmtNum(canal.pendSep)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficPick)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficSep)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.reg)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladasPorClientes)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladasSinStock)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.cantidadPedidos)}</td>
                             </tr>
                           ))}
                         </tbody>

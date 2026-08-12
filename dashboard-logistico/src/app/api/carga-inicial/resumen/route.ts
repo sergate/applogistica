@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const rows = await fetchAllGrupoPedidos();
-    let contables = rows.filter(esContable);
+    let contables = rows.filter((r) => esContable(r));
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
     }

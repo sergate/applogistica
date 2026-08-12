@@ -32,7 +32,7 @@ export async function GET() {
 
   try {
     const rows = await fetchAllGrupoPedidos();
-    const contables = rows.filter(esContable);
+    const contables = rows.filter((r) => esContable(r));
     const pedidosRemaManual = await fetchPedidosRemaManual();
 
     // Fecha, marca y tipo de pedido son consistentes dentro de un mismo
