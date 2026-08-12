@@ -3,9 +3,9 @@ import { supabaseEnvOk } from "@/lib/supabaseClient";
 import {
   fetchAllPedidosEcom,
   esContableEcomResumen,
-  esFilaCanceladaEcom,
   esCanceladaPorClienteEcom,
   esCanceladaSinStockEcom,
+  debeExcluirseDePickSepPendEcom,
   pickEfectivoResumenEcom,
   sepEfectivoResumenEcom,
   num,
@@ -55,13 +55,15 @@ export async function GET(request: NextRequest) {
     // "Unidades Canceladas sin stock" siempre daría 0 en "No" (esos estados
     // quedan excluidos de "contables" ahí).
     const filasFecha = desde || hasta ? rows.filter(enRango) : rows;
-    const unidadesCanceladas = filasFecha.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
+    const unidadesCanceladas = filasFecha
+      .filter(debeExcluirseDePickSepPendEcom)
+      .reduce((acc, r) => acc + num(r.uni), 0);
     const unidadesCanceladasPorClientes = filasFecha
       .filter(esCanceladaPorClienteEcom)
       .reduce((acc, r) => acc + num(r.uni), 0);
     const unidadesCanceladasSinStock = filasFecha
       .filter(esCanceladaSinStockEcom)
-      .reduce((acc, r) => acc + num(r.uni_sep), 0);
+      .reduce((acc, r) => acc + num(r.uni), 0);
 
     let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
     if (desde || hasta) {
@@ -77,13 +79,14 @@ export async function GET(request: NextRequest) {
     const cantidadPedidos = new Set(contables.map((r) => r.pedido)).size;
 
     // Pendiente = total - canceladas - lo ya hecho (las canceladas ya están
-    // "resueltas", no pueden quedar pendientes de picking/separación).
+    // "resueltas", no pueden quedar pendientes de picking/separación). Nunca
+    // puede dar negativo.
     const kpis = {
       totalUni,
       totalPick,
       totalSep,
-      pendPick: totalUni - unidadesCanceladas - totalPick,
-      pendSep: totalUni - unidadesCanceladas - totalSep,
+      pendPick: Math.max(0, totalUni - unidadesCanceladas - totalPick),
+      pendSep: Math.max(0, totalUni - unidadesCanceladas - totalSep),
       unidadesCanceladasPorClientes,
       unidadesCanceladasSinStock,
       cantidadPedidos,
@@ -119,9 +122,9 @@ export async function GET(request: NextRequest) {
         porMarcaCancelados.set(marca, { unidadesCanceladas: 0, canceladasPorClientes: 0, canceladasSinStock: 0 });
       }
       const acc = porMarcaCancelados.get(marca)!;
-      if (esFilaCanceladaEcom(r)) acc.unidadesCanceladas += num(r.uni);
+      if (debeExcluirseDePickSepPendEcom(r)) acc.unidadesCanceladas += num(r.uni);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
-      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni_sep);
+      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni);
     }
 
     const marcas = Array.from(porMarca.entries())
@@ -136,8 +139,8 @@ export async function GET(request: NextRequest) {
           uni: acc.uni,
           pick: acc.pick,
           sep: acc.sep,
-          pendPick: acc.uni - cancelados.unidadesCanceladas - acc.pick,
-          pendSep: acc.uni - cancelados.unidadesCanceladas - acc.sep,
+          pendPick: Math.max(0, acc.uni - cancelados.unidadesCanceladas - acc.pick),
+          pendSep: Math.max(0, acc.uni - cancelados.unidadesCanceladas - acc.sep),
           unidadesCanceladasPorClientes: cancelados.canceladasPorClientes,
           unidadesCanceladasSinStock: cancelados.canceladasSinStock,
           cantidadPedidos: acc.pedidos.size,

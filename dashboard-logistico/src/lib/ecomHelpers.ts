@@ -61,11 +61,19 @@ export function esCanceladaPorClienteEcom(row: PedidoEcomRow): boolean {
   return (row.estado_pedido || "").trim().toUpperCase() === "OD_CANCELADA";
 }
 
-/** Tarjeta "Unidades Canceladas sin stock": ya despachado o cargado al
- * camión, pero todavía con unidades en separación (Uni.Sep > 0). */
+/** Tarjeta "Unidades Canceladas sin stock": ya cargado al camión, pero
+ * todavía con pendiente de separación (Uni - Uni.Sep > 0). */
 export function esCanceladaSinStockEcom(row: PedidoEcomRow): boolean {
   const estado = (row.estado_pedido || "").trim().toUpperCase();
-  return (estado === "OD_DESPACHADO" || estado === "OD_CARGA_CAMION") && num(row.uni_sep) > 0;
+  if (estado !== "OD_CARGA_CAMION") return false;
+  return num(row.uni) - num(row.uni_sep) > 0;
+}
+
+// Estas filas quedan marcadas/afuera de Unidades Pickeadas, Unidades
+// Separadas, Pendiente Picking y Pendiente Separación (siguen sumando a
+// Total Unidades y a las tarjetas de canceladas que corresponda).
+export function debeExcluirseDePickSepPendEcom(row: PedidoEcomRow): boolean {
+  return esFilaCanceladaEcom(row) || esCanceladaSinStockEcom(row);
 }
 
 /** "OOLL asignado" hace de Canal para Ecom. Solo existen dos canales
@@ -78,15 +86,16 @@ export function canalDeOoll(ooll: string | null): string {
 
 export const num = (v: number | null): number => Number(v) || 0;
 
-// Una fila cancelada/devuelta se sigue mostrando (aporta a "Unidades
-// Canceladas" y al total de Uni), pero sus unidades pickeadas/separadas NO
-// entran en el resto de los cálculos de Resumen (KPIs, tabla por marca,
-// desglose por canal) -- solo cuentan para el total de unidades.
+// Una fila cancelada/devuelta o "sin stock" se sigue mostrando (aporta a
+// "Unidades Canceladas..." y al total de Uni), pero sus unidades
+// pickeadas/separadas NO entran en el resto de los cálculos de Resumen
+// (KPIs, tabla por marca, desglose por canal) -- solo cuentan para el total
+// de unidades.
 export function pickEfectivoResumenEcom(row: PedidoEcomRow): number {
-  return esFilaCanceladaEcom(row) ? 0 : num(row.uni_pick);
+  return debeExcluirseDePickSepPendEcom(row) ? 0 : num(row.uni_pick);
 }
 export function sepEfectivoResumenEcom(row: PedidoEcomRow): number {
-  return esFilaCanceladaEcom(row) ? 0 : num(row.uni_sep);
+  return debeExcluirseDePickSepPendEcom(row) ? 0 : num(row.uni_sep);
 }
 
 /** Devuelve el created_at más reciente entre todas las filas (o null si no hay filas). */

@@ -3,9 +3,9 @@ import { supabaseEnvOk } from "@/lib/supabaseClient";
 import {
   fetchAllPedidosEcom,
   esContableEcomResumen,
-  esFilaCanceladaEcom,
   esCanceladaPorClienteEcom,
   esCanceladaSinStockEcom,
+  debeExcluirseDePickSepPendEcom,
   pickEfectivoResumenEcom,
   sepEfectivoResumenEcom,
   num,
@@ -87,9 +87,9 @@ export async function GET(request: NextRequest) {
         porCanalCancelados.set(canal, { unidadesCanceladas: 0, canceladasPorClientes: 0, canceladasSinStock: 0 });
       }
       const acc = porCanalCancelados.get(canal)!;
-      if (esFilaCanceladaEcom(r)) acc.unidadesCanceladas += num(r.uni);
+      if (debeExcluirseDePickSepPendEcom(r)) acc.unidadesCanceladas += num(r.uni);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
-      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni_sep);
+      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni);
     }
 
     const canales = Array.from(porCanal.entries())
@@ -104,8 +104,8 @@ export async function GET(request: NextRequest) {
           uni: acc.uni,
           pick: acc.pick,
           sep: acc.sep,
-          pendPick: acc.uni - cancelados.unidadesCanceladas - acc.pick,
-          pendSep: acc.uni - cancelados.unidadesCanceladas - acc.sep,
+          pendPick: Math.max(0, acc.uni - cancelados.unidadesCanceladas - acc.pick),
+          pendSep: Math.max(0, acc.uni - cancelados.unidadesCanceladas - acc.sep),
           unidadesCanceladasPorClientes: cancelados.canceladasPorClientes,
           unidadesCanceladasSinStock: cancelados.canceladasSinStock,
           cantidadPedidos: acc.pedidos.size,
