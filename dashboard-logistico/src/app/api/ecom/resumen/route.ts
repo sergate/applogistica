@@ -4,6 +4,8 @@ import {
   fetchAllPedidosEcom,
   esContableEcomResumen,
   esFilaCanceladaEcom,
+  esCanceladaPorClienteEcom,
+  esCanceladaSinStockEcom,
   pickEfectivoResumenEcom,
   sepEfectivoResumenEcom,
   num,
@@ -47,12 +49,19 @@ export async function GET(request: NextRequest) {
       new Set(rows.map((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) : "SIN FECHA")))
     );
 
-    // "Unidades Canceladas" se calcula siempre sobre el mismo conjunto de
-    // filas (todas, solo acotadas por el rango de fecha) -- "Demanda Total"
-    // únicamente decide si OD_DESPACHADO/OD_CARGA_CAMION entran en el resto
-    // de los KPIs, no cambia qué cuenta como cancelado.
-    const filasParaCancelados = desde || hasta ? rows.filter(enRango) : rows;
-    const unidadesCanceladas = filasParaCancelados.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
+    // "Unidades canceladas" (amplio: OD_CANCELADA/OD_RECIBIDO_DEV/Cancelado)
+    // y las 2 tarjetas nuevas se calculan sobre TODAS las filas del rango de
+    // fecha, sin el filtro de "Demanda Total" -- si usáramos "contables",
+    // "Unidades Canceladas sin stock" siempre daría 0 en "No" (esos estados
+    // quedan excluidos de "contables" ahí).
+    const filasFecha = desde || hasta ? rows.filter(enRango) : rows;
+    const unidadesCanceladas = filasFecha.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
+    const unidadesCanceladasPorClientes = filasFecha
+      .filter(esCanceladaPorClienteEcom)
+      .reduce((acc, r) => acc + num(r.uni), 0);
+    const unidadesCanceladasSinStock = filasFecha
+      .filter(esCanceladaSinStockEcom)
+      .reduce((acc, r) => acc + num(r.uni_sep), 0);
 
     let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
     if (desde || hasta) {
@@ -65,6 +74,7 @@ export async function GET(request: NextRequest) {
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
     const totalPick = contables.reduce((acc, r) => acc + pickEfectivoResumenEcom(r), 0);
     const totalSep = contables.reduce((acc, r) => acc + sepEfectivoResumenEcom(r), 0);
+    const cantidadPedidos = new Set(contables.map((r) => r.pedido)).size;
 
     // Pendiente = total - canceladas - lo ya hecho (las canceladas ya están
     // "resueltas", no pueden quedar pendientes de picking/separación).
@@ -74,41 +84,65 @@ export async function GET(request: NextRequest) {
       totalSep,
       pendPick: totalUni - unidadesCanceladas - totalPick,
       pendSep: totalUni - unidadesCanceladas - totalSep,
-      eficPick: totalUni > 0 ? (totalPick / totalUni) * 100 : 0,
-      eficSep: totalUni > 0 ? (totalSep / totalUni) * 100 : 0,
-      unidadesCanceladas,
+      unidadesCanceladasPorClientes,
+      unidadesCanceladasSinStock,
+      cantidadPedidos,
     };
 
-    // Agrupado por marca (= columna "seller")
+    // Agrupado por marca (= columna "seller") -- uni/pick/sep/pedidos sobre
+    // "contables" (respeta "Demanda Total"); las 3 métricas de cancelados
+    // (para el Pendiente y las 2 tarjetas nuevas) sobre "filasFecha".
     const porMarca = new Map<
       string,
-      { uni: number; pick: number; sep: number; unidadesCanceladas: number }
+      { uni: number; pick: number; sep: number; pedidos: Set<string> }
+    >();
+    const porMarcaCancelados = new Map<
+      string,
+      { unidadesCanceladas: number; canceladasPorClientes: number; canceladasSinStock: number }
     >();
 
     for (const r of contables) {
       const marca = (r.seller || "").trim() || "SIN SELLER";
       if (!porMarca.has(marca)) {
-        porMarca.set(marca, { uni: 0, pick: 0, sep: 0, unidadesCanceladas: 0 });
+        porMarca.set(marca, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
       }
       const acc = porMarca.get(marca)!;
       acc.uni += num(r.uni);
       acc.pick += pickEfectivoResumenEcom(r);
       acc.sep += sepEfectivoResumenEcom(r);
+      acc.pedidos.add(r.pedido);
+    }
+
+    for (const r of filasFecha) {
+      const marca = (r.seller || "").trim() || "SIN SELLER";
+      if (!porMarcaCancelados.has(marca)) {
+        porMarcaCancelados.set(marca, { unidadesCanceladas: 0, canceladasPorClientes: 0, canceladasSinStock: 0 });
+      }
+      const acc = porMarcaCancelados.get(marca)!;
       if (esFilaCanceladaEcom(r)) acc.unidadesCanceladas += num(r.uni);
+      if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
+      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni_sep);
     }
 
     const marcas = Array.from(porMarca.entries())
-      .map(([name, acc]) => ({
-        name,
-        uni: acc.uni,
-        pick: acc.pick,
-        sep: acc.sep,
-        pendPick: acc.uni - acc.unidadesCanceladas - acc.pick,
-        pendSep: acc.uni - acc.unidadesCanceladas - acc.sep,
-        eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
-        eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
-        unidadesCanceladas: acc.unidadesCanceladas,
-      }))
+      .map(([name, acc]) => {
+        const cancelados = porMarcaCancelados.get(name) ?? {
+          unidadesCanceladas: 0,
+          canceladasPorClientes: 0,
+          canceladasSinStock: 0,
+        };
+        return {
+          name,
+          uni: acc.uni,
+          pick: acc.pick,
+          sep: acc.sep,
+          pendPick: acc.uni - cancelados.unidadesCanceladas - acc.pick,
+          pendSep: acc.uni - cancelados.unidadesCanceladas - acc.sep,
+          unidadesCanceladasPorClientes: cancelados.canceladasPorClientes,
+          unidadesCanceladasSinStock: cancelados.canceladasSinStock,
+          cantidadPedidos: acc.pedidos.size,
+        };
+      })
       .sort((a, b) => b.uni - a.uni);
 
     return NextResponse.json({ success: true, kpis, marcas, fechasDisponibles, updatedAt: ultimaActualizacionEcom(rows) });

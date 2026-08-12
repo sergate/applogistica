@@ -56,6 +56,18 @@ export function esFilaCanceladaEcom(row: PedidoEcomRow): boolean {
   return (row.cancelado || "").trim().toLowerCase() === "true";
 }
 
+/** Tarjeta "Unidades Canceladas por Clientes": solo estado OD_CANCELADA. */
+export function esCanceladaPorClienteEcom(row: PedidoEcomRow): boolean {
+  return (row.estado_pedido || "").trim().toUpperCase() === "OD_CANCELADA";
+}
+
+/** Tarjeta "Unidades Canceladas sin stock": ya despachado o cargado al
+ * camión, pero todavía con unidades en separación (Uni.Sep > 0). */
+export function esCanceladaSinStockEcom(row: PedidoEcomRow): boolean {
+  const estado = (row.estado_pedido || "").trim().toUpperCase();
+  return (estado === "OD_DESPACHADO" || estado === "OD_CARGA_CAMION") && num(row.uni_sep) > 0;
+}
+
 /** "OOLL asignado" hace de Canal para Ecom. Solo existen dos canales
  * posibles: MELI o INTRALOG -- cualquier otro valor (variantes de
  * mayúscula/minúscula, vacío, "ECOM", etc.) se considera INTRALOG. */

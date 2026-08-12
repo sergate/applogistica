@@ -71,8 +71,9 @@ interface ResumenData {
   updatedAt: string | null;
 }
 
-// Igual que MarcaResumen/CanalResumen, pero con "Unidades Canceladas" en vez
-// de "Registros" (columna de la tabla Detalle por Marca / desglose por Canal).
+// Igual que MarcaResumen/CanalResumen, pero en vez de Efic. Pick./Efic.
+// Sep./Registros muestra Unidades Canceladas por Clientes/sin stock y
+// Cantidad de Pedidos (columnas de Detalle por Marca / desglose por Canal).
 interface MarcaResumenEcom {
   name: string;
   uni: number;
@@ -80,9 +81,9 @@ interface MarcaResumenEcom {
   sep: number;
   pendPick: number;
   pendSep: number;
-  eficPick: number;
-  eficSep: number;
-  unidadesCanceladas: number;
+  unidadesCanceladasPorClientes: number;
+  unidadesCanceladasSinStock: number;
+  cantidadPedidos: number;
 }
 
 interface CanalResumenEcom {
@@ -92,14 +93,15 @@ interface CanalResumenEcom {
   sep: number;
   pendPick: number;
   pendSep: number;
-  eficPick: number;
-  eficSep: number;
-  unidadesCanceladas: number;
+  unidadesCanceladasPorClientes: number;
+  unidadesCanceladasSinStock: number;
+  cantidadPedidos: number;
 }
 
-// Igual que ResumenData, pero la última tarjeta es "Unidades Canceladas" en
-// vez de "Total Registros" (no se puede reusar ResumenData: ese tipo también
-// lo usa el useTabData de Resumen No Ecom).
+// Igual que ResumenData, pero en vez de Efic. Pick./Efic. Sep./Total
+// Registros expone Unidades Canceladas por Clientes/sin stock y Cantidad de
+// Pedidos (no se puede reusar ResumenData: ese tipo también lo usa el
+// useTabData de Resumen No Ecom).
 interface ResumenEcomData {
   kpis: {
     totalUni: number;
@@ -107,9 +109,9 @@ interface ResumenEcomData {
     totalSep: number;
     pendPick: number;
     pendSep: number;
-    eficPick: number;
-    eficSep: number;
-    unidadesCanceladas: number;
+    unidadesCanceladasPorClientes: number;
+    unidadesCanceladasSinStock: number;
+    cantidadPedidos: number;
   };
   marcas: MarcaResumenEcom[];
   // Fechas únicas presentes en la tabla (sin filtrar), para poder armar el
@@ -1934,9 +1936,9 @@ export default function DashboardLayout() {
     sep: fmtNum(m.sep),
     pendPick: fmtNum(m.pendPick),
     pendSep: fmtNum(m.pendSep),
-    eficPick: fmtPct(m.eficPick),
-    eficSep: fmtPct(m.eficSep),
-    unidadesCanceladas: fmtNum(m.unidadesCanceladas),
+    unidadesCanceladasPorClientes: fmtNum(m.unidadesCanceladasPorClientes),
+    unidadesCanceladasSinStock: fmtNum(m.unidadesCanceladasSinStock),
+    cantidadPedidos: fmtNum(m.cantidadPedidos),
   }));
 
   const [canalRowsEcom, setCanalRowsEcom] = useState<CanalResumenEcom[] | null>(null);
@@ -2221,9 +2223,9 @@ export default function DashboardLayout() {
     { title: "Unidades Separadas", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.totalSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polygon strokeLinecap="round" strokeLinejoin="round" points="12 2 2 7 12 12 22 7 12 2" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 17 12 22 22 17" /><polyline strokeLinecap="round" strokeLinejoin="round" points="2 12 17 22 12" /></svg> },
     { title: "Pendiente Picking", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendPick) : "—", theme: "orange", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><polyline strokeLinecap="round" strokeLinejoin="round" points="12 6 12 12 16 14" /></svg> },
     { title: "Pendiente Separación", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.pendSep) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="9" x2="12" y2="13" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="17" x2="12.01" y2="17" /></svg> },
-    { title: "Efic. Picking", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficPick) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><polyline strokeLinecap="round" strokeLinejoin="round" points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline strokeLinecap="round" strokeLinejoin="round" points="17 6 23 6 23 12" /></svg> },
-    { title: "Efic. Separación", value: resumenEcomData ? fmtPct(resumenEcomData.kpis.eficSep) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><line strokeLinecap="round" strokeLinejoin="round" x1="18" y1="20" x2="18" y2="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="20" x2="12" y2="4" /><line strokeLinecap="round" strokeLinejoin="round" x1="6" y1="20" x2="6" y2="14" /></svg> },
-    { title: "Unidades Canceladas", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.unidadesCanceladas) : "—", theme: "red", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="15" y1="9" x2="9" y2="15" /><line strokeLinecap="round" strokeLinejoin="round" x1="9" y1="9" x2="15" y2="15" /></svg> }
+    { title: "Unidades Canceladas por Clientes", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.unidadesCanceladasPorClientes) : "—", theme: "green", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="15" y1="9" x2="9" y2="15" /><line strokeLinecap="round" strokeLinejoin="round" x1="9" y1="9" x2="15" y2="15" /></svg> },
+    { title: "Unidades Canceladas sin stock", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.unidadesCanceladasSinStock) : "—", theme: "purple", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><circle strokeLinecap="round" strokeLinejoin="round" cx="12" cy="12" r="10" /><line strokeLinecap="round" strokeLinejoin="round" x1="15" y1="9" x2="9" y2="15" /><line strokeLinecap="round" strokeLinejoin="round" x1="9" y1="9" x2="15" y2="15" /></svg> },
+    { title: "Cantidad de Pedidos", value: resumenEcomData ? fmtNum(resumenEcomData.kpis.cantidadPedidos) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> }
   ];
 
   const hoyISO = new Date().toISOString().slice(0, 10);
@@ -5636,9 +5638,9 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Separadas</th>
                         <th className="py-3 px-4 text-left">Pend. Picking</th>
                         <th className="py-3 px-4 text-left">Pend. Sep.</th>
-                        <th className="py-3 px-4 text-left">Efic. Pick.</th>
-                        <th className="py-3 px-4 text-left">Efic. Sep.</th>
-                        <th className="py-3 px-4 text-left">Unidades Canceladas</th>
+                        <th className="py-3 px-4 text-left">Unidades Canceladas por Clientes</th>
+                        <th className="py-3 px-4 text-left">Unidades Canceladas sin stock</th>
+                        <th className="py-3 px-4 text-left">Cantidad de Pedidos</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -5650,9 +5652,9 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left text-slate-600">{marca.sep}</td>
                           <td className="py-3 px-4 text-left font-semibold text-orange-500">{marca.pendPick}</td>
                           <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficPick}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.eficSep}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladas}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladasPorClientes}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladasSinStock}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.cantidadPedidos}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -5692,9 +5694,9 @@ export default function DashboardLayout() {
                             <th className="py-3 px-4 text-left">Separadas</th>
                             <th className="py-3 px-4 text-left">Pend. Picking</th>
                             <th className="py-3 px-4 text-left">Pend. Sep.</th>
-                            <th className="py-3 px-4 text-left">Efic. Pick.</th>
-                            <th className="py-3 px-4 text-left">Efic. Sep.</th>
-                            <th className="py-3 px-4 text-left">Unidades Canceladas</th>
+                            <th className="py-3 px-4 text-left">Unidades Canceladas por Clientes</th>
+                            <th className="py-3 px-4 text-left">Unidades Canceladas sin stock</th>
+                            <th className="py-3 px-4 text-left">Cantidad de Pedidos</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -5709,9 +5711,9 @@ export default function DashboardLayout() {
                               <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.sep)}</td>
                               <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(canal.pendPick)}</td>
                               <td className="py-3 px-4 text-left font-semibold text-red-500">{fmtNum(canal.pendSep)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficPick)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficSep)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladas)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladasPorClientes)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladasSinStock)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.cantidadPedidos)}</td>
                             </tr>
                           ))}
                         </tbody>

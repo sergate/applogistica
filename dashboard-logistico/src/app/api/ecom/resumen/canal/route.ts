@@ -4,6 +4,8 @@ import {
   fetchAllPedidosEcom,
   esContableEcomResumen,
   esFilaCanceladaEcom,
+  esCanceladaPorClienteEcom,
+  esCanceladaSinStockEcom,
   pickEfectivoResumenEcom,
   sepEfectivoResumenEcom,
   num,
@@ -35,45 +37,80 @@ export async function GET(request: NextRequest) {
   try {
     const rows = await fetchAllPedidosEcom();
     const marcaTrim = marca.trim();
-    let contables = rows.filter(
-      (r) => esContableEcomResumen(r, incluirTodos) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
-    );
-    if (desde) {
-      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+
+    const esDeLaMarca = (r: { seller: string | null }) => ((r.seller || "").trim() || "SIN SELLER") === marcaTrim;
+    const enRango = (r: { fecha_creacion: string | null }) => {
+      if (!r.fecha_creacion) return false;
+      const fecha = r.fecha_creacion.slice(0, 10);
+      if (desde && fecha < desde) return false;
+      if (hasta && fecha > hasta) return false;
+      return true;
+    };
+
+    let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos) && esDeLaMarca(r));
+    if (desde || hasta) {
+      contables = contables.filter(enRango);
     }
-    if (hasta) {
-      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) <= hasta : false));
+
+    // Igual que en Resumen: las 3 métricas de cancelados se calculan sobre
+    // TODAS las filas de la marca en el rango de fecha, no sobre "contables"
+    // (si no, "sin stock" siempre daría 0 con Demanda Total en "No").
+    let filasFecha = rows.filter(esDeLaMarca);
+    if (desde || hasta) {
+      filasFecha = filasFecha.filter(enRango);
     }
 
     const porCanal = new Map<
       string,
-      { uni: number; pick: number; sep: number; unidadesCanceladas: number }
+      { uni: number; pick: number; sep: number; pedidos: Set<string> }
+    >();
+    const porCanalCancelados = new Map<
+      string,
+      { unidadesCanceladas: number; canceladasPorClientes: number; canceladasSinStock: number }
     >();
 
     for (const r of contables) {
       const canal = canalDeOoll(r.ooll_asignado);
       if (!porCanal.has(canal)) {
-        porCanal.set(canal, { uni: 0, pick: 0, sep: 0, unidadesCanceladas: 0 });
+        porCanal.set(canal, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
       }
       const acc = porCanal.get(canal)!;
       acc.uni += num(r.uni);
       acc.pick += pickEfectivoResumenEcom(r);
       acc.sep += sepEfectivoResumenEcom(r);
+      acc.pedidos.add(r.pedido);
+    }
+
+    for (const r of filasFecha) {
+      const canal = canalDeOoll(r.ooll_asignado);
+      if (!porCanalCancelados.has(canal)) {
+        porCanalCancelados.set(canal, { unidadesCanceladas: 0, canceladasPorClientes: 0, canceladasSinStock: 0 });
+      }
+      const acc = porCanalCancelados.get(canal)!;
       if (esFilaCanceladaEcom(r)) acc.unidadesCanceladas += num(r.uni);
+      if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
+      if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni_sep);
     }
 
     const canales = Array.from(porCanal.entries())
-      .map(([name, acc]) => ({
-        name,
-        uni: acc.uni,
-        pick: acc.pick,
-        sep: acc.sep,
-        pendPick: acc.uni - acc.unidadesCanceladas - acc.pick,
-        pendSep: acc.uni - acc.unidadesCanceladas - acc.sep,
-        eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
-        eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
-        unidadesCanceladas: acc.unidadesCanceladas,
-      }))
+      .map(([name, acc]) => {
+        const cancelados = porCanalCancelados.get(name) ?? {
+          unidadesCanceladas: 0,
+          canceladasPorClientes: 0,
+          canceladasSinStock: 0,
+        };
+        return {
+          name,
+          uni: acc.uni,
+          pick: acc.pick,
+          sep: acc.sep,
+          pendPick: acc.uni - cancelados.unidadesCanceladas - acc.pick,
+          pendSep: acc.uni - cancelados.unidadesCanceladas - acc.sep,
+          unidadesCanceladasPorClientes: cancelados.canceladasPorClientes,
+          unidadesCanceladasSinStock: cancelados.canceladasSinStock,
+          cantidadPedidos: acc.pedidos.size,
+        };
+      })
       .sort((a, b) => b.uni - a.uni);
 
     return NextResponse.json({ success: true, marca: marcaTrim, canales });
