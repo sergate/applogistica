@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllPedidosEcom, esContableEcomResumen, esFilaCanceladaEcom, num, ultimaActualizacionEcom } from "@/lib/ecomHelpers";
+import {
+  fetchAllPedidosEcom,
+  esContableEcomResumen,
+  esFilaCanceladaEcom,
+  pickEfectivoResumenEcom,
+  sepEfectivoResumenEcom,
+  num,
+  ultimaActualizacionEcom,
+} from "@/lib/ecomHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,15 +30,30 @@ export async function GET(request: NextRequest) {
 
   try {
     const rows = await fetchAllPedidosEcom();
+
+    // "Unidades Canceladas" se calcula siempre sobre el mismo conjunto de
+    // filas (todas, solo acotadas por el rango de fecha) -- "Demanda Total"
+    // únicamente decide si OD_DESPACHADO/OD_CARGA_CAMION entran en el resto
+    // de los KPIs, no cambia qué cuenta como cancelado.
+    let filasParaCancelados = rows;
+    if (desde) {
+      filasParaCancelados = filasParaCancelados.filter((r) =>
+        r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false
+      );
+    }
+    const unidadesCanceladas = filasParaCancelados.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
+
     let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
     }
 
+    // Las filas canceladas/devueltas siguen sumando a "Total Unidades", pero
+    // sus unidades pickeadas/separadas no cuentan para el resto de los
+    // cálculos (KPIs, tabla por marca) -- solo para el total de unidades.
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
-    const totalPick = contables.reduce((acc, r) => acc + num(r.uni_pick), 0);
-    const totalSep = contables.reduce((acc, r) => acc + num(r.uni_sep), 0);
-    const unidadesCanceladas = contables.filter(esFilaCanceladaEcom).reduce((acc, r) => acc + num(r.uni), 0);
+    const totalPick = contables.reduce((acc, r) => acc + pickEfectivoResumenEcom(r), 0);
+    const totalSep = contables.reduce((acc, r) => acc + sepEfectivoResumenEcom(r), 0);
 
     const kpis = {
       totalUni,
@@ -46,19 +69,19 @@ export async function GET(request: NextRequest) {
     // Agrupado por marca (= columna "seller")
     const porMarca = new Map<
       string,
-      { uni: number; pick: number; sep: number; pedidos: Set<string> }
+      { uni: number; pick: number; sep: number; unidadesCanceladas: number }
     >();
 
     for (const r of contables) {
       const marca = (r.seller || "").trim() || "SIN SELLER";
       if (!porMarca.has(marca)) {
-        porMarca.set(marca, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
+        porMarca.set(marca, { uni: 0, pick: 0, sep: 0, unidadesCanceladas: 0 });
       }
       const acc = porMarca.get(marca)!;
       acc.uni += num(r.uni);
-      acc.pick += num(r.uni_pick);
-      acc.sep += num(r.uni_sep);
-      acc.pedidos.add(r.pedido);
+      acc.pick += pickEfectivoResumenEcom(r);
+      acc.sep += sepEfectivoResumenEcom(r);
+      if (esFilaCanceladaEcom(r)) acc.unidadesCanceladas += num(r.uni);
     }
 
     const marcas = Array.from(porMarca.entries())
@@ -71,7 +94,7 @@ export async function GET(request: NextRequest) {
         pendSep: acc.uni - acc.sep,
         eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
         eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
-        reg: acc.pedidos.size,
+        unidadesCanceladas: acc.unidadesCanceladas,
       }))
       .sort((a, b) => b.uni - a.uni);
 

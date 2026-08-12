@@ -1,6 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllPedidosEcom, esContableEcomResumen, num, canalDeOoll } from "@/lib/ecomHelpers";
+import {
+  fetchAllPedidosEcom,
+  esContableEcomResumen,
+  esFilaCanceladaEcom,
+  pickEfectivoResumenEcom,
+  sepEfectivoResumenEcom,
+  num,
+  canalDeOoll,
+} from "@/lib/ecomHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,19 +38,19 @@ export async function GET(request: NextRequest) {
 
     const porCanal = new Map<
       string,
-      { uni: number; pick: number; sep: number; pedidos: Set<string> }
+      { uni: number; pick: number; sep: number; unidadesCanceladas: number }
     >();
 
     for (const r of contables) {
       const canal = canalDeOoll(r.ooll_asignado);
       if (!porCanal.has(canal)) {
-        porCanal.set(canal, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
+        porCanal.set(canal, { uni: 0, pick: 0, sep: 0, unidadesCanceladas: 0 });
       }
       const acc = porCanal.get(canal)!;
       acc.uni += num(r.uni);
-      acc.pick += num(r.uni_pick);
-      acc.sep += num(r.uni_sep);
-      acc.pedidos.add(r.pedido);
+      acc.pick += pickEfectivoResumenEcom(r);
+      acc.sep += sepEfectivoResumenEcom(r);
+      if (esFilaCanceladaEcom(r)) acc.unidadesCanceladas += num(r.uni);
     }
 
     const canales = Array.from(porCanal.entries())
@@ -55,7 +63,7 @@ export async function GET(request: NextRequest) {
         pendSep: acc.uni - acc.sep,
         eficPick: acc.uni > 0 ? (acc.pick / acc.uni) * 100 : 0,
         eficSep: acc.uni > 0 ? (acc.sep / acc.uni) * 100 : 0,
-        reg: acc.pedidos.size,
+        unidadesCanceladas: acc.unidadesCanceladas,
       }))
       .sort((a, b) => b.uni - a.uni);
 

@@ -71,6 +71,32 @@ interface ResumenData {
   updatedAt: string | null;
 }
 
+// Igual que MarcaResumen/CanalResumen, pero con "Unidades Canceladas" en vez
+// de "Registros" (columna de la tabla Detalle por Marca / desglose por Canal).
+interface MarcaResumenEcom {
+  name: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  eficPick: number;
+  eficSep: number;
+  unidadesCanceladas: number;
+}
+
+interface CanalResumenEcom {
+  name: string;
+  uni: number;
+  pick: number;
+  sep: number;
+  pendPick: number;
+  pendSep: number;
+  eficPick: number;
+  eficSep: number;
+  unidadesCanceladas: number;
+}
+
 // Igual que ResumenData, pero la última tarjeta es "Unidades Canceladas" en
 // vez de "Total Registros" (no se puede reusar ResumenData: ese tipo también
 // lo usa el useTabData de Resumen No Ecom).
@@ -85,7 +111,7 @@ interface ResumenEcomData {
     eficSep: number;
     unidadesCanceladas: number;
   };
-  marcas: MarcaResumen[];
+  marcas: MarcaResumenEcom[];
   updatedAt: string | null;
 }
 
@@ -1898,10 +1924,10 @@ export default function DashboardLayout() {
     pendSep: fmtNum(m.pendSep),
     eficPick: fmtPct(m.eficPick),
     eficSep: fmtPct(m.eficSep),
-    reg: fmtNum(m.reg),
+    unidadesCanceladas: fmtNum(m.unidadesCanceladas),
   }));
 
-  const [canalRowsEcom, setCanalRowsEcom] = useState<CanalResumen[] | null>(null);
+  const [canalRowsEcom, setCanalRowsEcom] = useState<CanalResumenEcom[] | null>(null);
   const [canalLoadingEcom, setCanalLoadingEcom] = useState(false);
   const [canalErrorEcom, setCanalErrorEcom] = useState<string | null>(null);
 
@@ -5569,7 +5595,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Pend. Sep.</th>
                         <th className="py-3 px-4 text-left">Efic. Pick.</th>
                         <th className="py-3 px-4 text-left">Efic. Sep.</th>
-                        <th className="py-3 px-4 text-left">Registros</th>
+                        <th className="py-3 px-4 text-left">Unidades Canceladas</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -5583,7 +5609,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{marca.eficPick}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{marca.eficSep}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{marca.reg}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladas}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -5625,7 +5651,7 @@ export default function DashboardLayout() {
                             <th className="py-3 px-4 text-left">Pend. Sep.</th>
                             <th className="py-3 px-4 text-left">Efic. Pick.</th>
                             <th className="py-3 px-4 text-left">Efic. Sep.</th>
-                            <th className="py-3 px-4 text-left">Registros</th>
+                            <th className="py-3 px-4 text-left">Unidades Canceladas</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -5642,7 +5668,7 @@ export default function DashboardLayout() {
                               <td className="py-3 px-4 text-left font-semibold text-red-500">{fmtNum(canal.pendSep)}</td>
                               <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficPick)}</td>
                               <td className="py-3 px-4 text-left text-slate-600">{fmtPct(canal.eficSep)}</td>
-                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.reg)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladas)}</td>
                             </tr>
                           ))}
                         </tbody>

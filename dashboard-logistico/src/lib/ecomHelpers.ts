@@ -56,15 +56,26 @@ export function esFilaCanceladaEcom(row: PedidoEcomRow): boolean {
   return (row.cancelado || "").trim().toLowerCase() === "true";
 }
 
-/** "OOLL asignado" hace de Canal para Ecom -- se normaliza para que
- * variantes de mayúscula/minúscula (ej. "Intralog" / "INTRALOG") no cuenten
- * como canales distintos. */
+/** "OOLL asignado" hace de Canal para Ecom. Solo existen dos canales
+ * posibles: MELI o INTRALOG -- cualquier otro valor (variantes de
+ * mayúscula/minúscula, vacío, "ECOM", etc.) se considera INTRALOG. */
 export function canalDeOoll(ooll: string | null): string {
   const v = (ooll || "").trim().toUpperCase();
-  return v || "SIN CANAL";
+  return v === "MELI" ? "MELI" : "INTRALOG";
 }
 
 export const num = (v: number | null): number => Number(v) || 0;
+
+// Una fila cancelada/devuelta se sigue mostrando (aporta a "Unidades
+// Canceladas" y al total de Uni), pero sus unidades pickeadas/separadas NO
+// entran en el resto de los cálculos de Resumen (KPIs, tabla por marca,
+// desglose por canal) -- solo cuentan para el total de unidades.
+export function pickEfectivoResumenEcom(row: PedidoEcomRow): number {
+  return esFilaCanceladaEcom(row) ? 0 : num(row.uni_pick);
+}
+export function sepEfectivoResumenEcom(row: PedidoEcomRow): number {
+  return esFilaCanceladaEcom(row) ? 0 : num(row.uni_sep);
+}
 
 /** Devuelve el created_at más reciente entre todas las filas (o null si no hay filas). */
 export function ultimaActualizacionEcom(rows: PedidoEcomRow[]): string | null {
