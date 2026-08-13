@@ -35,11 +35,12 @@ export function esContableEcom(row: PedidoEcomRow): boolean {
 }
 
 // Solo para la pestaña Resumen: a diferencia de Por Fecha/Por Pedidos,
-// OD_CANCELADA y OD_RECIBIDO_DEV SÍ cuentan acá (hay una tarjeta dedicada a
-// mostrarlos, "Unidades Canceladas"), y el flag "Cancelado" tampoco excluye
-// -- solo quedan afuera los pedidos ya despachados o cargados al camión
-// (que ya no tienen pendiente real), salvo que "Demanda Total" esté en Sí.
-export const ESTADOS_EXCLUIDOS_ECOM_RESUMEN = ["OD_DESPACHADO", "OD_CARGA_CAMION"];
+// OD_CANCELADA SÍ cuenta acá (hay una tarjeta dedicada, "Unidades Canceladas
+// por Clientes"), y el flag "Cancelado" tampoco excluye -- solo quedan
+// afuera los pedidos ya despachados, cargados al camión o recibidos como
+// devolución (que ya no tienen pendiente real), salvo que "Demanda Total"
+// esté en Sí.
+export const ESTADOS_EXCLUIDOS_ECOM_RESUMEN = ["OD_DESPACHADO", "OD_CARGA_CAMION", "OD_RECIBIDO_DEV"];
 
 export function esContableEcomResumen(row: PedidoEcomRow, incluirTodos = false): boolean {
   if (incluirTodos) return true;
