@@ -46,22 +46,21 @@ export async function GET(request: NextRequest) {
       new Set(rows.map((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) : "SIN FECHA")))
     );
 
-    // Las 2 tarjetas de cancelados se calculan sobre TODAS las filas del
-    // rango de fecha, sin el filtro de "Demanda Total" -- si usáramos
-    // "contables", "Unidades Canceladas sin stock" siempre daría 0 en "No"
-    // (OD_CARGA_CAMION queda excluido de "contables" ahí).
-    const filasFecha = desde || hasta ? rows.filter(enRango) : rows;
-    const unidadesCanceladasPorClientes = filasFecha
-      .filter(esCanceladaPorClienteEcom)
-      .reduce((acc, r) => acc + num(r.uni), 0);
-    const unidadesCanceladasSinStock = filasFecha
-      .filter(esCanceladaSinStockEcom)
-      .reduce((acc, r) => acc + (num(r.uni) - num(r.uni_sep)), 0);
-
     let contables = rows.filter((r) => esContableEcomResumen(r, incluirTodos));
     if (desde || hasta) {
       contables = contables.filter(enRango);
     }
+
+    // Ambas tarjetas de cancelados se calculan sobre "contables" -- respetan
+    // "Demanda Total" igual que el resto: OD_CARGA_CAMION (base de "sin
+    // stock") queda afuera de "contables" en "No", así que esa tarjeta da 0
+    // ahí y solo muestra datos con "Demanda Total: Sí".
+    const unidadesCanceladasPorClientes = contables
+      .filter(esCanceladaPorClienteEcom)
+      .reduce((acc, r) => acc + num(r.uni), 0);
+    const unidadesCanceladasSinStock = contables
+      .filter(esCanceladaSinStockEcom)
+      .reduce((acc, r) => acc + (num(r.uni) - num(r.uni_sep)), 0);
 
     // Pickeadas/Separadas: suma cruda, sin excluir nada (Uni.Pick/Uni.Sep
     // de "contables" tal cual).
@@ -70,69 +69,61 @@ export async function GET(request: NextRequest) {
     const totalSep = contables.reduce((acc, r) => acc + num(r.uni_sep), 0);
     const cantidadPedidos = new Set(contables.map((r) => r.pedido)).size;
 
-    // Pendiente = total - Unidades Canceladas por Clientes - lo ya hecho
-    // (solo OD_CANCELADA se resta acá; OD_RECIBIDO_DEV y Cancelado=true no
-    // afectan Pendiente ni Pickeadas/Separadas). Nunca puede dar negativo.
+    // Verificación: Total = Pickeadas + PendPick + CanceladasPorClientes, y
+    // Total = Separadas + PendSep + CanceladasPorClientes + CanceladasSinStock.
+    // Pendiente Picking solo resta lo cancelado por el cliente; Pendiente
+    // Separación además resta "sin stock" (que se define por pendiente de
+    // separación). Nunca puede dar negativo.
     const kpis = {
       totalUni,
       totalPick,
       totalSep,
       pendPick: Math.max(0, totalUni - unidadesCanceladasPorClientes - totalPick),
-      pendSep: Math.max(0, totalUni - unidadesCanceladasPorClientes - totalSep),
+      pendSep: Math.max(0, totalUni - unidadesCanceladasPorClientes - unidadesCanceladasSinStock - totalSep),
       unidadesCanceladasPorClientes,
       unidadesCanceladasSinStock,
       cantidadPedidos,
     };
 
-    // Agrupado por marca (= columna "seller") -- uni/pick/sep/pedidos sobre
-    // "contables" (respeta "Demanda Total"); las 2 tarjetas de cancelados
-    // sobre "filasFecha".
+    // Agrupado por marca (= columna "seller"), todo sobre "contables".
     const porMarca = new Map<
       string,
-      { uni: number; pick: number; sep: number; pedidos: Set<string> }
-    >();
-    const porMarcaCancelados = new Map<
-      string,
-      { canceladasPorClientes: number; canceladasSinStock: number }
+      {
+        uni: number;
+        pick: number;
+        sep: number;
+        pedidos: Set<string>;
+        canceladasPorClientes: number;
+        canceladasSinStock: number;
+      }
     >();
 
     for (const r of contables) {
       const marca = (r.seller || "").trim() || "SIN SELLER";
       if (!porMarca.has(marca)) {
-        porMarca.set(marca, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
+        porMarca.set(marca, { uni: 0, pick: 0, sep: 0, pedidos: new Set(), canceladasPorClientes: 0, canceladasSinStock: 0 });
       }
       const acc = porMarca.get(marca)!;
       acc.uni += num(r.uni);
       acc.pick += num(r.uni_pick);
       acc.sep += num(r.uni_sep);
       acc.pedidos.add(r.pedido);
-    }
-
-    for (const r of filasFecha) {
-      const marca = (r.seller || "").trim() || "SIN SELLER";
-      if (!porMarcaCancelados.has(marca)) {
-        porMarcaCancelados.set(marca, { canceladasPorClientes: 0, canceladasSinStock: 0 });
-      }
-      const acc = porMarcaCancelados.get(marca)!;
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
       if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni) - num(r.uni_sep);
     }
 
     const marcas = Array.from(porMarca.entries())
-      .map(([name, acc]) => {
-        const cancelados = porMarcaCancelados.get(name) ?? { canceladasPorClientes: 0, canceladasSinStock: 0 };
-        return {
-          name,
-          uni: acc.uni,
-          pick: acc.pick,
-          sep: acc.sep,
-          pendPick: Math.max(0, acc.uni - cancelados.canceladasPorClientes - acc.pick),
-          pendSep: Math.max(0, acc.uni - cancelados.canceladasPorClientes - acc.sep),
-          unidadesCanceladasPorClientes: cancelados.canceladasPorClientes,
-          unidadesCanceladasSinStock: cancelados.canceladasSinStock,
-          cantidadPedidos: acc.pedidos.size,
-        };
-      })
+      .map(([name, acc]) => ({
+        name,
+        uni: acc.uni,
+        pick: acc.pick,
+        sep: acc.sep,
+        pendPick: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.pick),
+        pendSep: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.canceladasSinStock - acc.sep),
+        unidadesCanceladasPorClientes: acc.canceladasPorClientes,
+        unidadesCanceladasSinStock: acc.canceladasSinStock,
+        cantidadPedidos: acc.pedidos.size,
+      }))
       .sort((a, b) => b.uni - a.uni);
 
     return NextResponse.json({ success: true, kpis, marcas, fechasDisponibles, updatedAt: ultimaActualizacionEcom(rows) });
