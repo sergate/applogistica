@@ -5,7 +5,6 @@ import {
   esContableEcomResumen,
   esCanceladaPorClienteEcom,
   esCanceladaSinStockEcom,
-  debeExcluirseDePickSepPendEcom,
   pickEfectivoResumenEcom,
   sepEfectivoResumenEcom,
   num,
@@ -52,65 +51,44 @@ export async function GET(request: NextRequest) {
       contables = contables.filter(enRango);
     }
 
-    // Igual que en Resumen: las 3 métricas de cancelados se calculan sobre
-    // TODAS las filas de la marca en el rango de fecha, no sobre "contables"
-    // (si no, "sin stock" siempre daría 0 con Demanda Total en "No").
-    let filasFecha = rows.filter(esDeLaMarca);
-    if (desde || hasta) {
-      filasFecha = filasFecha.filter(enRango);
-    }
-
     const porCanal = new Map<
       string,
-      { uni: number; pick: number; sep: number; pedidos: Set<string> }
-    >();
-    const porCanalCancelados = new Map<
-      string,
-      { unidadesCanceladas: number; canceladasPorClientes: number; canceladasSinStock: number }
+      {
+        uni: number;
+        pick: number;
+        sep: number;
+        pedidos: Set<string>;
+        canceladasPorClientes: number;
+        canceladasSinStock: number;
+      }
     >();
 
     for (const r of contables) {
       const canal = canalDeOoll(r.ooll_asignado);
       if (!porCanal.has(canal)) {
-        porCanal.set(canal, { uni: 0, pick: 0, sep: 0, pedidos: new Set() });
+        porCanal.set(canal, { uni: 0, pick: 0, sep: 0, pedidos: new Set(), canceladasPorClientes: 0, canceladasSinStock: 0 });
       }
       const acc = porCanal.get(canal)!;
       acc.uni += num(r.uni);
       acc.pick += pickEfectivoResumenEcom(r);
       acc.sep += sepEfectivoResumenEcom(r);
       acc.pedidos.add(r.pedido);
-    }
-
-    for (const r of filasFecha) {
-      const canal = canalDeOoll(r.ooll_asignado);
-      if (!porCanalCancelados.has(canal)) {
-        porCanalCancelados.set(canal, { unidadesCanceladas: 0, canceladasPorClientes: 0, canceladasSinStock: 0 });
-      }
-      const acc = porCanalCancelados.get(canal)!;
-      if (debeExcluirseDePickSepPendEcom(r)) acc.unidadesCanceladas += num(r.uni);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
       if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni) - num(r.uni_sep);
     }
 
     const canales = Array.from(porCanal.entries())
-      .map(([name, acc]) => {
-        const cancelados = porCanalCancelados.get(name) ?? {
-          unidadesCanceladas: 0,
-          canceladasPorClientes: 0,
-          canceladasSinStock: 0,
-        };
-        return {
-          name,
-          uni: acc.uni,
-          pick: acc.pick,
-          sep: acc.sep,
-          pendPick: Math.max(0, acc.uni - cancelados.unidadesCanceladas - acc.pick),
-          pendSep: Math.max(0, acc.uni - cancelados.unidadesCanceladas - acc.sep),
-          unidadesCanceladasPorClientes: cancelados.canceladasPorClientes,
-          unidadesCanceladasSinStock: cancelados.canceladasSinStock,
-          cantidadPedidos: acc.pedidos.size,
-        };
-      })
+      .map(([name, acc]) => ({
+        name,
+        uni: acc.uni,
+        pick: acc.pick,
+        sep: acc.sep,
+        pendPick: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.pick),
+        pendSep: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.canceladasSinStock - acc.sep),
+        unidadesCanceladasPorClientes: acc.canceladasPorClientes,
+        unidadesCanceladasSinStock: acc.canceladasSinStock,
+        cantidadPedidos: acc.pedidos.size,
+      }))
       .sort((a, b) => b.uni - a.uni);
 
     return NextResponse.json({ success: true, marca: marcaTrim, canales });
