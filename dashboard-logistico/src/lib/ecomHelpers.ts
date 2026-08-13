@@ -73,6 +73,17 @@ export function canalDeOoll(ooll: string | null): string {
 
 export const num = (v: number | null): number => Number(v) || 0;
 
+// Las unidades de un pedido OD_CANCELADA ya se cuentan por completo en
+// "Unidades Canceladas por Clientes" -- si además sumaran su Uni.Pick/Uni.Sep
+// a Pickeadas/Separadas, esas unidades quedarían contadas dos veces (rompe
+// Total = Pickeadas + Pendiente Picking + Canceladas por Clientes).
+export function pickEfectivoResumenEcom(row: PedidoEcomRow): number {
+  return esCanceladaPorClienteEcom(row) ? 0 : num(row.uni_pick);
+}
+export function sepEfectivoResumenEcom(row: PedidoEcomRow): number {
+  return esCanceladaPorClienteEcom(row) ? 0 : num(row.uni_sep);
+}
+
 /** Devuelve el created_at más reciente entre todas las filas (o null si no hay filas). */
 export function ultimaActualizacionEcom(rows: PedidoEcomRow[]): string | null {
   let max: string | null = null;

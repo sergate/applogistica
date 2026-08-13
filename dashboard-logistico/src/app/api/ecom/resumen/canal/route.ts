@@ -5,6 +5,8 @@ import {
   esContableEcomResumen,
   esCanceladaPorClienteEcom,
   esCanceladaSinStockEcom,
+  pickEfectivoResumenEcom,
+  sepEfectivoResumenEcom,
   num,
   canalDeOoll,
 } from "@/lib/ecomHelpers";
@@ -68,8 +70,8 @@ export async function GET(request: NextRequest) {
       }
       const acc = porCanal.get(canal)!;
       acc.uni += num(r.uni);
-      acc.pick += num(r.uni_pick);
-      acc.sep += num(r.uni_sep);
+      acc.pick += pickEfectivoResumenEcom(r);
+      acc.sep += sepEfectivoResumenEcom(r);
       acc.pedidos.add(r.pedido);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
       if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni) - num(r.uni_sep);

@@ -5,6 +5,8 @@ import {
   esContableEcomResumen,
   esCanceladaPorClienteEcom,
   esCanceladaSinStockEcom,
+  pickEfectivoResumenEcom,
+  sepEfectivoResumenEcom,
   num,
   ultimaActualizacionEcom,
 } from "@/lib/ecomHelpers";
@@ -62,11 +64,12 @@ export async function GET(request: NextRequest) {
       .filter(esCanceladaSinStockEcom)
       .reduce((acc, r) => acc + (num(r.uni) - num(r.uni_sep)), 0);
 
-    // Pickeadas/Separadas: suma cruda, sin excluir nada (Uni.Pick/Uni.Sep
-    // de "contables" tal cual).
+    // Pickeadas/Separadas: suma cruda de Uni.Pick/Uni.Sep, excepto las
+    // filas OD_CANCELADA (ya están 100% contadas en "Unidades Canceladas
+    // por Clientes" -- sumarlas de nuevo acá las duplicaría).
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
-    const totalPick = contables.reduce((acc, r) => acc + num(r.uni_pick), 0);
-    const totalSep = contables.reduce((acc, r) => acc + num(r.uni_sep), 0);
+    const totalPick = contables.reduce((acc, r) => acc + pickEfectivoResumenEcom(r), 0);
+    const totalSep = contables.reduce((acc, r) => acc + sepEfectivoResumenEcom(r), 0);
     const cantidadPedidos = new Set(contables.map((r) => r.pedido)).size;
 
     // Verificación: Total = Pickeadas + PendPick + CanceladasPorClientes, y
@@ -105,8 +108,8 @@ export async function GET(request: NextRequest) {
       }
       const acc = porMarca.get(marca)!;
       acc.uni += num(r.uni);
-      acc.pick += num(r.uni_pick);
-      acc.sep += num(r.uni_sep);
+      acc.pick += pickEfectivoResumenEcom(r);
+      acc.sep += sepEfectivoResumenEcom(r);
       acc.pedidos.add(r.pedido);
       if (esCanceladaPorClienteEcom(r)) acc.canceladasPorClientes += num(r.uni);
       if (esCanceladaSinStockEcom(r)) acc.canceladasSinStock += num(r.uni) - num(r.uni_sep);
