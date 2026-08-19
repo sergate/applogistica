@@ -1639,6 +1639,7 @@ export default function DashboardLayout() {
     fecha: string;
     tipoProceso: string;
     cantidad: number;
+    usuariosUnicos: number;
   }
 
   const {
@@ -6285,7 +6286,7 @@ export default function DashboardLayout() {
               )}
               {productividadResumenLoading && !productividadResumen && (
                 <div className="mb-4 rounded-lg border border-slate-200 overflow-hidden">
-                  <SkeletonTable rows={6} columns={4} />
+                  <SkeletonTable rows={6} columns={5} />
                 </div>
               )}
 
@@ -6359,6 +6360,7 @@ export default function DashboardLayout() {
                       <th className="py-4 px-4 text-left">Fecha</th>
                       <th className="py-4 px-4 text-left">Tipo Proceso</th>
                       <th className="py-4 px-4 text-left">Cantidad</th>
+                      <th className="py-4 px-4 text-left">Usuarios Únicos</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -6367,6 +6369,7 @@ export default function DashboardLayout() {
                         <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
                         <td className="py-4 px-4 text-left font-semibold text-slate-900">{row.tipoProceso}</td>
                         <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.cantidad)}</td>
+                        <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.usuariosUnicos)}</td>
                       </tr>
                     ))}
                   </tbody>

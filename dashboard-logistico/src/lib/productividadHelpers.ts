@@ -7,6 +7,7 @@ export interface ProductividadRow {
   fecha: string;
   tipo_proceso: string | null;
   cantidad: number | null;
+  usuario: string | null;
   created_at: string | null;
 }
 
@@ -32,7 +33,7 @@ export async function fetchAllProductividad(): Promise<ProductividadRow[]> {
     while (true) {
       const { data, error } = await supabaseAdmin
         .from("productividad")
-        .select("fecha, tipo_proceso, cantidad, created_at")
+        .select("fecha, tipo_proceso, cantidad, usuario, created_at")
         .range(from, from + PAGE_SIZE - 1);
 
       if (error) {
