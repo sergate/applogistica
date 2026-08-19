@@ -31,7 +31,10 @@ export async function GET() {
   try {
     const rows = await fetchAllProductividad();
 
-    const grupos = new Map<string, { fecha: string; tipoProceso: string; cantidad: number }>();
+    const grupos = new Map<
+      string,
+      { fecha: string; tipoProceso: string; cantidad: number; usuarios: Set<string> }
+    >();
     let updatedAt: string | null = null;
 
     for (const r of rows) {
@@ -40,19 +43,24 @@ export async function GET() {
 
       const key = `${r.fecha}__${tipoMapeado}`;
       if (!grupos.has(key)) {
-        grupos.set(key, { fecha: r.fecha, tipoProceso: tipoMapeado, cantidad: 0 });
+        grupos.set(key, { fecha: r.fecha, tipoProceso: tipoMapeado, cantidad: 0, usuarios: new Set() });
       }
-      grupos.get(key)!.cantidad += num(r.cantidad);
+      const g = grupos.get(key)!;
+      g.cantidad += num(r.cantidad);
+      const usuario = (r.usuario || "").trim();
+      if (usuario) g.usuarios.add(usuario.toUpperCase());
 
       if (r.created_at && (!updatedAt || r.created_at > updatedAt)) updatedAt = r.created_at;
     }
 
-    const filas = Array.from(grupos.values()).sort((a, b) => {
-      if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1; // fecha más reciente primero
-      const rankA = ORDEN_PROCESOS.indexOf(a.tipoProceso);
-      const rankB = ORDEN_PROCESOS.indexOf(b.tipoProceso);
-      return (rankA === -1 ? 100 : rankA) - (rankB === -1 ? 100 : rankB);
-    });
+    const filas = Array.from(grupos.values())
+      .map((g) => ({ fecha: g.fecha, tipoProceso: g.tipoProceso, cantidad: g.cantidad, usuariosUnicos: g.usuarios.size }))
+      .sort((a, b) => {
+        if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1; // fecha más reciente primero
+        const rankA = ORDEN_PROCESOS.indexOf(a.tipoProceso);
+        const rankB = ORDEN_PROCESOS.indexOf(b.tipoProceso);
+        return (rankA === -1 ? 100 : rankA) - (rankB === -1 ? 100 : rankB);
+      });
 
     return NextResponse.json({ success: true, filas, updatedAt });
   } catch (err) {
