@@ -314,7 +314,10 @@ export default function DashboardLayout() {
   const inputGruposRef = useRef<HTMLInputElement>(null);
   const inputTiendasRef = useRef<HTMLInputElement>(null);
 
-  const todosLosArchivosListos = !!archivoClientes && !!archivoGrupos && !!archivoTiendas;
+  // Clientes es opcional: ya queda guardado en su propia tabla (upsert) de
+  // una carga anterior, así que no hace falta volver a subirlo cada vez que
+  // se actualizan Grupos/Tiendas -- esos dos sí son obligatorios.
+  const todosLosArchivosListos = !!archivoGrupos && !!archivoTiendas;
 
   const CHUNK_SIZE = 500; // registros por request, para no chocar con el límite de 4.5MB de Vercel
 
@@ -370,7 +373,7 @@ export default function DashboardLayout() {
     setResultadosImport(null);
 
     const archivos: { key: "clientes" | "grupos" | "tiendas"; file: File; tipo: "excel" | "csv" }[] = [
-      { key: "clientes", file: archivoClientes as File, tipo: "excel" },
+      ...(archivoClientes ? [{ key: "clientes" as const, file: archivoClientes, tipo: "excel" as const }] : []),
       { key: "grupos", file: archivoGrupos as File, tipo: "csv" },
       { key: "tiendas", file: archivoTiendas as File, tipo: "csv" },
     ];
@@ -4832,14 +4835,15 @@ export default function DashboardLayout() {
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
               <h2 className="text-xl font-bold text-slate-800 mb-1">Importar Maestros</h2>
               <p className="text-sm text-slate-500 mb-6">
-                Subí los 3 archivos de maestros. Al procesar, se cargan directamente en Supabase.
+                Grupos y Tiendas son obligatorios en cada carga. Clientes es opcional -- una vez importado
+                queda guardado en su propia tabla, no hace falta volver a subirlo para actualizar Grupos/Tiendas.
               </p>
 
               <div className="space-y-4">
                 {/* --- CLIENTES (Excel) --- */}
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
                   <div>
-                    <p className="font-semibold text-slate-800">Clientes</p>
+                    <p className="font-semibold text-slate-800">Clientes <span className="font-normal text-slate-400">(opcional)</span></p>
                     <p className="text-xs text-slate-500">Formato Excel (.xlsx, .xls)</p>
                     {archivoClientes && (
                       <p className="text-xs text-emerald-600 font-medium mt-1">{archivoClientes.name}</p>
