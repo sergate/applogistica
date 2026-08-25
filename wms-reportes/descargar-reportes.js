@@ -337,7 +337,7 @@ async function chequearSesion(page) {
       "Parece que la sesión no está activa y no se pudo reloguear solo (los campos de usuario/contraseña no estaban " +
         "autocompletados por Chrome, o el login no funcionó). " +
         `Guardé una captura en ${captura} para revisar. ` +
-        'Corré "set LOGIN_MANUAL=1" y después "node descargar-reportes.js" en tu terminal para volver a iniciar sesión a mano.'
+        'Corré "node agente-local.js --login" en tu terminal para volver a iniciar sesión a mano (WMS + Tablero).'
     );
   }
 }

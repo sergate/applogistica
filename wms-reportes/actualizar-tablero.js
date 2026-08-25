@@ -129,7 +129,7 @@ async function chequearSesion(page) {
     throw new Error(
       "Parece que la sesión del tablero no está activa y no se pudo reloguear solo. " +
         `Guardé una captura en ${captura}. ` +
-        'Corré "set LOGIN_MANUAL=1" y después "node actualizar-tablero.js" para iniciar sesión a mano.'
+        'Corré "node agente-local.js --login" en tu terminal para volver a iniciar sesión a mano (WMS + Tablero).'
     );
   }
 }
