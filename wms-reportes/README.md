@@ -1,5 +1,10 @@
 # Descarga automática de reportes WMS
 
+> **¿Solo querés usar el botón "Actualizar esta sección (WMS)" del Tablero?**
+> Seguí [INSTALACION-AGENTE.md](./INSTALACION-AGENTE.md) en vez de esto --
+> este README es para uso manual por consola (descargar/subir sin el botón
+> de la web).
+
 Script que entra al WMS (wms-cheeky.azurewebsites.net), recorre una lista de
 reportes y descarga cada uno en CSV, esperando a que termine cada descarga
 antes de pasar al siguiente.
