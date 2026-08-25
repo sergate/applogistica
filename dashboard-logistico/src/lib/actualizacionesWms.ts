@@ -43,3 +43,28 @@ export async function usuarioDesdeTokenAgente(
 export function esErrorAuth(v: { userId: string } | { error: string; status: number }): v is { error: string; status: number } {
   return "error" in v;
 }
+
+// Permiso (subseccion_key de src/lib/secciones.ts) que habilita el botón
+// "Actualizar esta sección (WMS)" de cada sección -- mismo esquema de
+// perfiles/perfil_permisos que el resto de la app.
+const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
+  no_ecom: "NOECOM-ActualizarWMS",
+  ecom: "ECOM-ActualizarWMS",
+  carga_inicial: "CI-ActualizarWMS",
+  remanentes: "REM-ActualizarWMS",
+};
+
+/** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */
+export async function tienePermisoSeccion(userId: string, seccion: SeccionActualizacion): Promise<boolean> {
+  const { data: usuario } = await supabaseAdmin.from("usuarios").select("perfil_id").eq("id", userId).single();
+  if (!usuario?.perfil_id) return false;
+
+  const { data: permiso } = await supabaseAdmin
+    .from("perfil_permisos")
+    .select("id")
+    .eq("perfil_id", usuario.perfil_id)
+    .eq("subseccion_key", PERMISO_POR_SECCION[seccion])
+    .maybeSingle();
+
+  return !!permiso;
+}

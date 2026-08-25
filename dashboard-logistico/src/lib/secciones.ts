@@ -18,11 +18,13 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     nombre: "Status de Preparación",
     subsecciones: [
       { key: "Importar datos", label: "Importar Datos (No Ecom)" },
+      { key: "NOECOM-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos No Ecom)" },
       { key: "Resumen", label: "Resumen (No Ecom)" },
       { key: "Por fecha", label: "Por Fecha (No Ecom)" },
       { key: "Por pedidos", label: "Por Pedidos (No Ecom)" },
       { key: "REMA Manual", label: "Pedidos REMA Manual (No Ecom)" },
       { key: "ECOM-Importar", label: "Importar Datos (Ecom)" },
+      { key: "ECOM-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos Ecom)" },
       { key: "ECOM-Resumen", label: "Resumen (Ecom)" },
       { key: "ECOM-PorFecha", label: "Por Fecha (Ecom)" },
       { key: "ECOM-PorPedidos", label: "Por Pedidos (Ecom)" },
@@ -32,6 +34,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     nombre: "Status Carga Inicial",
     subsecciones: [
       { key: "CI-Importar", label: "Importar Datos" },
+      { key: "CI-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos)" },
       { key: "CI-Resumen", label: "Resumen" },
       { key: "CI-Avance", label: "Avance Plan" },
       { key: "CI-Carga", label: "Carga Datos" },
@@ -42,6 +45,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     nombre: "Status Remanentes",
     subsecciones: [
       { key: "REM-Importar", label: "Importar Datos" },
+      { key: "REM-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos)" },
       { key: "REM-Resumen", label: "Resumen" },
       { key: "REM-Avance", label: "Avance Plan" },
       { key: "REM-Carga", label: "Carga Datos" },

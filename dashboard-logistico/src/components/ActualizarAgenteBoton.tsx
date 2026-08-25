@@ -8,6 +8,8 @@ interface PedidoEstado {
   id: number;
   estado: "pendiente" | "corriendo" | "ok" | "error";
   mensaje: string | null;
+  progreso: number | null;
+  paso: string | null;
   created_at: string;
 }
 
@@ -87,7 +89,14 @@ export default function ActualizarAgenteBoton({
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo crear el pedido.");
 
       inicioEsperaRef.current = Date.now();
-      setPedido({ id: data.id, estado: data.estado, mensaje: null, created_at: new Date().toISOString() });
+      setPedido({
+        id: data.id,
+        estado: data.estado,
+        mensaje: null,
+        progreso: 0,
+        paso: null,
+        created_at: new Date().toISOString(),
+      });
 
       detenerPolling();
       intervaloRef.current = setInterval(consultarEstado, INTERVALO_POLLING_MS);
@@ -119,12 +128,23 @@ export default function ActualizarAgenteBoton({
           : "Actualizar esta sección (WMS)"}
       </button>
 
-      {corriendo && (
-        <p className="text-xs text-slate-500 mt-2">
-          {pedido?.estado === "corriendo"
-            ? "Tu PC está bajando los reportes del WMS y subiéndolos acá. Puede tardar varios minutos."
-            : "Esperando que tu Agente Local tome el pedido..."}
-        </p>
+      {pedido?.estado === "corriendo" && (
+        <div className="mt-2 max-w-xs">
+          <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+            <span>{pedido.paso || "Procesando..."}</span>
+            <span className="font-semibold text-slate-700">{pedido.progreso ?? 0}%</span>
+          </div>
+          <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+            <div
+              className="h-full bg-emerald-600 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${pedido.progreso ?? 0}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {pedido?.estado === "pendiente" && (
+        <p className="text-xs text-slate-500 mt-2">Esperando que tu Agente Local tome el pedido...</p>
       )}
 
       {avisoSinAgente && (

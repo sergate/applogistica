@@ -103,20 +103,42 @@ async function modoLogin() {
   }
 }
 
-// Baja los reportes que necesita la sección y los sube al Tablero. Devuelve
-// la lista de archivos descargados (para poder borrarlos después si salió
-// todo bien).
-async function correrPedido(pedido, paginas) {
+// Nombres legibles para el texto de progreso que ve el usuario.
+const NOMBRE_REPORTE = {
+  grupo: "Pedidos por grupo",
+  tienda: "Pedidos por tienda",
+  listado_ecom: "Listado de pedidos Ecom",
+  ci_chk: "Carga Inicial CHK",
+  ci_awa: "Carga Inicial AWA",
+  ci_cqq: "Carga Inicial CQQ",
+  ci_rema: "Reportes REMA (puede tardar varios minutos)",
+};
+
+// Baja los reportes que necesita la sección y los sube al Tablero, avisando
+// el progreso real (paso a paso) a medida que avanza. Devuelve la lista de
+// archivos descargados (para poder borrarlos después si salió todo bien).
+async function correrPedido(config, pedido, paginas) {
   const { paginaWms, paginaTablero } = paginas;
   const seccion = pedido.seccion;
   const idsReportes = REPORTES_POR_SECCION[seccion];
   if (!idsReportes) throw new Error(`Sección desconocida en el pedido: "${seccion}"`);
 
+  const totalPasos = idsReportes.length + 1; // + 1 por la subida al final
+  let pasosHechos = 0;
+
   const manifiesto = {};
   for (const idReporte of idsReportes) {
+    await avisarProgreso(
+      config.token,
+      pedido.id,
+      Math.round((pasosHechos / totalPasos) * 100),
+      `Descargando: ${NOMBRE_REPORTE[idReporte] || idReporte}...`
+    );
     manifiesto[idReporte] = await descargador.descargarUnReporte(paginaWms, idReporte);
+    pasosHechos++;
   }
 
+  await avisarProgreso(config.token, pedido.id, Math.round((pasosHechos / totalPasos) * 100), "Subiendo al Tablero...");
   await subidor.subirUnaSeccion(paginaTablero, seccion, manifiesto);
 
   return Object.values(manifiesto).flat();
@@ -130,6 +152,16 @@ function borrarArchivos(rutas) {
       if (err) console.error(`  (no pude borrar ${ruta}: ${err.message})`);
     });
   }
+}
+
+async function avisarProgreso(token, id, progreso, paso) {
+  await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/progreso`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ id, progreso, paso }),
+  }).catch((err) => {
+    console.error("No pude avisar el progreso al Tablero:", err.message);
+  });
 }
 
 async function avisarResultado(token, id, exito, mensaje) {
@@ -160,7 +192,7 @@ async function atenderPedido(config, pedido) {
   console.log(`[${new Date().toLocaleTimeString()}] Pedido #${pedido.id} (${pedido.seccion}) -- corriendo...`);
   const contextos = await abrirContextos({ headless: true });
   try {
-    const archivos = await correrPedido(pedido, contextos);
+    const archivos = await correrPedido(config, pedido, contextos);
     await avisarResultado(config.token, pedido.id, true, "OK");
     borrarArchivos(archivos);
     console.log(`  -> #${pedido.id} listo.`);

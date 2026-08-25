@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
-import { esErrorAuth, esSeccionValida, usuarioDesdeSesion } from "@/lib/actualizacionesWms";
+import { esErrorAuth, esSeccionValida, tienePermisoSeccion, usuarioDesdeSesion } from "@/lib/actualizacionesWms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +26,13 @@ export async function POST(request: NextRequest) {
     const seccion = body?.seccion;
     if (!esSeccionValida(seccion)) {
       return NextResponse.json({ success: false, error: "Sección inválida." }, { status: 400 });
+    }
+
+    if (!(await tienePermisoSeccion(auth.userId, seccion))) {
+      return NextResponse.json(
+        { success: false, error: "No tenés permiso para actualizar esta sección." },
+        { status: 403 }
+      );
     }
 
     const { data: existente } = await supabaseAdmin
