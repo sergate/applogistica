@@ -7,15 +7,26 @@ echo   Instalador del Agente Local - Tablero WMS
 echo ================================================
 echo.
 
-REM --- 1. Node.js ---
+REM --- 1. Node.js (se instala solo si falta) ---
 node -v >nul 2>&1
 if errorlevel 1 (
-  echo ERROR: no encontre Node.js instalado en esta PC.
-  echo Instalalo desde https://nodejs.org/ ^(version LTS, opciones por defecto^)
-  echo y volve a correr este instalador.
+  echo Node.js no esta instalado. Bajandolo e instalandolo automaticamente...
+  echo ^(esto puede pedirte permisos de administrador^)
   echo.
+  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0instalar-node.ps1"
+  if errorlevel 1 (
+    echo.
+    echo ERROR instalando Node.js automaticamente.
+    echo Instalalo a mano desde https://nodejs.org/ ^(version LTS^) y volve a
+    echo correr este instalador.
+    pause
+    exit /b 1
+  )
+  echo.
+  echo Node.js se instalo correctamente. Cerra esta ventana y volve a correr
+  echo instalar-agente.bat para que la terminal reconozca el cambio.
   pause
-  exit /b 1
+  exit /b 0
 )
 echo [OK] Node.js encontrado.
 
