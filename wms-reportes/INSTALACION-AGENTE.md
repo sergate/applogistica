@@ -88,39 +88,73 @@ logueadas, volvé a la consola y apretá **Enter**.
 
 Esto se hace **una sola vez** — las sesiones quedan guardadas en esa PC.
 
-## Paso 6: Dejar el Agente corriendo
+## Paso 6: Programar que el Agente se fije solo cada 1-2 minutos
 
-Doble clic en **`agente-local.bat`** (está en la misma carpeta). Se abre una
-ventanita de consola que dice "Agente Local corriendo" — dejala abierta (se
-puede minimizar, pero no cerrar). Mientras esté abierta, el botón
-"Actualizar esta sección (WMS)" te va a funcionar en el Tablero.
+En vez de dejar una ventana abierta (que alguien podría cerrar sin querer),
+el Agente queda invisible: Windows lo despierta cada 1-2 minutos, se fija si
+hay algo para hacer, y si no hay nada se cierra al toque. Solo tarda unos
+minutos configurarlo, una sola vez:
 
-### Opcional: que arranque solo con Windows
+1. Apretá `Win + R`, escribí `taskschd.msc` y Enter (se abre el **Programador
+   de tareas** de Windows).
+2. En el panel de la derecha, click en **"Crear tarea básica..."**.
+3. **Nombre**: `Agente WMS`. Siguiente.
+4. **Desencadenador**: elegí "Diariamente". Siguiente. Dejá la fecha/hora que
+   proponga. Siguiente.
+5. **Acción**: "Iniciar un programa". Siguiente.
+6. En **"Programa o script"** poné:
+   ```
+   wscript.exe
+   ```
+   En **"Agregar argumentos"** poné la ruta completa al archivo `.vbs`, entre
+   comillas, por ejemplo:
+   ```
+   "C:\Agente-WMS\wms-reportes\agente-once-oculto.vbs"
+   ```
+   Siguiente, y **Finalizar**.
+7. Ahora hay que hacer que se repita: buscá la tarea "Agente WMS" en la lista
+   del Programador, click derecho → **Propiedades**.
+   - Pestaña **Desencadenadores** → seleccioná el que creaste → **Editar**.
+   - Marcá **"Repetir la tarea cada:"** y elegí **1 minuto**, con duración
+     **"Indefinidamente"**. Aceptar.
+   - Pestaña **General**: dejá tildado "Ejecutar solo cuando el usuario haya
+     iniciado sesión" (así usa tu sesión de Chrome).
+   - Aceptar todo.
 
-Para no tener que abrirlo a mano cada vez que prendés la PC:
+Listo — a partir de ahora, mientras tu usuario esté logueado en Windows, el
+botón "Actualizar esta sección (WMS)" te va a andar solo, sin ninguna
+ventana visible.
 
-1. Apretá `Win + R`, escribí `shell:startup` y Enter (se abre una carpeta).
-2. Copiá ahí un acceso directo a `agente-local.bat`.
+### Alternativa manual (para probar sin configurar la tarea)
 
-Así, cada vez que inicies sesión en Windows, el Agente arranca solo en
-segundo plano.
+Si por ahora solo querés probarlo una vez sin armar la tarea programada,
+podés correr esto en `cmd` cada vez que quieras que el Agente se fije si hay
+un pedido tuyo pendiente:
+
+```bash
+node agente-local.js --once
+```
 
 ---
 
 ## Probarlo
 
-1. Con el Agente corriendo, entrá al Tablero y andá a cualquier pantalla
-   "Importar Datos".
+1. Con la tarea programada ya configurada (o corriendo `--once` a mano),
+   entrá al Tablero y andá a cualquier pantalla "Importar Datos".
 2. Apretá **"Actualizar esta sección (WMS)"**.
 3. Debería pasar a "Esperando al Agente Local..." y después "Actualizando...".
-   Puede tardar varios minutos (baja y sube datos reales). Al terminar, ves
+   Puede tardar varios minutos (baja y sube datos reales) más el tiempo hasta
+   la próxima corrida programada (hasta 1-2 minutos). Al terminar, ves
    "Actualizado correctamente." (o el error, si algo falló).
+
+Los reportes bajados se borran solos de `wms-reportes/descargas/` apenas se
+suben con éxito, así esa carpeta no acumula copias viejas.
 
 ## Problemas comunes
 
 - **"No detectamos que tu Agente Local esté corriendo"** (después de 30
-  segundos): fijate que la ventana de `agente-local.bat` siga abierta. Si la
-  cerraste sin querer, volvé a abrirla.
+  segundos): revisá que la tarea "Agente WMS" exista en el Programador de
+  tareas y esté habilitada (click derecho → no debería decir "Deshabilitada").
 - **El Agente tira error de sesión** (WMS o Tablero): la sesión guardada
   venció. Repetí el Paso 5 (`node agente-local.js --login`) para renovarla.
 - **Token inválido**: alguien generó un token nuevo desde el Tablero (eso
