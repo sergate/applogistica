@@ -1,8 +1,8 @@
-// Agente Local: corre en segundo plano en la PC de un usuario del depósito y
-// hace polling a la cola de actualizaciones del Tablero Logístico. Cuando
-// alguien aprieta "Actualizar esta sección (WMS)" en la web, este proceso
-// toma el pedido, baja los reportes del WMS y los sube al tablero -- todo
-// local, con la sesión de ESTA PC.
+// Agente Local: corre en la PC de un usuario del depósito y atiende sus
+// pedidos de actualización del Tablero Logístico. Pensado para correr "una
+// vez" (--once) disparado por el Programador de tareas de Windows cada 1-2
+// minutos, sin ninguna ventana visible -- así nadie tiene una ventana para
+// cerrar por error. Ver INSTALACION-AGENTE.md para la configuración completa.
 //
 // Primer uso (una sola vez por PC): configurar el token y loguearse.
 //   1. Copiá agente-config.example.json a agente-config.json y pegá tu token
@@ -11,8 +11,13 @@
 //      Se abren dos ventanas de Chrome (WMS y Tablero) -- iniciá sesión en
 //      cada una, volvé a la consola y apretá Enter.
 //
-// Uso normal (queda corriendo, Ctrl+C para parar):
-//   node agente-local.js
+// Uso (lo dispara el Programador de tareas, ver INSTALACION-AGENTE.md):
+//   node agente-local.js --once
+//     Se fija si hay UN pedido pendiente; si hay, lo corre y termina; si no
+//     hay, termina al toque (no abre Chrome para nada).
+//
+// Uso alternativo (ventana siempre abierta, para pruebas manuales):
+//   node agente-local.js --loop
 
 const fs = require("fs");
 const path = require("path");
@@ -25,7 +30,7 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // Mismo override que actualizar-tablero.js, para poder apuntar el agente a
 // un deploy preview en vez de a producción sin tocar código.
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
-const INTERVALO_POLLING_MS = 8000;
+const INTERVALO_POLLING_MS = 8000; // solo se usa en --loop
 
 // Qué reportes de descargar-reportes.js hay que bajar para poder subir cada
 // sección con actualizar-tablero.js.
@@ -79,21 +84,28 @@ async function abrirContextos({ headless }) {
   return { contextoWms, paginaWms, contextoTablero, paginaTablero };
 }
 
+async function cerrarContextos({ contextoWms, contextoTablero }) {
+  await contextoWms.close().catch(() => {});
+  await contextoTablero.close().catch(() => {});
+}
+
 async function modoLogin() {
-  const { contextoWms, paginaWms, contextoTablero, paginaTablero } = await abrirContextos({ headless: false });
+  const contextos = await abrirContextos({ headless: false });
   try {
-    await paginaWms.goto(descargador.URL_BASE);
-    await paginaTablero.goto(subidor.URL_BASE);
+    await contextos.paginaWms.goto(descargador.URL_BASE);
+    await contextos.paginaTablero.goto(subidor.URL_BASE);
     console.log("Iniciá sesión en las DOS ventanas de Chrome que se abrieron (WMS y Tablero).");
     console.log("Cuando ambas estén logueadas, volvé acá y presioná Enter...");
     await esperarEnter();
     console.log("Listo, sesiones guardadas.");
   } finally {
-    await contextoWms.close();
-    await contextoTablero.close();
+    await cerrarContextos(contextos);
   }
 }
 
+// Baja los reportes que necesita la sección y los sube al Tablero. Devuelve
+// la lista de archivos descargados (para poder borrarlos después si salió
+// todo bien).
 async function correrPedido(pedido, paginas) {
   const { paginaWms, paginaTablero } = paginas;
   const seccion = pedido.seccion;
@@ -106,6 +118,18 @@ async function correrPedido(pedido, paginas) {
   }
 
   await subidor.subirUnaSeccion(paginaTablero, seccion, manifiesto);
+
+  return Object.values(manifiesto).flat();
+}
+
+// Borra del disco los CSV que se acaban de subir con éxito, para no
+// acumular copias viejas en la carpeta descargas/.
+function borrarArchivos(rutas) {
+  for (const ruta of rutas) {
+    fs.unlink(ruta, (err) => {
+      if (err) console.error(`  (no pude borrar ${ruta}: ${err.message})`);
+    });
+  }
 }
 
 async function avisarResultado(token, id, exito, mensaje) {
@@ -129,45 +153,55 @@ async function buscarProximoPedido(token) {
   return data.pedido || null;
 }
 
-async function main() {
-  if (process.argv.includes("--login")) {
-    await modoLogin();
-    return;
+// Ejecuta UN pedido de punta a punta: abre los navegadores (recién acá, no
+// antes) sólo si hay algo para hacer, corre la sección, avisa el resultado,
+// borra los archivos si salió bien, y cierra todo.
+async function atenderPedido(config, pedido) {
+  console.log(`[${new Date().toLocaleTimeString()}] Pedido #${pedido.id} (${pedido.seccion}) -- corriendo...`);
+  const contextos = await abrirContextos({ headless: true });
+  try {
+    const archivos = await correrPedido(pedido, contextos);
+    await avisarResultado(config.token, pedido.id, true, "OK");
+    borrarArchivos(archivos);
+    console.log(`  -> #${pedido.id} listo.`);
+  } catch (err) {
+    const mensaje = err instanceof Error ? err.message : "Error inesperado";
+    await avisarResultado(config.token, pedido.id, false, mensaje);
+    console.error(`  -> #${pedido.id} falló: ${mensaje}`);
+  } finally {
+    await cerrarContextos(contextos);
   }
+}
 
+// Modo pensado para el Programador de tareas: una sola pasada. Si no hay
+// pedido pendiente, ni siquiera abre Chrome -- entra y sale rápido.
+async function modoUnaVez() {
   const config = leerConfig();
-  console.log("Agente Local corriendo. Ctrl+C para detener.\n");
+  const pedido = await buscarProximoPedido(config.token);
+  if (!pedido) return;
+  await atenderPedido(config, pedido);
+}
 
-  const { contextoWms, contextoTablero, paginaWms, paginaTablero } = await abrirContextos({ headless: true });
-
-  process.on("SIGINT", async () => {
-    console.log("\nCerrando Agente Local...");
-    await contextoWms.close().catch(() => {});
-    await contextoTablero.close().catch(() => {});
-    process.exit(0);
-  });
-
-  // Loop infinito de polling -- se corta con Ctrl+C (ver SIGINT arriba).
+// Modo con ventana siempre abierta, para pruebas manuales (Ctrl+C para
+// parar). El uso real pensado es --once vía el Programador de tareas.
+async function modoLoop() {
+  const config = leerConfig();
+  console.log("Agente Local corriendo (modo loop). Ctrl+C para detener.\n");
   for (;;) {
     try {
       const pedido = await buscarProximoPedido(config.token);
-      if (pedido) {
-        console.log(`[${new Date().toLocaleTimeString()}] Pedido #${pedido.id} (${pedido.seccion}) -- corriendo...`);
-        try {
-          await correrPedido(pedido, { paginaWms, paginaTablero });
-          await avisarResultado(config.token, pedido.id, true, "OK");
-          console.log(`  -> #${pedido.id} listo.`);
-        } catch (err) {
-          const mensaje = err instanceof Error ? err.message : "Error inesperado";
-          await avisarResultado(config.token, pedido.id, false, mensaje);
-          console.error(`  -> #${pedido.id} falló: ${mensaje}`);
-        }
-      }
+      if (pedido) await atenderPedido(config, pedido);
     } catch (err) {
       console.error("Error consultando pedidos pendientes:", err instanceof Error ? err.message : err);
     }
     await new Promise((r) => setTimeout(r, INTERVALO_POLLING_MS));
   }
+}
+
+async function main() {
+  if (process.argv.includes("--login")) return modoLogin();
+  if (process.argv.includes("--loop")) return modoLoop();
+  return modoUnaVez();
 }
 
 main().catch((err) => {
