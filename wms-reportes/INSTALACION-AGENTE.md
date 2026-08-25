@@ -10,6 +10,23 @@ tiene que estar corriendo en TU máquina para que el botón te funcione a vos.
 
 ---
 
+## Instalación rápida (recomendado)
+
+1. Copiá la carpeta `wms-reportes` completa a tu PC (ver Paso 1 más abajo si
+   necesitás detalle).
+2. Doble clic en **`instalar-agente.bat`**.
+3. Seguí lo que te va pidiendo: pegar tu token, loguearte en las dos
+   ventanas de Chrome que se abren. El resto (dependencias, Tarea
+   Programada) lo hace solo.
+
+Requiere tener **Node.js** instalado de antes (el instalador te avisa si
+falta, con el link para bajarlo). Si el instalador falla en algo puntual,
+seguí la guía manual paso a paso de abajo desde ese punto.
+
+---
+
+## Instalación manual (paso a paso, o si el instalador falla en algo)
+
 ## Requisitos (una vez por PC)
 
 1. **Google Chrome** instalado (el que ya usás normalmente).
