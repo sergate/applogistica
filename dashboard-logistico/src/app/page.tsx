@@ -7,6 +7,8 @@ import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonCard, SkeletonTable } from "@/components/Skeleton";
+import ActualizarAgenteBoton from "@/components/ActualizarAgenteBoton";
+import AgenteTokenPanel from "@/components/AgenteTokenPanel";
 
 type ImportKey = "clientes" | "grupos" | "tiendas" | "ecom";
 
@@ -4839,7 +4841,10 @@ export default function DashboardLayout() {
                 queda guardado en su propia tabla, no hace falta volver a subirlo para actualizar Grupos/Tiendas.
               </p>
 
-              <div className="space-y-4">
+              <AgenteTokenPanel />
+              <ActualizarAgenteBoton seccion="no_ecom" onExito={() => setDataVersion((v) => v + 1)} />
+
+              <div className="space-y-4 mt-6">
                 {/* --- CLIENTES (Excel) --- */}
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
                   <div>
@@ -5738,7 +5743,10 @@ export default function DashboardLayout() {
                 Subí el archivo de pedidos de e-commerce (CSV). Al procesar, reemplaza por completo los datos de Ecom en Supabase.
               </p>
 
-              <div className="space-y-4">
+              <AgenteTokenPanel />
+              <ActualizarAgenteBoton seccion="ecom" onExito={() => setDataVersion((v) => v + 1)} />
+
+              <div className="space-y-4 mt-6">
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
                   <div>
                     <p className="font-semibold text-slate-800">Pedidos Ecom</p>
@@ -7653,7 +7661,10 @@ export default function DashboardLayout() {
                 &quot;Numero&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
               </p>
 
-              <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
+              <AgenteTokenPanel />
+              <ActualizarAgenteBoton seccion="carga_inicial" onExito={() => setDataVersion((v) => v + 1)} />
+
+              <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center mt-6">
                 <input
                   ref={inputCargaInicialRef}
                   type="file"
@@ -8191,7 +8202,10 @@ export default function DashboardLayout() {
                 &quot;Numero&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
               </p>
 
-              <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
+              <AgenteTokenPanel />
+              <ActualizarAgenteBoton seccion="remanentes" onExito={() => setDataVersion((v) => v + 1)} />
+
+              <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center mt-6">
                 <input
                   ref={inputRemanentesRef}
                   type="file"
