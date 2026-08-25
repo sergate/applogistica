@@ -17,7 +17,10 @@ const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");
 
-const URL_BASE = "https://applogistica-alpha.vercel.app/";
+// TABLERO_URL permite apuntar a un deploy preview (ej. de la rama test) en
+// vez de al de producción, sin tocar el código -- útil para probar cambios
+// antes de que lleguen a producción.
+const URL_BASE = process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app/";
 const PERFIL_DIR = path.join(__dirname, "perfil-chrome-tablero");
 const DESCARGAS_DIR = path.join(__dirname, "descargas");
 const MANIFIESTO_PATH = path.join(DESCARGAS_DIR, "manifiesto.json");

@@ -22,7 +22,9 @@ const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
-const APP_BASE_URL = "https://applogistica-alpha.vercel.app";
+// Mismo override que actualizar-tablero.js, para poder apuntar el agente a
+// un deploy preview en vez de a producción sin tocar código.
+const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
 const INTERVALO_POLLING_MS = 8000;
 
 // Qué reportes de descargar-reportes.js hay que bajar para poder subir cada
