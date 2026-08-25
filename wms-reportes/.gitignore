@@ -1,0 +1,8 @@
+node_modules/
+perfil-chrome/
+perfil-chrome-tablero/
+descargas/
+error-sesion.png
+error-sesion-tablero.png
+error-*.png
+agente-config.json

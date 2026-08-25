@@ -7,6 +7,8 @@ import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
 import { REGISTRO_SECCIONES } from "@/lib/secciones";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonCard, SkeletonTable } from "@/components/Skeleton";
+import ActualizarAgenteBoton from "@/components/ActualizarAgenteBoton";
+import AgenteTokenPanel from "@/components/AgenteTokenPanel";
 
 type ImportKey = "clientes" | "grupos" | "tiendas" | "ecom";
 
@@ -4839,7 +4841,10 @@ export default function DashboardLayout() {
                 queda guardado en su propia tabla, no hace falta volver a subirlo para actualizar Grupos/Tiendas.
               </p>
 
-              <div className="space-y-4">
+              <AgenteTokenPanel />
+              <ActualizarAgenteBoton seccion="no_ecom" onExito={() => setDataVersion((v) => v + 1)} />
+
+              <div className="space-y-4 mt-6">
                 {/* --- CLIENTES (Excel) --- */}
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
                   <div>
