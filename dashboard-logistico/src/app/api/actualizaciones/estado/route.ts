@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from("actualizaciones_wms")
-      .select("id, estado, mensaje, created_at, started_at, finished_at")
+      .select("id, estado, mensaje, progreso, paso, created_at, started_at, finished_at")
       .eq("usuario_id", auth.userId)
       .eq("seccion", seccion)
       .order("created_at", { ascending: false })

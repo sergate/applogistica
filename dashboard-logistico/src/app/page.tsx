@@ -4841,8 +4841,12 @@ export default function DashboardLayout() {
                 queda guardado en su propia tabla, no hace falta volver a subirlo para actualizar Grupos/Tiendas.
               </p>
 
-              <AgenteTokenPanel />
-              <ActualizarAgenteBoton seccion="no_ecom" onExito={() => setDataVersion((v) => v + 1)} />
+              {tienePermiso("NOECOM-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="no_ecom" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
 
               <div className="space-y-4 mt-6">
                 {/* --- CLIENTES (Excel) --- */}
@@ -5743,8 +5747,12 @@ export default function DashboardLayout() {
                 Subí el archivo de pedidos de e-commerce (CSV). Al procesar, reemplaza por completo los datos de Ecom en Supabase.
               </p>
 
-              <AgenteTokenPanel />
-              <ActualizarAgenteBoton seccion="ecom" onExito={() => setDataVersion((v) => v + 1)} />
+              {tienePermiso("ECOM-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="ecom" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
 
               <div className="space-y-4 mt-6">
                 <div className="flex items-center justify-between border border-slate-200 rounded-lg p-4">
@@ -7661,8 +7669,12 @@ export default function DashboardLayout() {
                 &quot;Numero&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
               </p>
 
-              <AgenteTokenPanel />
-              <ActualizarAgenteBoton seccion="carga_inicial" onExito={() => setDataVersion((v) => v + 1)} />
+              {tienePermiso("CI-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="carga_inicial" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
 
               <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center mt-6">
                 <input
@@ -8202,8 +8214,12 @@ export default function DashboardLayout() {
                 &quot;Numero&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
               </p>
 
-              <AgenteTokenPanel />
-              <ActualizarAgenteBoton seccion="remanentes" onExito={() => setDataVersion((v) => v + 1)} />
+              {tienePermiso("REM-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="remanentes" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
 
               <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center mt-6">
                 <input
