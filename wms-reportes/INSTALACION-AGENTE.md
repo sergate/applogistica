@@ -19,9 +19,14 @@ tiene que estar corriendo en TU máquina para que el botón te funcione a vos.
    ventanas de Chrome que se abren. El resto (dependencias, Tarea
    Programada) lo hace solo.
 
-Requiere tener **Node.js** instalado de antes (el instalador te avisa si
-falta, con el link para bajarlo). Si el instalador falla en algo puntual,
-seguí la guía manual paso a paso de abajo desde ese punto.
+Si no tenés **Node.js** instalado, el instalador lo baja e instala solo
+(puede pedirte permisos de administrador la primera vez) y te avisa que
+tenés que cerrar la ventana y volver a correr `instalar-agente.bat` una vez
+más, para que la terminal reconozca el cambio. Requiere tener **Google
+Chrome** instalado de antes (el que ya usás normalmente).
+
+Si el instalador falla en algo puntual, seguí la guía manual paso a paso de
+abajo desde ese punto.
 
 ---
 
