@@ -13,7 +13,10 @@ interface PedidoEstado {
   created_at: string;
 }
 
-const SEGUNDOS_ANTES_DE_AVISAR_SIN_AGENTE = 30;
+// La Tarea Programada del Agente corre cada 1 minuto -- el peor caso normal
+// es esperar casi 60s a que lo tome, así que el aviso de "no detectamos tu
+// Agente" espera más que eso para no disparar en falso en el uso normal.
+const SEGUNDOS_ANTES_DE_AVISAR_SIN_AGENTE = 90;
 const INTERVALO_POLLING_MS = 3000;
 
 // Botón "Actualizar esta sección": crea un pedido en actualizaciones_wms y
@@ -144,7 +147,9 @@ export default function ActualizarAgenteBoton({
       )}
 
       {pedido?.estado === "pendiente" && (
-        <p className="text-xs text-slate-500 mt-2">Esperando que tu Agente Local tome el pedido...</p>
+        <p className="text-xs text-slate-500 mt-2">
+          Esperando que tu Agente Local tome el pedido (puede tardar hasta 1 minuto)...
+        </p>
       )}
 
       {avisoSinAgente && (
