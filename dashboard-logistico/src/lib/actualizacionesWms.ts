@@ -8,6 +8,7 @@ export const SECCIONES_VALIDAS = [
   "remanentes",
   "pd_clientes",
   "pd_propios",
+  "ocupacion_almacen",
 ] as const;
 export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 
@@ -61,6 +62,7 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
   remanentes: "REM-ActualizarWMS",
   pd_clientes: "PD-Clientes-ActualizarWMS",
   pd_propios: "PD-Propios-ActualizarWMS",
+  ocupacion_almacen: "ALM-ActualizarWMS",
 };
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */

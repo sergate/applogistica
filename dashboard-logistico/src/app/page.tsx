@@ -8899,6 +8899,13 @@ export default function DashboardLayout() {
                   tu navegador -- solo se sube el resultado ya limpio, nunca el archivo original.
                 </p>
 
+                {tienePermiso("ALM-ActualizarWMS") && (
+                  <>
+                    <AgenteTokenPanel />
+                    <ActualizarAgenteBoton seccion="ocupacion_almacen" onExito={() => setDataVersion((v) => v + 1)} />
+                  </>
+                )}
+
                 <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
                   <input
                     ref={inputOcupacionAlmacenRef}

@@ -41,6 +41,7 @@ const REPORTES_POR_SECCION = {
   remanentes: ["ci_rema"],
   pd_clientes: ["bandeja_comercial"],
   pd_propios: ["pre_despacho"],
+  ocupacion_almacen: ["ocupacion_almacen"],
 };
 
 function leerConfig() {
@@ -116,6 +117,7 @@ const NOMBRE_REPORTE = {
   ci_rema: "Reportes REMA (puede tardar varios minutos)",
   bandeja_comercial: "Bandeja comercial",
   pre_despacho: "Pre despacho",
+  ocupacion_almacen: "Existencia por ubicación (archivo grande, puede tardar varios minutos)",
 };
 
 // Baja los reportes que necesita la sección y los sube al Tablero, avisando
