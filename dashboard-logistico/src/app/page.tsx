@@ -6411,6 +6411,13 @@ export default function DashboardLayout() {
                 todo lo que había cargado antes en esta tabla.
               </p>
 
+              {tienePermiso("PD-Clientes-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="pd_clientes" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
+
               <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
                 <input
                   ref={inputPDClientesRef}
@@ -6486,6 +6493,13 @@ export default function DashboardLayout() {
                 Subí el archivo .xlsx de contenedores propios. Es una foto completa y vigente: al procesar, se
                 reemplaza todo lo que había cargado antes en esta tabla.
               </p>
+
+              {tienePermiso("PD-Propios-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="pd_propios" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
 
               <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
                 <input

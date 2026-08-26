@@ -1,7 +1,14 @@
 import { createClient as createServerAuthClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
 
-export const SECCIONES_VALIDAS = ["no_ecom", "ecom", "carga_inicial", "remanentes"] as const;
+export const SECCIONES_VALIDAS = [
+  "no_ecom",
+  "ecom",
+  "carga_inicial",
+  "remanentes",
+  "pd_clientes",
+  "pd_propios",
+] as const;
 export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 
 export function esSeccionValida(v: unknown): v is SeccionActualizacion {
@@ -52,6 +59,8 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
   ecom: "ECOM-ActualizarWMS",
   carga_inicial: "CI-ActualizarWMS",
   remanentes: "REM-ActualizarWMS",
+  pd_clientes: "PD-Clientes-ActualizarWMS",
+  pd_propios: "PD-Propios-ActualizarWMS",
 };
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */
