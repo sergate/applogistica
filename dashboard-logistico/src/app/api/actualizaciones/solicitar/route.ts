@@ -7,8 +7,10 @@ export const dynamic = "force-dynamic";
 
 // Si un pedido quedó "corriendo" hace más de esto sin cerrarse, se considera
 // abandonado (el Agente se cortó/crasheó a mitad de camino) y no se reusa --
-// si no, un pedido trabado bloquearía el botón para siempre.
-const MINUTOS_CORRIENDO_ABANDONADO = 10;
+// si no, un pedido trabado bloquearía el botón para siempre. 20 min (no 10)
+// porque "ocupacion_almacen" baja y procesa un archivo de 100+ MB y puede
+// tardar bastante más que el resto de las secciones.
+const MINUTOS_CORRIENDO_ABANDONADO = 20;
 
 // Crea un pedido de actualización para el usuario logueado. Si ya tiene uno
 // pendiente/corriendo (y no abandonado) para la misma sección, lo reusa en

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Seccion = "no_ecom" | "ecom" | "carga_inicial" | "remanentes" | "pd_clientes" | "pd_propios";
+type Seccion = "no_ecom" | "ecom" | "carga_inicial" | "remanentes" | "pd_clientes" | "pd_propios" | "ocupacion_almacen";
 
 interface PedidoEstado {
   id: number;

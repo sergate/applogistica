@@ -256,6 +256,29 @@ async function reporteCargaInicialRema(page) {
   return archivos;
 }
 
+// --- Reporte "Existencia por ubicación" -> Excel Contenedor (Ocupación Almacén) ---
+// Archivo grande (100+ MB): sin filtros, un solo click en "Excel Contenedor".
+// Le damos más tiempo que al resto para que Playwright no lo corte a mitad
+// de la descarga.
+async function reporteOcupacionAlmacen(page) {
+  console.log("> ocupacion_almacen (archivo grande, puede tardar varios minutos)");
+  await abrirPantalla(page, "Stock", "Existencia");
+  await page.waitForTimeout(800);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 600000 }),
+    clickBotonExt(page, "Excel Contenedor"),
+  ]);
+  // Guardamos con la extensión real que manda el servidor (el botón dice
+  // "Excel" pero el archivo que baja es el que espera la pantalla de
+  // Importar Ocupación en el Tablero, sea cual sea su formato real).
+  const extension = path.extname(download.suggestedFilename()) || ".csv";
+  const destino = path.join(DESCARGAS_DIR, `ocupacion_almacen_${timestamp()}${extension}`);
+  await download.saveAs(destino);
+  console.log(`  -> descargado: ${destino}`);
+  return destino;
+}
+
 const REPORTES = {
   grupo: (page) =>
     reportePedidosResumen(page, {
@@ -276,6 +299,7 @@ const REPORTES = {
   ci_rema: reporteCargaInicialRema,
   bandeja_comercial: reporteBandejaComercial,
   pre_despacho: reportePreDespacho,
+  ocupacion_almacen: reporteOcupacionAlmacen,
 };
 
 // Corre UN reporte por su id (navega, chequea sesión, ejecuta, devuelve el

@@ -91,6 +91,24 @@ async function esperarResultadoImport(page, timeout = 180000) {
   return { exito, textoCompleto };
 }
 
+// Igual que esperarResultadoImport, pero con el texto de éxito propio de
+// esta pantalla ("... actualizadas correctamente") y un timeout más largo:
+// el archivo es grande (100+ MB) y se procesa entero en el navegador
+// (leer + pivotear) antes de subir, lo que puede tardar varios minutos.
+async function esperarResultadoOcupacion(page, timeout = 600000) {
+  await page.waitForFunction(
+    () => {
+      const texto = document.body.innerText;
+      return /actualizadas correctamente/.test(texto) || /rror al procesar|rror inesperado|No se encontraron posiciones/.test(texto);
+    },
+    undefined,
+    { timeout }
+  );
+  const textoCompleto = await page.evaluate(() => document.body.innerText);
+  const exito = /actualizadas correctamente/.test(textoCompleto);
+  return { exito, textoCompleto };
+}
+
 async function chequearSesion(page) {
   let haySesion = await page
     .getByText("Status de preparación", { exact: true })
@@ -247,6 +265,26 @@ async function subirPDPropios(page, reportes) {
   if (!r.exito) throw new Error(`Fallo importando Pendiente de Despacho - Propios. Detalle: ${r.textoCompleto.slice(-500)}`);
 }
 
+// --- Ocupación Almacén: Existencia por ubicación (Excel Contenedor) ---
+async function subirOcupacionAlmacen(page, reportes) {
+  console.log("> ocupacion_almacen (Ocupación Almacén - Importar Datos - Importar Ocupación)");
+  const archivo = primerArchivo(reportes, "ocupacion_almacen");
+
+  await irYLoguear(page);
+  await abrirMenu(page, "Ocupación Almacén", "Importar Datos");
+
+  // "Importar Layout del Almacén" (opcional, no se toca) puede estar arriba
+  // de "Importar Ocupación" -- el input de archivo de Importar Ocupación es
+  // siempre el último de la pantalla.
+  const inputs = page.locator("input[type=file]");
+  await inputs.last().setInputFiles(archivo);
+  await page.getByRole("button", { name: "Procesar archivo", exact: true }).click();
+
+  const r = await esperarResultadoOcupacion(page);
+  console.log(`  -> ${r.exito ? "OK" : "ERROR"}: ${r.textoCompleto.slice(-200)}`);
+  if (!r.exito) throw new Error(`Fallo importando Ocupación Almacén. Detalle: ${r.textoCompleto.slice(-500)}`);
+}
+
 const SECCIONES = {
   no_ecom: subirNoEcom,
   ecom: subirEcom,
@@ -254,6 +292,7 @@ const SECCIONES = {
   remanentes: subirRemanentes,
   pd_clientes: subirPDClientes,
   pd_propios: subirPDPropios,
+  ocupacion_almacen: subirOcupacionAlmacen,
 };
 
 // Corre UNA sección por su id sobre un browser ya abierto (usa el manifiesto
