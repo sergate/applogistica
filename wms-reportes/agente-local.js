@@ -39,6 +39,8 @@ const REPORTES_POR_SECCION = {
   ecom: ["listado_ecom"],
   carga_inicial: ["ci_chk", "ci_awa", "ci_cqq"],
   remanentes: ["ci_rema"],
+  pd_clientes: ["bandeja_comercial"],
+  pd_propios: ["pre_despacho"],
 };
 
 function leerConfig() {
@@ -112,6 +114,8 @@ const NOMBRE_REPORTE = {
   ci_awa: "Carga Inicial AWA",
   ci_cqq: "Carga Inicial CQQ",
   ci_rema: "Reportes REMA (puede tardar varios minutos)",
+  bandeja_comercial: "Bandeja comercial",
+  pre_despacho: "Pre despacho",
 };
 
 // Baja los reportes que necesita la sección y los sube al Tablero, avisando

@@ -214,11 +214,46 @@ async function subirRemanentes(page, reportes) {
   if (!r.exito) throw new Error(`Fallo importando Remanentes. Detalle: ${r.textoCompleto.slice(-500)}`);
 }
 
+// --- Pendiente de Despacho - Clientes: bandeja_comercial ---
+async function subirPDClientes(page, reportes) {
+  console.log("> pd_clientes (Pendiente de Despacho - Importar Datos - Clientes)");
+  const archivo = primerArchivo(reportes, "bandeja_comercial");
+
+  await irYLoguear(page);
+  await abrirMenu(page, "Pendiente de Despacho", "Importar Datos");
+
+  // La pantalla tiene dos formularios (Clientes arriba, Propios abajo), cada
+  // uno con su propio input de archivo y botón "Procesar" -- el de Clientes
+  // es el primero de cada uno.
+  await page.locator("input[type=file]").nth(0).setInputFiles(archivo);
+  await page.getByRole("button", { name: "Procesar", exact: true }).nth(0).click();
+  const r = await esperarResultadoImport(page);
+  console.log(`  -> ${r.exito ? "OK" : "ERROR"}: ${r.textoCompleto.slice(-200)}`);
+  if (!r.exito) throw new Error(`Fallo importando Pendiente de Despacho - Clientes. Detalle: ${r.textoCompleto.slice(-500)}`);
+}
+
+// --- Pendiente de Despacho - Propios: pre_despacho ---
+async function subirPDPropios(page, reportes) {
+  console.log("> pd_propios (Pendiente de Despacho - Importar Datos - Propios)");
+  const archivo = primerArchivo(reportes, "pre_despacho");
+
+  await irYLoguear(page);
+  await abrirMenu(page, "Pendiente de Despacho", "Importar Datos");
+
+  await page.locator("input[type=file]").nth(1).setInputFiles(archivo);
+  await page.getByRole("button", { name: "Procesar", exact: true }).nth(1).click();
+  const r = await esperarResultadoImport(page);
+  console.log(`  -> ${r.exito ? "OK" : "ERROR"}: ${r.textoCompleto.slice(-200)}`);
+  if (!r.exito) throw new Error(`Fallo importando Pendiente de Despacho - Propios. Detalle: ${r.textoCompleto.slice(-500)}`);
+}
+
 const SECCIONES = {
   no_ecom: subirNoEcom,
   ecom: subirEcom,
   carga_inicial: subirCargaInicial,
   remanentes: subirRemanentes,
+  pd_clientes: subirPDClientes,
+  pd_propios: subirPDPropios,
 };
 
 // Corre UNA sección por su id sobre un browser ya abierto (usa el manifiesto

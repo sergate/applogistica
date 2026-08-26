@@ -165,6 +165,58 @@ async function reporteCargaInicial(page, { valorPedido, nombreBase }) {
   return descargarConBoton(page, "CSV Completo", `${nombreBase}_${timestamp()}.csv`);
 }
 
+// "Fecha desde" de Bandeja comercial / Pre despacho se pone siempre en "hoy
+// menos 2 años" para traer todo el historial relevante sin tener que tocar
+// el script cuando pasa el tiempo.
+function fechaDosAniosAtras() {
+  const hoy = new Date();
+  const fecha = new Date(hoy.getFullYear() - 2, hoy.getMonth(), hoy.getDate());
+  const dd = String(fecha.getDate()).padStart(2, "0");
+  const mm = String(fecha.getMonth() + 1).padStart(2, "0");
+  return `${dd}/${mm}/${fecha.getFullYear()}`;
+}
+
+async function completarCampoTexto(page, placeholder, valor) {
+  const campo = page.locator(`input[placeholder="${placeholder}"]`).first();
+  await campo.click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type(valor);
+}
+
+async function vaciarCampoTexto(page, placeholder) {
+  const campo = page.locator(`input[placeholder="${placeholder}"]`).first();
+  await campo.click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.press("Delete");
+}
+
+// --- Reporte "Bandeja comercial" (Pendiente de Despacho - Clientes) ---
+async function reporteBandejaComercial(page) {
+  console.log("> bandeja_comercial");
+  // "Bandeja comercial" es un ítem directo del menú lateral, no está anidado
+  // en un grupo -- un solo click alcanza.
+  await clickMenuItem(page, "Bandeja comercial");
+  await page.waitForTimeout(800);
+  await completarCampoTexto(page, "Fecha desde", fechaDosAniosAtras());
+  await clickBotonExt(page, "Buscar");
+  await esperarGridCargado(page);
+  return descargarConBoton(page, "Excel", `bandeja_comercial_${timestamp()}.xlsx`);
+}
+
+// --- Reporte "Pre despacho" (Pendiente de Despacho - Propios) ---
+async function reportePreDespacho(page) {
+  console.log("> pre_despacho");
+  await clickMenuItem(page, "Pre despacho");
+  await page.waitForTimeout(800);
+  await completarCampoTexto(page, "Fecha desde", fechaDosAniosAtras());
+  // El campo "Estado remito" trae "Pendiente" tildado por defecto -- hay que
+  // vaciarlo para traer todos los estados.
+  await vaciarCampoTexto(page, "Estado remito");
+  await clickBotonExt(page, "Buscar");
+  await esperarGridCargado(page);
+  return descargarConBoton(page, "Excel", `pre_despacho_${timestamp()}.xlsx`);
+}
+
 // --- Reporte "Resumen carga inicial" para TODAS las opciones que contengan REMA ---
 async function reporteCargaInicialRema(page) {
   console.log("> carga_inicial_rema (todas las opciones que contengan REMA)");
@@ -222,6 +274,8 @@ const REPORTES = {
   ci_awa: (page) => reporteCargaInicial(page, { valorPedido: "CI_AWA_VER", nombreBase: "carga_inicial_awa" }),
   ci_cqq: (page) => reporteCargaInicial(page, { valorPedido: "CI_CQQ_VER", nombreBase: "carga_inicial_cqq" }),
   ci_rema: reporteCargaInicialRema,
+  bandeja_comercial: reporteBandejaComercial,
+  pre_despacho: reportePreDespacho,
 };
 
 // Corre UN reporte por su id (navega, chequea sesión, ejecuta, devuelve el
