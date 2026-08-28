@@ -119,7 +119,7 @@ async function chequearSesion(page) {
     .catch(() => false);
 
   if (!haySesion) {
-    // Igual que en descargar-reportes.js: si Chrome ya autocompletó el
+    // Igual que en descargar-reportes.js: si Edge ya autocompletó el
     // login guardado, alcanza con apretar "Ingresar" -- nunca leemos ni
     // tipeamos la contraseña acá.
     const email = page.locator('input[type="email"]').first();
@@ -337,7 +337,8 @@ async function correrSubidas(idsACorrer, reportes) {
 
   async function abrirNavegador() {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-      channel: "chrome",
+      // Ver nota en descargar-reportes.js: Edge en vez de Chrome real.
+      channel: "msedge",
       headless: !loginManual,
       acceptDownloads: false,
     });
@@ -357,7 +358,7 @@ async function correrSubidas(idsACorrer, reportes) {
   try {
     if (loginManual) {
       await page.goto(URL_BASE);
-      console.log("Iniciá sesión manualmente en la ventana de Chrome que se abrió.");
+      console.log("Iniciá sesión manualmente en la ventana de Edge que se abrió.");
       console.log("Cuando veas el tablero cargado, volvé acá y presioná Enter...");
       await esperarEnter();
     }

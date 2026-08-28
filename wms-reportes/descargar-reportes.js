@@ -347,7 +347,10 @@ async function correrDescargas(idsACorrer) {
 
   async function abrirNavegador() {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-      channel: "chrome",
+      // Se usa Edge (ya instalado en todas las PCs con Windows) en vez de
+      // Chrome real: Chrome se autoactualiza solo y puede forzar un reinicio
+      // a mitad de una descarga, cortando la automatización.
+      channel: "msedge",
       headless: !loginManual,
       acceptDownloads: true,
     });
@@ -360,7 +363,7 @@ async function correrDescargas(idsACorrer) {
   try {
     if (loginManual) {
       await page.goto(URL_BASE);
-      console.log("Iniciá sesión manualmente en la ventana de Chrome que se abrió.");
+      console.log("Iniciá sesión manualmente en la ventana de Edge que se abrió.");
       console.log("Cuando veas el Dashboard cargado, volvé acá y presioná Enter...");
       await esperarEnter();
     }
@@ -418,7 +421,7 @@ async function chequearSesion(page) {
     .catch(() => false);
 
   if (!haySesion) {
-    // La sesión del WMS parece vencerse seguido. Si Chrome ya autocompletó
+    // La sesión del WMS parece vencerse seguido. Si Edge ya autocompletó
     // usuario/contraseña guardados (por su propio gestor de contraseñas,
     // no algo que este script escriba), alcanza con apretar "Ingresar" --
     // nunca leemos ni tipeamos la contraseña acá.
@@ -447,7 +450,7 @@ async function chequearSesion(page) {
     await page.screenshot({ path: captura }).catch(() => {});
     throw new Error(
       "Parece que la sesión no está activa y no se pudo reloguear solo (los campos de usuario/contraseña no estaban " +
-        "autocompletados por Chrome, o el login no funcionó). " +
+        "autocompletados por Edge, o el login no funcionó). " +
         `Guardé una captura en ${captura} para revisar. ` +
         'Corré "node agente-local.js --login" en tu terminal para volver a iniciar sesión a mano (WMS + Tablero).'
     );
