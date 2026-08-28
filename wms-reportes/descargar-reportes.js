@@ -11,6 +11,7 @@
 const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");
+const { conLock } = require("./lock.js");
 
 const URL_BASE = "https://wms-cheeky.azurewebsites.net/";
 const PERFIL_DIR = path.join(__dirname, "perfil-chrome");
@@ -330,13 +331,31 @@ async function main() {
 
   fs.mkdirSync(DESCARGAS_DIR, { recursive: true });
 
+  await conLock(() => correrDescargas(idsACorrer));
+}
+
+// Todo lo que necesita el navegador abierto -- separado de main() para que
+// pueda correr adentro de conLock() sin competir con otra corrida (el .bat
+// manual, u otro pedido que la Tarea Programada del Agente esté atendiendo
+// en simultáneo) por el mismo perfil de Chrome.
+function esCierreInesperado(err) {
+  return /has been closed|Target closed|Target page/i.test(String(err?.message || err));
+}
+
+async function correrDescargas(idsACorrer) {
   const loginManual = process.env.LOGIN_MANUAL === "1";
-  const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-    channel: "chrome",
-    headless: !loginManual,
-    acceptDownloads: true,
-  });
-  const page = context.pages()[0] || (await context.newPage());
+
+  async function abrirNavegador() {
+    const context = await chromium.launchPersistentContext(PERFIL_DIR, {
+      channel: "chrome",
+      headless: !loginManual,
+      acceptDownloads: true,
+    });
+    const page = context.pages()[0] || (await context.newPage());
+    return { context, page };
+  }
+
+  let { context, page } = await abrirNavegador();
 
   try {
     if (loginManual) {
@@ -359,7 +378,22 @@ async function main() {
     } catch {}
 
     for (const id of idsACorrer) {
-      manifiesto.reportes[id] = await descargarUnReporte(page, id);
+      // Por las dudas (crash puntual, sin memoria, etc.) -- si el navegador
+      // se cierra solo a mitad de una descarga, reabrimos y reintentamos ESE
+      // reporte una sola vez antes de darnos por vencidos.
+      let reintentado = false;
+      for (;;) {
+        try {
+          manifiesto.reportes[id] = await descargarUnReporte(page, id);
+          break;
+        } catch (err) {
+          if (!esCierreInesperado(err) || reintentado) throw err;
+          reintentado = true;
+          console.log(`  (el navegador se cerró inesperadamente -- reabriendo y reintentando "${id}"...)`);
+          await context.close().catch(() => {});
+          ({ context, page } = await abrirNavegador());
+        }
+      }
     }
 
     manifiesto.generadoEn = new Date().toISOString();
@@ -367,7 +401,7 @@ async function main() {
     console.log("\nListo. Todo descargado en:", DESCARGAS_DIR);
     console.log("Manifiesto:", manifiestoPath);
   } finally {
-    await context.close();
+    await context.close().catch(() => {});
   }
 }
 
@@ -437,6 +471,7 @@ module.exports = {
   REPORTES,
   descargarUnReporte,
   chequearSesion,
+  esCierreInesperado,
 };
 
 // Solo corre el CLI si el archivo se ejecuta directamente (node

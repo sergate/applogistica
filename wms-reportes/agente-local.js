@@ -25,6 +25,7 @@ const { chromium } = require("playwright");
 
 const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
+const { conLock } = require("./lock.js");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // Mismo override que actualizar-tablero.js, para poder apuntar el agente a
@@ -93,17 +94,19 @@ async function cerrarContextos({ contextoWms, contextoTablero }) {
 }
 
 async function modoLogin() {
-  const contextos = await abrirContextos({ headless: false });
-  try {
-    await contextos.paginaWms.goto(descargador.URL_BASE);
-    await contextos.paginaTablero.goto(subidor.URL_BASE);
-    console.log("Iniciá sesión en las DOS ventanas de Chrome que se abrieron (WMS y Tablero).");
-    console.log("Cuando ambas estén logueadas, volvé acá y presioná Enter...");
-    await esperarEnter();
-    console.log("Listo, sesiones guardadas.");
-  } finally {
-    await cerrarContextos(contextos);
-  }
+  await conLock(async () => {
+    const contextos = await abrirContextos({ headless: false });
+    try {
+      await contextos.paginaWms.goto(descargador.URL_BASE);
+      await contextos.paginaTablero.goto(subidor.URL_BASE);
+      console.log("Iniciá sesión en las DOS ventanas de Chrome que se abrieron (WMS y Tablero).");
+      console.log("Cuando ambas estén logueadas, volvé acá y presioná Enter...");
+      await esperarEnter();
+      console.log("Listo, sesiones guardadas.");
+    } finally {
+      await cerrarContextos(contextos);
+    }
+  });
 }
 
 // Nombres legibles para el texto de progreso que ve el usuario.
@@ -196,18 +199,53 @@ async function buscarProximoPedido(token) {
 // borra los archivos si salió bien, y cierra todo.
 async function atenderPedido(config, pedido) {
   console.log(`[${new Date().toLocaleTimeString()}] Pedido #${pedido.id} (${pedido.seccion}) -- corriendo...`);
-  const contextos = await abrirContextos({ headless: true });
-  try {
-    const archivos = await correrPedido(config, pedido, contextos);
-    await avisarResultado(config.token, pedido.id, true, "OK");
-    borrarArchivos(archivos);
-    console.log(`  -> #${pedido.id} listo.`);
-  } catch (err) {
-    const mensaje = err instanceof Error ? err.message : "Error inesperado";
+
+  // Si el navegador ya está ocupado (el .bat manual corriendo, u otro
+  // pedido) esperamos hasta 1 minuto -- lo normal es que la otra corrida
+  // libere el lock antes de eso. Si no, se marca como error (en vez de
+  // quedar "corriendo" colgado sin avisar) para que el usuario pueda
+  // simplemente volver a apretar el botón.
+  const corrio = await conLock(
+    async () => {
+      let contextos = await abrirContextos({ headless: true });
+      try {
+        // El Chrome real a veces se cierra solo a mitad de camino (crash,
+        // auto-update, etc.) -- si pasa, reabrimos los dos navegadores y
+        // reintentamos el pedido completo una sola vez antes de avisar error.
+        let reintentado = false;
+        for (;;) {
+          try {
+            const archivos = await correrPedido(config, pedido, contextos);
+            await avisarResultado(config.token, pedido.id, true, "OK");
+            borrarArchivos(archivos);
+            console.log(`  -> #${pedido.id} listo.`);
+            break;
+          } catch (err) {
+            if (descargador.esCierreInesperado(err) && !reintentado) {
+              reintentado = true;
+              console.log(`  (el navegador se cerró inesperadamente -- reabriendo y reintentando pedido #${pedido.id}...)`);
+              await cerrarContextos(contextos);
+              contextos = await abrirContextos({ headless: true });
+              continue;
+            }
+            const mensaje = err instanceof Error ? err.message : "Error inesperado";
+            await avisarResultado(config.token, pedido.id, false, mensaje);
+            console.error(`  -> #${pedido.id} falló: ${mensaje}`);
+            break;
+          }
+        }
+      } finally {
+        await cerrarContextos(contextos);
+      }
+      return true;
+    },
+    { maxEsperaMs: 60_000, silencioso: true }
+  );
+
+  if (!corrio) {
+    const mensaje = "El navegador del Agente estaba ocupado en otra corrida. Volvé a apretar el botón.";
     await avisarResultado(config.token, pedido.id, false, mensaje);
-    console.error(`  -> #${pedido.id} falló: ${mensaje}`);
-  } finally {
-    await cerrarContextos(contextos);
+    console.error(`  -> #${pedido.id} pospuesto: ${mensaje}`);
   }
 }
 
