@@ -8,13 +8,13 @@
 //   1. Copiá agente-config.example.json a agente-config.json y pegá tu token
 //      (lo generás en el Tablero, pantalla "Importar Datos" -> "Agente Local").
 //   2. node agente-local.js --login
-//      Se abren dos ventanas de Chrome (WMS y Tablero) -- iniciá sesión en
+//      Se abren dos ventanas de Edge (WMS y Tablero) -- iniciá sesión en
 //      cada una, volvé a la consola y apretá Enter.
 //
 // Uso (lo dispara el Programador de tareas, ver INSTALACION-AGENTE.md):
 //   node agente-local.js --once
 //     Se fija si hay UN pedido pendiente; si hay, lo corre y termina; si no
-//     hay, termina al toque (no abre Chrome para nada).
+//     hay, termina al toque (no abre el navegador para nada).
 //
 // Uso alternativo (ventana siempre abierta, para pruebas manuales):
 //   node agente-local.js --loop
@@ -68,15 +68,16 @@ function esperarEnter() {
 }
 
 async function abrirContextos({ headless }) {
+  // Se usa Edge (ver nota en descargar-reportes.js) en vez de Chrome real.
   const contextoWms = await chromium.launchPersistentContext(descargador.PERFIL_DIR, {
-    channel: "chrome",
+    channel: "msedge",
     headless,
     acceptDownloads: true,
   });
   const paginaWms = contextoWms.pages()[0] || (await contextoWms.newPage());
 
   const contextoTablero = await chromium.launchPersistentContext(subidor.PERFIL_DIR, {
-    channel: "chrome",
+    channel: "msedge",
     headless,
     acceptDownloads: false,
   });
@@ -99,7 +100,7 @@ async function modoLogin() {
     try {
       await contextos.paginaWms.goto(descargador.URL_BASE);
       await contextos.paginaTablero.goto(subidor.URL_BASE);
-      console.log("Iniciá sesión en las DOS ventanas de Chrome que se abrieron (WMS y Tablero).");
+      console.log("Iniciá sesión en las DOS ventanas de Edge que se abrieron (WMS y Tablero).");
       console.log("Cuando ambas estén logueadas, volvé acá y presioná Enter...");
       await esperarEnter();
       console.log("Listo, sesiones guardadas.");

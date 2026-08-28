@@ -67,7 +67,7 @@ if exist agente-config.json (
 
 REM --- 4. Login WMS + Tablero ---
 echo.
-echo Ahora se van a abrir 2 ventanas de Chrome ^(WMS y Tablero^).
+echo Ahora se van a abrir 2 ventanas de Edge ^(WMS y Tablero^).
 echo Inicia sesion en las DOS con tu usuario habitual, y cuando ambas
 echo esten logueadas volve aca y apreta una tecla.
 pause

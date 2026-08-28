@@ -16,14 +16,14 @@ tiene que estar corriendo en TU máquina para que el botón te funcione a vos.
    necesitás detalle).
 2. Doble clic en **`instalar-agente.bat`**.
 3. Seguí lo que te va pidiendo: pegar tu token, loguearte en las dos
-   ventanas de Chrome que se abren. El resto (dependencias, Tarea
+   ventanas de Edge que se abren. El resto (dependencias, Tarea
    Programada) lo hace solo.
 
 Si no tenés **Node.js** instalado, el instalador lo baja e instala solo
 (puede pedirte permisos de administrador la primera vez) y te avisa que
 tenés que cerrar la ventana y volver a correr `instalar-agente.bat` una vez
-más, para que la terminal reconozca el cambio. Requiere tener **Google
-Chrome** instalado de antes (el que ya usás normalmente).
+más, para que la terminal reconozca el cambio. Requiere tener **Microsoft
+Edge** instalado (viene de fábrica en Windows).
 
 Si el instalador falla en algo puntual, seguí la guía manual paso a paso de
 abajo desde ese punto.
@@ -34,7 +34,7 @@ abajo desde ese punto.
 
 ## Requisitos (una vez por PC)
 
-1. **Google Chrome** instalado (el que ya usás normalmente).
+1. **Microsoft Edge** instalado (viene de fábrica en Windows).
 2. **Node.js** instalado. Para chequear si ya lo tenés, abrí una consola
    (`cmd`) y corré:
    ```bash
@@ -66,8 +66,8 @@ cd C:\Agente-WMS\wms-reportes
 npm install
 ```
 
-Esto baja lo necesario para que el Agente funcione (usa tu Chrome ya
-instalado, no descarga uno aparte). Puede tardar uno o dos minutos.
+Esto baja lo necesario para que el Agente funcione (usa el Edge ya instalado
+en Windows, no descarga uno aparte). Puede tardar uno o dos minutos.
 
 ## Paso 3: Generar tu token personal
 
@@ -103,7 +103,7 @@ Todavía en `cmd`, en la carpeta `wms-reportes`:
 node agente-local.js --login
 ```
 
-Se abren **dos ventanas de Chrome**: una del WMS y otra del Tablero. Iniciá
+Se abren **dos ventanas de Edge**: una del WMS y otra del Tablero. Iniciá
 sesión en las dos con tu usuario habitual (en cada una tenés que llegar a
 ver la pantalla normal, no quedarte en el login). Cuando las dos estén
 logueadas, volvé a la consola y apretá **Enter**.
@@ -140,7 +140,7 @@ minutos configurarlo, una sola vez:
    - Marcá **"Repetir la tarea cada:"** y elegí **1 minuto**, con duración
      **"Indefinidamente"**. Aceptar.
    - Pestaña **General**: dejá tildado "Ejecutar solo cuando el usuario haya
-     iniciado sesión" (así usa tu sesión de Chrome).
+     iniciado sesión".
    - Aceptar todo.
 
 Listo — a partir de ahora, mientras tu usuario esté logueado en Windows, el
