@@ -16,6 +16,7 @@
 const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");
+const { conLock } = require("./lock.js");
 
 // TABLERO_URL permite apuntar a un deploy preview (ej. de la rama test) en
 // vez de al de producción, sin tocar el código -- útil para probar cambios
@@ -320,19 +321,38 @@ async function main() {
 
   const reportes = leerManifiesto();
 
+  await conLock(() => correrSubidas(idsACorrer, reportes));
+}
+
+// Todo lo que necesita el navegador abierto -- separado de main() para que
+// pueda correr adentro de conLock() sin competir con otra corrida (el .bat
+// manual, u otro pedido que la Tarea Programada del Agente esté atendiendo
+// en simultáneo) por el mismo perfil de Chrome.
+function esCierreInesperado(err) {
+  return /has been closed|Target closed|Target page/i.test(String(err?.message || err));
+}
+
+async function correrSubidas(idsACorrer, reportes) {
   const loginManual = process.env.LOGIN_MANUAL === "1";
-  const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-    channel: "chrome",
-    headless: !loginManual,
-    acceptDownloads: false,
-  });
-  // La app guarda en sessionStorage qué sección quedó abierta tras el último
-  // import (para volver ahí después del reload). Lo limpiamos ANTES de que
-  // cargue cualquier página, así el menú arranca siempre en el mismo estado
-  // conocido (Status de preparación + No Ecom abiertos, el resto cerrado) y
-  // nunca quedan dos secciones abiertas a la vez por una corrida anterior.
-  await context.addInitScript(() => window.sessionStorage.clear());
-  const page = context.pages()[0] || (await context.newPage());
+
+  async function abrirNavegador() {
+    const context = await chromium.launchPersistentContext(PERFIL_DIR, {
+      channel: "chrome",
+      headless: !loginManual,
+      acceptDownloads: false,
+    });
+    // La app guarda en sessionStorage qué sección quedó abierta tras el
+    // último import (para volver ahí después del reload). Lo limpiamos ANTES
+    // de que cargue cualquier página, así el menú arranca siempre en el
+    // mismo estado conocido (Status de preparación + No Ecom abiertos, el
+    // resto cerrado) y nunca quedan dos secciones abiertas a la vez por una
+    // corrida anterior.
+    await context.addInitScript(() => window.sessionStorage.clear());
+    const page = context.pages()[0] || (await context.newPage());
+    return { context, page };
+  }
+
+  let { context, page } = await abrirNavegador();
 
   try {
     if (loginManual) {
@@ -343,19 +363,33 @@ async function main() {
     }
 
     for (const id of idsACorrer) {
-      try {
-        await SECCIONES[id](page, reportes);
-      } catch (err) {
-        const captura = path.join(__dirname, `error-${id}.png`);
-        await page.screenshot({ path: captura, fullPage: true }).catch(() => {});
-        console.error(`Guardé una captura del momento del error en: ${captura}`);
-        throw err;
+      // Igual que en descargar-reportes.js: por las dudas, si el navegador
+      // se cierra solo a mitad de camino, reabrimos y reintentamos esa
+      // sección una sola vez antes de darnos por vencidos.
+      let reintentado = false;
+      for (;;) {
+        try {
+          await SECCIONES[id](page, reportes);
+          break;
+        } catch (err) {
+          if (esCierreInesperado(err) && !reintentado) {
+            reintentado = true;
+            console.log(`  (el navegador se cerró inesperadamente -- reabriendo y reintentando "${id}"...)`);
+            await context.close().catch(() => {});
+            ({ context, page } = await abrirNavegador());
+            continue;
+          }
+          const captura = path.join(__dirname, `error-${id}.png`);
+          await page.screenshot({ path: captura, fullPage: true }).catch(() => {});
+          console.error(`Guardé una captura del momento del error en: ${captura}`);
+          throw err;
+        }
       }
     }
 
     console.log("\nListo. Tablero actualizado.");
   } finally {
-    await context.close();
+    await context.close().catch(() => {});
   }
 }
 
