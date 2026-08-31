@@ -84,7 +84,25 @@ async function cerrarCartelWms(page) {
 
 async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo) {
   await clickBotonExt(page, textoBotonImprimir);
-  await page.locator(".x-window:visible", { hasText: tituloModal }).first().waitFor({ state: "visible", timeout: 25000 });
+  try {
+    await page.locator(".x-window:visible", { hasText: tituloModal }).first().waitFor({ state: "visible", timeout: 25000 });
+  } catch (err) {
+    // Diagnóstico: qué ventanas/carteles quedaron visibles cuando el modal
+    // esperado nunca apareció, para saber contra qué estamos chocando.
+    const info = await page.evaluate(() => ({
+      ventanas: Array.from(document.querySelectorAll(".x-window"))
+        .filter((w) => w.offsetParent !== null)
+        .map((w) => (w.querySelector(".x-window-header-title, .x-title-text")?.textContent || "").trim()),
+      mensajes: Array.from(document.querySelectorAll(".x-message-box"))
+        .filter((w) => w.offsetParent !== null)
+        .map((w) => (w.textContent || "").trim().slice(0, 200)),
+      hayMascara: !!document.querySelector(".x-mask"),
+    })).catch(() => null);
+    const captura = path.join(IMPRESIONES_DIR, `diagnostico_${timestamp()}.png`);
+    await page.screenshot({ path: captura }).catch(() => {});
+    console.log(`  DIAGNÓSTICO (modal "${tituloModal}" no apareció): ${JSON.stringify(info)} -- captura: ${captura}`);
+    throw err;
+  }
 
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
