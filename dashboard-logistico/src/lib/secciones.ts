@@ -76,6 +76,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     subsecciones: [
       { key: "DESP-Imprimir", label: "Para Imprimir" },
       { key: "DESP-Reimprimir", label: "Para Reimprimir" },
+      { key: "DESP-Grupos", label: "Grupos de Clientes (Admin)" },
     ],
   },
   {
