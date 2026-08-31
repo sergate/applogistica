@@ -163,7 +163,6 @@ async function main() {
 
   await conLock(async () => {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-      channel: "msedge",
       headless: true,
       acceptDownloads: true,
     });

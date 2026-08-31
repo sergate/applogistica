@@ -109,9 +109,8 @@ async function main() {
 
   await conLock(async () => {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-      // Mismo perfil y mismo Edge que descargar-reportes.js -- reutiliza la
-      // sesión ya logueada, no pide credenciales de nuevo.
-      channel: "msedge",
+      // Mismo perfil que descargar-reportes.js -- reutiliza la sesión ya
+      // logueada, no pide credenciales de nuevo.
       headless: true,
     });
     const page = context.pages()[0] || (await context.newPage());

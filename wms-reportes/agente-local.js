@@ -84,16 +84,15 @@ function esperarEnter() {
 }
 
 async function abrirContextos({ headless }) {
-  // Se usa Edge (ver nota en descargar-reportes.js) en vez de Chrome real.
+  // Chromium propio de Playwright (ver nota en descargar-reportes.js), no el
+  // navegador del sistema.
   const contextoWms = await chromium.launchPersistentContext(descargador.PERFIL_DIR, {
-    channel: "msedge",
     headless,
     acceptDownloads: true,
   });
   const paginaWms = contextoWms.pages()[0] || (await contextoWms.newPage());
 
   const contextoTablero = await chromium.launchPersistentContext(subidor.PERFIL_DIR, {
-    channel: "msedge",
     headless,
     acceptDownloads: false,
   });

@@ -16,6 +16,21 @@ const { conLock } = require("./lock.js");
 const URL_BASE = "https://wms-cheeky.azurewebsites.net/";
 const PERFIL_DIR = path.join(__dirname, "perfil-chrome");
 const DESCARGAS_DIR = path.join(__dirname, "descargas");
+const CONFIG_PATH = path.join(__dirname, "agente-config.json");
+
+// Usuario/clave del WMS, opcionales, en agente-config.json ("wmsUsuario" /
+// "wmsClave") -- solo hace falta configurarlos si NO se usa el Chrome/Edge
+// del sistema (que guarda la contraseña solo y la autocompleta), como pasa
+// con el Chromium propio de Playwright. Si no están, el comportamiento es
+// el de siempre: hay que re-loguearse a mano con "--login" cuando vence la
+// sesión.
+function leerCredencialesWms() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    if (config.wmsUsuario && config.wmsClave) return { usuario: config.wmsUsuario, clave: config.wmsClave };
+  } catch {}
+  return null;
+}
 
 function timestamp() {
   return new Date().toISOString().replace(/[:.]/g, "-");
@@ -347,10 +362,11 @@ async function correrDescargas(idsACorrer) {
 
   async function abrirNavegador() {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-      // Se usa Edge (ya instalado en todas las PCs con Windows) en vez de
-      // Chrome real: Chrome se autoactualiza solo y puede forzar un reinicio
-      // a mitad de una descarga, cortando la automatización.
-      channel: "msedge",
+      // Chromium propio de Playwright (npx playwright install chromium), NO
+      // el Edge del sistema: Edge (y Chrome) se autoactualizan solos y eso
+      // puede cortar una descarga a mitad de camino sin aviso -- el binario
+      // de Playwright queda fijo en la versión que se instaló, no cambia
+      // solo. Requiere "npx playwright install chromium" una vez por PC.
       headless: !loginManual,
       acceptDownloads: true,
     });
@@ -421,17 +437,34 @@ async function chequearSesion(page) {
     .catch(() => false);
 
   if (!haySesion) {
-    // La sesión del WMS parece vencerse seguido. Si Edge ya autocompletó
-    // usuario/contraseña guardados (por su propio gestor de contraseñas,
-    // no algo que este script escriba), alcanza con apretar "Ingresar" --
-    // nunca leemos ni tipeamos la contraseña acá.
+    // La sesión del WMS parece vencerse seguido. Si el navegador ya
+    // autocompletó usuario/contraseña guardados (gestor de contraseñas del
+    // navegador, no algo que este script escriba por su cuenta), alcanza
+    // con apretar "Ingresar". Si no hay nada autocompletado (como pasa con
+    // el Chromium propio de Playwright, que no guarda contraseñas) pero el
+    // usuario configuró wmsUsuario/wmsClave en agente-config.json, se
+    // tipean acá -- ver leerCredencialesWms() más arriba.
     const usuario = page.locator('input[type="text"], input:not([type])').first();
     const clave = page.locator('input[type="password"]').first();
     const hayLogin = await clave.isVisible().catch(() => false);
 
     if (hayLogin) {
-      const usuarioLleno = ((await usuario.inputValue().catch(() => "")) || "").length > 0;
-      const claveLlena = ((await clave.inputValue().catch(() => "")) || "").length > 0;
+      let usuarioLleno = ((await usuario.inputValue().catch(() => "")) || "").length > 0;
+      let claveLlena = ((await clave.inputValue().catch(() => "")) || "").length > 0;
+
+      // Si no hay nada autocompletado pero hay credenciales configuradas
+      // (agente-config.json), las tipeamos acá -- es la única parte del
+      // código que llega a ver la contraseña del WMS, y solo si el usuario
+      // decidió guardarla explícitamente para poder correr sin Edge.
+      if (!(usuarioLleno && claveLlena)) {
+        const credenciales = leerCredencialesWms();
+        if (credenciales) {
+          await usuario.fill(credenciales.usuario);
+          await clave.fill(credenciales.clave);
+          usuarioLleno = true;
+          claveLlena = true;
+        }
+      }
 
       if (usuarioLleno && claveLlena) {
         await page.getByText("Ingresar", { exact: true }).first().click();
@@ -450,7 +483,7 @@ async function chequearSesion(page) {
     await page.screenshot({ path: captura }).catch(() => {});
     throw new Error(
       "Parece que la sesión no está activa y no se pudo reloguear solo (los campos de usuario/contraseña no estaban " +
-        "autocompletados por Edge, o el login no funcionó). " +
+        "autocompletados, o el login no funcionó). " +
         `Guardé una captura en ${captura} para revisar. ` +
         'Corré "node agente-local.js --login" en tu terminal para volver a iniciar sesión a mano (WMS + Tablero).'
     );
