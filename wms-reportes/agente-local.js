@@ -243,8 +243,11 @@ async function avisarEventoDespacho(token, { trabajoId, despachoCabId, guia, tip
 }
 
 // Imprime (o reimprime) la guía + remito de cada guía del payload, una por
-// una -- cada guía en su propio try/catch para que una que falle no aborte
-// el resto del lote. "tipo" es solo para el log de auditoría (impresion vs
+// una -- cada guía en su propio try/catch para que una falla PUNTUAL (ej. un
+// timeout de un modal) no aborte el resto del lote. Un cierre real del
+// navegador SÍ se propaga (ver más abajo), para que el reintento de
+// atenderPedido() se encargue en vez de marcar cada guía restante como
+// error una por una. "tipo" es solo para el log de auditoría (impresion vs
 // reimpresion); el circuito de impresión en sí es idéntico.
 async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
   const { paginaWms } = paginas;
@@ -275,6 +278,13 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
         },
       });
     } catch (err) {
+      // Si lo que falló fue el navegador en sí (se cerró solo a mitad de
+      // camino) no tiene sentido seguir con la próxima guía -- todas las
+      // que queden van a fallar igual. Se propaga para que atenderPedido()
+      // reabra el navegador y reintente el pedido COMPLETO una vez, en vez
+      // de que cada guía restante quede marcada como error una por una.
+      if (descargador.esCierreInesperado(err)) throw err;
+
       conError++;
       const mensaje = err instanceof Error ? err.message : "Error inesperado";
       console.error(`  (falló la guía ${guia}: ${mensaje})`);
