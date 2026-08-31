@@ -84,11 +84,42 @@ async function cerrarCartelWms(page) {
 
 async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo) {
   await clickBotonExt(page, textoBotonImprimir);
-  try {
-    await page.locator(".x-window:visible", { hasText: tituloModal }).first().waitFor({ state: "visible", timeout: 25000 });
-  } catch (err) {
+
+  // Para ciertos casos (ej. "los remitos de clientes se deben imprimir
+  // desde GACI") el WMS no abre el modal de impresión -- muestra un cartel
+  // de confirmación en su lugar. Antes esto quedaba trabado bloqueando el
+  // resto del lote; ahora se detecta apenas aparece, se cierra, y se avisa
+  // como "no aplica" en vez de como error de automatización.
+  const modalLoc = page.locator(".x-window:visible", { hasText: tituloModal }).first();
+  const cartelLoc = page.locator(".x-message-box:visible").filter({ hasText: /gaci/i }).first();
+  let apareceModal = false;
+  for (let i = 0; i < 50; i++) {
+    if (await modalLoc.isVisible().catch(() => false)) {
+      apareceModal = true;
+      break;
+    }
+    if (await cartelLoc.isVisible().catch(() => false)) {
+      const texto = ((await cartelLoc.textContent().catch(() => "")) || "").trim();
+      const cerrado = await cartelLoc
+        .locator("a.x-btn:visible", { hasText: /^No$/ })
+        .first()
+        .click({ timeout: 5000 })
+        .then(() => true)
+        .catch(() => false);
+      if (!cerrado) {
+        await cartelLoc.locator("a.x-btn:visible", { hasText: /^Cancel$/ }).first().click({ timeout: 5000 }).catch(() => {});
+      }
+      await esperarGridCargado(page);
+      const err = new Error(texto.replace(/\s+/g, " ").slice(0, 300) || "El WMS no permite imprimir esto desde acá.");
+      err.noAplica = true;
+      throw err;
+    }
+    await page.waitForTimeout(500);
+  }
+
+  if (!apareceModal) {
     // Diagnóstico: qué ventanas/carteles quedaron visibles cuando el modal
-    // esperado nunca apareció, para saber contra qué estamos chocando.
+    // esperado nunca apareció (y tampoco era el cartel de GACI conocido).
     const info = await page.evaluate(() => ({
       ventanas: Array.from(document.querySelectorAll(".x-window"))
         .filter((w) => w.offsetParent !== null)
@@ -101,7 +132,7 @@ async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo
     const captura = path.join(IMPRESIONES_DIR, `diagnostico_${timestamp()}.png`);
     await page.screenshot({ path: captura }).catch(() => {});
     console.log(`  DIAGNÓSTICO (modal "${tituloModal}" no apareció): ${JSON.stringify(info)} -- captura: ${captura}`);
-    throw err;
+    throw new Error(`El modal "${tituloModal}" no apareció después de 25s.`);
   }
 
   const [download] = await Promise.all([
