@@ -9,13 +9,10 @@
 
 const path = require("path");
 const fs = require("fs");
-const { spawn, execFile } = require("child_process");
-const { promisify } = require("util");
+const { spawn } = require("child_process");
 const { chromium } = require("playwright");
 const { conLock } = require("./lock.js");
 const { URL_BASE, PERFIL_DIR, chequearSesion } = require("./descargar-reportes.js");
-
-const execFileP = promisify(execFile);
 
 const IMPRESIONES_DIR = path.join(__dirname, "impresiones");
 // Se crea al cargar el módulo (no solo al correr el CLI) -- agente-local.js
@@ -118,43 +115,16 @@ function correrSumatra(pdfPath, impresora) {
 }
 
 // SumatraPDF sale apenas termina de MANDAR el documento a la cola de
-// Windows, no cuando la impresora física termina de sacarlo -- para un
-// remito de 50+ páginas eso puede tardar varios minutos más. Se consulta la
-// cola real (wmic, no requiere PowerShell) hasta que no queden trabajos de
-// esta impresora, así la próxima guía del lote no arranca mientras la
-// anterior todavía se está imprimiendo.
-async function hayTrabajosEnCola(nombreImpresora) {
-  try {
-    const { stdout } = await execFileP("wmic", ["printjob", "get", "Name"], {
-      encoding: "buffer",
-      timeout: 10000,
-    });
-    const texto = stdout.toString("utf16le").toLowerCase();
-    return texto.includes(nombreImpresora.toLowerCase());
-  } catch {
-    // "No hay instancias disponibles" en algunos Windows sale por código de
-    // error en vez de por stdout vacío -- se interpreta como cola vacía, no
-    // como falla real (wmic tampoco está garantizado a futuro, así que un
-    // fallo acá no debe trabar todo el flujo de impresión).
-    return false;
-  }
-}
-
-async function esperarColaVacia(nombreImpresora, { timeoutMs = 5 * 60_000, intervaloMs = 2000 } = {}) {
-  if (!nombreImpresora) return; // sin impresora configurada (-print-to-default) no hay nombre por el cual filtrar
-  const limite = Date.now() + timeoutMs;
-  while (await hayTrabajosEnCola(nombreImpresora)) {
-    if (Date.now() >= limite) {
-      console.log(`  (la cola de "${nombreImpresora}" sigue con trabajos después de ${Math.round(timeoutMs / 1000)}s, sigo igual)`);
-      return;
-    }
-    await new Promise((r) => setTimeout(r, intervaloMs));
-  }
-}
-
+// Windows, no cuando la impresora física termina de sacarlo. Se intentó
+// esperar la cola real vía wmic filtrando por nombre de impresora, pero
+// "Facturacion" es una impresora compartida con uso normal del depósito --
+// casi siempre hay ALGÚN trabajo en cola (de otra guía, de otro proceso),
+// así que ese chequeo esperaba 5 minutos por guía sin sentido. Se sacó: por
+// ahora se confía en que SumatraPDF ya espera a que el documento esté
+// completamente encolado antes de salir (documentado así), que es lo mismo
+// que ya veníamos usando cuando las impresiones funcionaron bien.
 async function imprimirPdf(pdfPath, impresora) {
   await correrSumatra(pdfPath, impresora);
-  await esperarColaVacia(impresora);
 }
 
 // onPaso(paso, resultado, mensaje?) se llama después de CADA paso (no solo
