@@ -14,10 +14,13 @@ antes de pasar al siguiente.
 ```bash
 cd wms-reportes
 npm install
+npx playwright install chromium
 ```
 
-Necesita Google Chrome instalado en la PC (usa el Chrome del sistema, no
-descarga uno aparte).
+No hace falta tener Chrome ni Edge instalados en la PC: usa el Chromium
+propio de Playwright (versión fija, no se autoactualiza solo -- así una
+actualización del navegador del sistema no puede cortar una descarga a
+mitad de camino).
 
 ## Primer login
 
@@ -29,9 +32,15 @@ set LOGIN_MANUAL=1
 node descargar-reportes.js
 ```
 
-Se abre una ventana de Chrome. Iniciá sesión como siempre, esperá a que
+Se abre una ventana del navegador. Iniciá sesión como siempre, esperá a que
 cargue el Dashboard, y volvé a la consola y apretá Enter. La sesión queda
 guardada en la carpeta `perfil-chrome` (no se sube al repo).
+
+Como este Chromium no guarda contraseñas, la sesión puede vencer seguido y
+pedir loguearse a mano de nuevo. Para evitarlo, se puede configurar
+`wmsUsuario`/`wmsClave` en `agente-config.json` (ver
+`agente-config.example.json`) y `chequearSesion()` reloguea sola cuando
+hace falta -- opcional, y ese archivo no se sube al repo.
 
 ## Uso normal
 
@@ -76,7 +85,7 @@ set LOGIN_MANUAL=1
 node actualizar-tablero.js
 ```
 
-Igual que con el WMS: se abre Chrome, iniciá sesión, esperá que cargue el
+Igual que con el WMS: se abre el navegador, iniciá sesión, esperá que cargue el
 tablero, volvé a la consola y apretá Enter. Queda guardada en
 `perfil-chrome-tablero/` (carpeta separada del perfil del WMS).
 
