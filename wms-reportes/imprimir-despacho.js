@@ -55,8 +55,8 @@ function escapeRegex(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-async function clickMenuItem(page, texto) {
-  await page.getByText(texto, { exact: true }).first().click();
+async function clickMenuItem(page, texto, options) {
+  await page.getByText(texto, { exact: true }).first().click(options);
 }
 
 async function clickBotonExt(page, texto, { exact = true } = {}) {
@@ -127,6 +127,25 @@ async function imprimirPdf(pdfPath, impresora) {
   await correrSumatra(pdfPath, impresora);
 }
 
+// Una vez que la máscara de carga del WMS queda trabada, NO se despeja sola
+// (se probó esperar hasta 20s, sigue tapada) -- arrastra a todas las guías
+// que vengan después en el mismo lote. En vez de solo esperar, si el click
+// en "Despacho" no entra en unos segundos se recarga la página del WMS
+// entera (con re-login si hizo falta) para forzar un estado limpio.
+async function irADespacho(page) {
+  await page.locator(".x-mask").first().waitFor({ state: "hidden", timeout: 5000 }).catch(() => {});
+  try {
+    await clickMenuItem(page, "Despacho", { timeout: 8000 });
+    return;
+  } catch {
+    console.log("  (la pantalla del WMS quedó trabada -- recargando...)");
+  }
+  await page.goto(URL_BASE, { waitUntil: "networkidle" });
+  await page.waitForTimeout(1000);
+  await chequearSesion(page);
+  await clickMenuItem(page, "Despacho");
+}
+
 // onPaso(paso, resultado, mensaje?) se llama después de CADA paso (no solo
 // al final) para que quien llama (agente-local.js) pueda registrar "guía
 // impresa" apenas pasa, sin esperar a que el remito también termine -- si el
@@ -134,11 +153,7 @@ async function imprimirPdf(pdfPath, impresora) {
 async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
   const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
 
-  // Defensivo: si la guía anterior del lote quedó a mitad de camino (falló
-  // con una máscara de carga todavía tapando la pantalla), esperar a que se
-  // despeje antes de intentar clickear "Despacho" de nuevo.
-  await page.locator(".x-mask").first().waitFor({ state: "hidden", timeout: 20000 }).catch(() => {});
-  await clickMenuItem(page, "Despacho");
+  await irADespacho(page);
   await page.waitForTimeout(800);
 
   const campoGuia = page.locator('input[placeholder="Guia"]').first();
