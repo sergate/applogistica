@@ -22,7 +22,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Falta "vista" (imprimir|reimprimir).' }, { status: 400 });
     }
 
-    let query = supabaseAdmin.from("despacho_guias").select("*").order("fecha_creacion", { ascending: false });
+    // Los despachos ECOM no pasan por este circuito de impresión.
+    let query = supabaseAdmin
+      .from("despacho_guias")
+      .select("*")
+      .neq("tipo", "ECOM")
+      .order("fecha_creacion", { ascending: false });
     query =
       vista === "reimprimir"
         ? query.eq("guia_impresa", true).eq("remito_impreso", true)

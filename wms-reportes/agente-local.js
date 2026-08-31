@@ -34,6 +34,20 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
 const INTERVALO_POLLING_MS = 8000; // solo se usa en --loop
 
+// Deploys de preview de Vercel (ej. el de la rama "test") pueden tener
+// activada la protección SSO, que redirige cualquier request sin sesión de
+// Vercel a una pantalla de login -- rompe las llamadas del agente aunque el
+// Bearer token de la app sea válido. Este secret ("Protection Bypass for
+// Automation", Project Settings -> Deployment Protection en Vercel) lo
+// esquiva; no hace falta en producción si ahí no está activada.
+const VERCEL_PROTECTION_BYPASS = process.env.VERCEL_PROTECTION_BYPASS || "";
+
+function headersAgente(token, extra) {
+  const headers = Object.assign({ Authorization: `Bearer ${token}` }, extra || {});
+  if (VERCEL_PROTECTION_BYPASS) headers["x-vercel-protection-bypass"] = VERCEL_PROTECTION_BYPASS;
+  return headers;
+}
+
 // Qué reportes de descargar-reportes.js hay que bajar para poder subir cada
 // sección con actualizar-tablero.js.
 const REPORTES_POR_SECCION = {
@@ -172,7 +186,7 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
   await avisarProgreso(config.token, pedido.id, 70, `Subiendo ${filas.length} guías al Tablero...`);
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/importar`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.token}` },
+    headers: headersAgente(config.token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ trabajoId: pedido.id, filas }),
   });
   const data = await res.json().catch(() => null);
@@ -196,7 +210,7 @@ function borrarArchivos(rutas) {
 async function avisarProgreso(token, id, progreso, paso) {
   await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/progreso`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: headersAgente(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ id, progreso, paso }),
   }).catch((err) => {
     console.error("No pude avisar el progreso al Tablero:", err.message);
@@ -206,7 +220,7 @@ async function avisarProgreso(token, id, progreso, paso) {
 async function avisarResultado(token, id, exito, mensaje) {
   await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/resultado`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: headersAgente(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ id, exito, mensaje }),
   }).catch((err) => {
     console.error("No pude avisar el resultado al Tablero:", err.message);
@@ -215,7 +229,7 @@ async function avisarResultado(token, id, exito, mensaje) {
 
 async function buscarProximoPedido(token) {
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/proximo`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: headersAgente(token),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.success) {
