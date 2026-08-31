@@ -9,8 +9,20 @@ export const SECCIONES_VALIDAS = [
   "pd_clientes",
   "pd_propios",
   "ocupacion_almacen",
+  "despacho_importar",
+  "despacho_imprimir",
+  "despacho_reimprimir",
 ] as const;
 export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
+
+// Secciones cuyo pedido lleva un "payload" (ej. la lista de guías
+// seleccionadas) que cambia en cada click -- para estas, /solicitar NO debe
+// reusar un pedido pendiente/corriendo existente como hace con el resto
+// (sería idéntico a ignorar la selección nueva del usuario).
+export const SECCIONES_CON_PAYLOAD_VARIABLE: readonly SeccionActualizacion[] = [
+  "despacho_imprimir",
+  "despacho_reimprimir",
+];
 
 export function esSeccionValida(v: unknown): v is SeccionActualizacion {
   return typeof v === "string" && (SECCIONES_VALIDAS as readonly string[]).includes(v);
@@ -63,6 +75,9 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
   pd_clientes: "PD-Clientes-ActualizarWMS",
   pd_propios: "PD-Propios-ActualizarWMS",
   ocupacion_almacen: "ALM-ActualizarWMS",
+  despacho_importar: "DESP-Imprimir",
+  despacho_imprimir: "DESP-Imprimir",
+  despacho_reimprimir: "DESP-Reimprimir",
 };
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */

@@ -25,6 +25,8 @@ const { chromium } = require("playwright");
 
 const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
+const reporteDespachos = require("./reporte-despachos.js");
+const { imprimirGuia } = require("./imprimir-despacho.js");
 const { conLock } = require("./lock.js");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
@@ -32,6 +34,20 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // un deploy preview en vez de a producción sin tocar código.
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
 const INTERVALO_POLLING_MS = 8000; // solo se usa en --loop
+
+// Deploys de preview de Vercel (ej. el de la rama "test") pueden tener
+// activada la protección SSO, que redirige cualquier request sin sesión de
+// Vercel a una pantalla de login -- rompe las llamadas del agente aunque el
+// Bearer token de la app sea válido. Este secret ("Protection Bypass for
+// Automation", Project Settings -> Deployment Protection en Vercel) lo
+// esquiva; no hace falta en producción si ahí no está activada.
+const VERCEL_PROTECTION_BYPASS = process.env.VERCEL_PROTECTION_BYPASS || "";
+
+function headersAgente(token, extra) {
+  const headers = Object.assign({ Authorization: `Bearer ${token}` }, extra || {});
+  if (VERCEL_PROTECTION_BYPASS) headers["x-vercel-protection-bypass"] = VERCEL_PROTECTION_BYPASS;
+  return headers;
+}
 
 // Qué reportes de descargar-reportes.js hay que bajar para poder subir cada
 // sección con actualizar-tablero.js.
@@ -68,16 +84,15 @@ function esperarEnter() {
 }
 
 async function abrirContextos({ headless }) {
-  // Se usa Edge (ver nota en descargar-reportes.js) en vez de Chrome real.
+  // Chromium propio de Playwright (ver nota en descargar-reportes.js), no el
+  // navegador del sistema.
   const contextoWms = await chromium.launchPersistentContext(descargador.PERFIL_DIR, {
-    channel: "msedge",
     headless,
     acceptDownloads: true,
   });
   const paginaWms = contextoWms.pages()[0] || (await contextoWms.newPage());
 
   const contextoTablero = await chromium.launchPersistentContext(subidor.PERFIL_DIR, {
-    channel: "msedge",
     headless,
     acceptDownloads: false,
   });
@@ -154,6 +169,34 @@ async function correrPedido(config, pedido, paginas) {
   return Object.values(manifiesto).flat();
 }
 
+// Trae las guías de despacho de HOY directo del WMS (JSON, sin descargar
+// ningún archivo) y las manda al Tablero -- no usa paginaTablero porque no
+// hay nada que subir por su UI, es un POST directo con el token del agente.
+async function correrPedidoDespachoImportar(config, pedido, paginas) {
+  const { paginaWms } = paginas;
+
+  await avisarProgreso(config.token, pedido.id, 10, "Consultando guías de hoy en el WMS...");
+  await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+  await paginaWms.waitForTimeout(1000);
+  await descargador.chequearSesion(paginaWms);
+
+  const hoy = reporteDespachos.hoyISO();
+  const filas = await reporteDespachos.listarDespachos(paginaWms, hoy, hoy);
+
+  await avisarProgreso(config.token, pedido.id, 70, `Subiendo ${filas.length} guías al Tablero...`);
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/importar`, {
+    method: "POST",
+    headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ trabajoId: pedido.id, filas }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || `Error subiendo guías al Tablero (HTTP ${res.status}).`);
+  }
+
+  return []; // no hay archivos locales que borrar en este tipo de pedido
+}
+
 // Borra del disco los CSV que se acaban de subir con éxito, para no
 // acumular copias viejas en la carpeta descargas/.
 function borrarArchivos(rutas) {
@@ -167,7 +210,7 @@ function borrarArchivos(rutas) {
 async function avisarProgreso(token, id, progreso, paso) {
   await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/progreso`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: headersAgente(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ id, progreso, paso }),
   }).catch((err) => {
     console.error("No pude avisar el progreso al Tablero:", err.message);
@@ -177,16 +220,100 @@ async function avisarProgreso(token, id, progreso, paso) {
 async function avisarResultado(token, id, exito, mensaje) {
   await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/resultado`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    headers: headersAgente(token, { "Content-Type": "application/json" }),
     body: JSON.stringify({ id, exito, mensaje }),
   }).catch((err) => {
     console.error("No pude avisar el resultado al Tablero:", err.message);
   });
 }
 
+// Avisa el resultado de UN paso (guía o remito) de UNA guía dentro de un
+// pedido de impresión/reimpresión -- el Tablero lo usa para el log de
+// auditoría y, si salió bien, para actualizar en vivo la columna Sí/No de
+// esa guía en la grilla (no hace falta esperar a que termine el lote).
+async function avisarEventoDespacho(token, { trabajoId, despachoCabId, guia, tipo, paso, resultado, mensaje }) {
+  await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/evento`, {
+    method: "POST",
+    headers: headersAgente(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ trabajoId, despachoCabId, guia, tipo, paso, resultado, mensaje }),
+  }).catch((err) => {
+    console.error("No pude avisar un evento de impresión al Tablero:", err.message);
+  });
+}
+
+// Imprime (o reimprime) la guía + remito de cada guía del payload, una por
+// una -- cada guía en su propio try/catch para que una falla PUNTUAL (ej. un
+// timeout de un modal) no aborte el resto del lote. Un cierre real del
+// navegador SÍ se propaga (ver más abajo), para que el reintento de
+// atenderPedido() se encargue en vez de marcar cada guía restante como
+// error una por una. "tipo" es solo para el log de auditoría (impresion vs
+// reimpresion); el circuito de impresión en sí es idéntico.
+async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
+  const { paginaWms } = paginas;
+  const guias = pedido.payload?.guias;
+  if (!Array.isArray(guias) || guias.length === 0) {
+    throw new Error("El pedido no tiene guías para imprimir (payload vacío).");
+  }
+
+  await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+  await paginaWms.waitForTimeout(1000);
+  await descargador.chequearSesion(paginaWms);
+
+  let hechas = 0;
+  let conError = 0;
+  for (const { despachoCabId, guia } of guias) {
+    await avisarProgreso(
+      config.token,
+      pedido.id,
+      Math.round((hechas / guias.length) * 100),
+      `Imprimiendo guía ${guia} (${hechas + 1}/${guias.length})...`
+    );
+    let ultimoPasoOk = null;
+    try {
+      await imprimirGuia(paginaWms, guia, {
+        onPaso: (paso, resultado) => {
+          ultimoPasoOk = paso;
+          return avisarEventoDespacho(config.token, { trabajoId: pedido.id, despachoCabId, guia, tipo, paso, resultado });
+        },
+      });
+    } catch (err) {
+      // Si lo que falló fue el navegador en sí (se cerró solo a mitad de
+      // camino) no tiene sentido seguir con la próxima guía -- todas las
+      // que queden van a fallar igual. Se propaga para que atenderPedido()
+      // reabra el navegador y reintente el pedido COMPLETO una vez, en vez
+      // de que cada guía restante quede marcada como error una por una.
+      if (descargador.esCierreInesperado(err)) throw err;
+
+      conError++;
+      const mensaje = err instanceof Error ? err.message : "Error inesperado";
+      console.error(`  (falló la guía ${guia}: ${mensaje})`);
+      // imprimirGuia va guía -> remito en orden: si el último onPaso avisado
+      // fue "guia", el que falló fue el remito; si no llegó a avisar nada,
+      // falló en la guía misma.
+      const pasoFallido = ultimoPasoOk === "guia" ? "remito" : "guia";
+      await avisarEventoDespacho(config.token, {
+        trabajoId: pedido.id,
+        despachoCabId,
+        guia,
+        tipo,
+        paso: pasoFallido,
+        resultado: "error",
+        mensaje,
+      });
+    }
+    hechas++;
+  }
+
+  if (conError > 0) {
+    throw new Error(`${conError} de ${guias.length} guías fallaron -- revisar el log de eventos.`);
+  }
+
+  return []; // no hay archivos locales que borrar en este tipo de pedido
+}
+
 async function buscarProximoPedido(token) {
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/proximo`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: headersAgente(token),
   });
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.success) {
@@ -216,7 +343,14 @@ async function atenderPedido(config, pedido) {
         let reintentado = false;
         for (;;) {
           try {
-            const archivos = await correrPedido(config, pedido, contextos);
+            const archivos =
+              pedido.seccion === "despacho_importar"
+                ? await correrPedidoDespachoImportar(config, pedido, contextos)
+                : pedido.seccion === "despacho_imprimir"
+                ? await correrPedidoDespachoImprimir(config, pedido, contextos, "impresion")
+                : pedido.seccion === "despacho_reimprimir"
+                ? await correrPedidoDespachoImprimir(config, pedido, contextos, "reimpresion")
+                : await correrPedido(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, "OK");
             borrarArchivos(archivos);
             console.log(`  -> #${pedido.id} listo.`);

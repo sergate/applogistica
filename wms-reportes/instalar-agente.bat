@@ -41,6 +41,17 @@ if errorlevel 1 (
 )
 echo [OK] Dependencias instaladas.
 
+echo.
+echo Descargando el navegador del Agente ^(Chromium de Playwright, ~150 MB,
+echo puede tardar unos minutos^)...
+call npx playwright install chromium
+if errorlevel 1 (
+  echo ERROR descargando el navegador. Revisa el mensaje de arriba.
+  pause
+  exit /b 1
+)
+echo [OK] Navegador instalado.
+
 REM --- 3. Token personal ---
 echo.
 if exist agente-config.json (
@@ -67,7 +78,7 @@ if exist agente-config.json (
 
 REM --- 4. Login WMS + Tablero ---
 echo.
-echo Ahora se van a abrir 2 ventanas de Edge ^(WMS y Tablero^).
+echo Ahora se van a abrir 2 ventanas del navegador ^(WMS y Tablero^).
 echo Inicia sesion en las DOS con tu usuario habitual, y cuando ambas
 echo esten logueadas volve aca y apreta una tecla.
 pause

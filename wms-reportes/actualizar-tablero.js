@@ -337,8 +337,8 @@ async function correrSubidas(idsACorrer, reportes) {
 
   async function abrirNavegador() {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
-      // Ver nota en descargar-reportes.js: Edge en vez de Chrome real.
-      channel: "msedge",
+      // Ver nota en descargar-reportes.js: Chromium propio de Playwright,
+      // no el navegador del sistema.
       headless: !loginManual,
       acceptDownloads: false,
     });

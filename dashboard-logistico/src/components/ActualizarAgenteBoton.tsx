@@ -2,7 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Seccion = "no_ecom" | "ecom" | "carga_inicial" | "remanentes" | "pd_clientes" | "pd_propios" | "ocupacion_almacen";
+type Seccion =
+  | "no_ecom"
+  | "ecom"
+  | "carga_inicial"
+  | "remanentes"
+  | "pd_clientes"
+  | "pd_propios"
+  | "ocupacion_almacen"
+  | "despacho_importar"
+  | "despacho_imprimir"
+  | "despacho_reimprimir";
 
 interface PedidoEstado {
   id: number;
@@ -26,9 +36,21 @@ const INTERVALO_POLLING_MS = 3000;
 export default function ActualizarAgenteBoton({
   seccion,
   onExito,
+  payload,
+  label,
+  deshabilitado,
+  onCorriendoChange,
 }: {
   seccion: Seccion;
   onExito?: () => void;
+  /** Datos extra del pedido (ej. guías seleccionadas) -- solo lo usan despacho_imprimir/despacho_reimprimir. */
+  payload?: unknown;
+  /** Reemplaza el texto del botón en reposo (default: "Actualizar esta sección (WMS)"). */
+  label?: string;
+  /** Deshabilita el botón por una condición externa (ej. sin filas seleccionadas), además del estado propio. */
+  deshabilitado?: boolean;
+  /** Avisa cada vez que cambia si hay un pedido pendiente/corriendo -- útil para que el padre acelere el polling de su propia grilla mientras tanto. */
+  onCorriendoChange?: (corriendo: boolean) => void;
 }) {
   const [pedido, setPedido] = useState<PedidoEstado | null>(null);
   const [enviando, setEnviando] = useState(false);
@@ -86,7 +108,7 @@ export default function ActualizarAgenteBoton({
       const res = await fetch("/api/actualizaciones/solicitar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seccion }),
+        body: JSON.stringify(payload !== undefined ? { seccion, payload } : { seccion }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo crear el pedido.");
@@ -112,23 +134,28 @@ export default function ActualizarAgenteBoton({
 
   const corriendo = pedido?.estado === "pendiente" || pedido?.estado === "corriendo";
 
+  useEffect(() => {
+    onCorriendoChange?.(corriendo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [corriendo]);
+
   return (
     <div className="mt-3">
       <button
         type="button"
         onClick={solicitarActualizacion}
-        disabled={enviando || corriendo}
+        disabled={enviando || corriendo || deshabilitado}
         className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-          enviando || corriendo
+          enviando || corriendo || deshabilitado
             ? "bg-slate-200 text-slate-400 cursor-not-allowed"
             : "bg-emerald-600 text-white hover:bg-emerald-700"
         }`}
       >
         {corriendo
           ? pedido?.estado === "corriendo"
-            ? "Actualizando..."
+            ? "Procesando..."
             : "Esperando al Agente Local..."
-          : "Actualizar esta sección (WMS)"}
+          : label || "Actualizar esta sección (WMS)"}
       </button>
 
       {pedido?.estado === "corriendo" && (
