@@ -71,6 +71,16 @@ export function parseCodigoCliente(clienteRaw: string | null): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * El campo "Cliente" que trae el WMS para Despacho usa otro formato, sin
+ * guión, ej: "39960 DEPOSITO SHOWROOM CHK" -> código = "39960".
+ */
+export function parseCodigoClienteDespacho(clienteRaw: string | null): string | null {
+  if (!clienteRaw) return null;
+  const m = clienteRaw.trim().match(/^(\d+)\s+/);
+  return m ? m[1] : null;
+}
+
 export interface PendienteDespachoPropiosRow {
   numero: string;
   curva: string | null;

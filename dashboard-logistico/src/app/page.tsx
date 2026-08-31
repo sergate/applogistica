@@ -1011,6 +1011,7 @@ export default function DashboardLayout() {
   const despachoSubSections = [
     { key: "DESP-Imprimir", label: "Para Imprimir" },
     { key: "DESP-Reimprimir", label: "Para Reimprimir" },
+    { key: "DESP-Grupos", label: "Grupos de Clientes (Admin)" },
   ];
 
   interface DespachoGuiaFila {
@@ -1033,6 +1034,21 @@ export default function DashboardLayout() {
     remito_impreso: boolean;
     remito_impreso_en: string | null;
     remito_impreso_por_nombre: string | null;
+    grupo: string | null;
+  }
+
+  function filasDespachoFiltradas(
+    filas: DespachoGuiaFila[],
+    filtroCliente: string,
+    filtroTipo: string,
+    filtroGrupo: string
+  ): DespachoGuiaFila[] {
+    return filas.filter((f) => {
+      if (filtroCliente && !(f.cliente || "").toLowerCase().includes(filtroCliente.toLowerCase())) return false;
+      if (filtroTipo !== "TODOS" && (f.tipo || "SIN TIPO") !== filtroTipo) return false;
+      if (filtroGrupo !== "TODOS" && (f.grupo || "SIN GRUPO") !== filtroGrupo) return false;
+      return true;
+    });
   }
 
   const [despachoImprimiendoEnCurso, setDespachoImprimiendoEnCurso] = useState(false);
@@ -1056,10 +1072,22 @@ export default function DashboardLayout() {
       return next;
     });
   };
+  const [filtroClienteImprimir, setFiltroClienteImprimir] = useState("");
+  const [filtroTipoImprimir, setFiltroTipoImprimir] = useState("TODOS");
+  const [filtroGrupoImprimir, setFiltroGrupoImprimir] = useState("TODOS");
+  const tiposDisponiblesImprimir = [...new Set((despachoImprimirData?.filas || []).map((f) => f.tipo || "SIN TIPO"))].sort();
+  const gruposDisponiblesImprimir = [...new Set((despachoImprimirData?.filas || []).map((f) => f.grupo || "SIN GRUPO"))].sort();
+  const filasFiltradasImprimir = filasDespachoFiltradas(
+    despachoImprimirData?.filas || [],
+    filtroClienteImprimir,
+    filtroTipoImprimir,
+    filtroGrupoImprimir
+  );
   const toggleDespachoImprimirTodas = () => {
-    const filas = despachoImprimirData?.filas || [];
     setDespachoImprimirSeleccion((prev) =>
-      prev.size === filas.length ? new Set() : new Set(filas.map((f) => f.despacho_cab_id))
+      prev.size === filasFiltradasImprimir.length
+        ? new Set()
+        : new Set(filasFiltradasImprimir.map((f) => f.despacho_cab_id))
     );
   };
 
@@ -1084,11 +1112,128 @@ export default function DashboardLayout() {
       return next;
     });
   };
+  const [filtroClienteReimprimir, setFiltroClienteReimprimir] = useState("");
+  const [filtroTipoReimprimir, setFiltroTipoReimprimir] = useState("TODOS");
+  const [filtroGrupoReimprimir, setFiltroGrupoReimprimir] = useState("TODOS");
+  const tiposDisponiblesReimprimir = [...new Set((despachoReimprimirData?.filas || []).map((f) => f.tipo || "SIN TIPO"))].sort();
+  const gruposDisponiblesReimprimir = [...new Set((despachoReimprimirData?.filas || []).map((f) => f.grupo || "SIN GRUPO"))].sort();
+  const filasFiltradasReimprimir = filasDespachoFiltradas(
+    despachoReimprimirData?.filas || [],
+    filtroClienteReimprimir,
+    filtroTipoReimprimir,
+    filtroGrupoReimprimir
+  );
   const toggleDespachoReimprimirTodas = () => {
-    const filas = despachoReimprimirData?.filas || [];
     setDespachoReimprimirSeleccion((prev) =>
-      prev.size === filas.length ? new Set() : new Set(filas.map((f) => f.despacho_cab_id))
+      prev.size === filasFiltradasReimprimir.length
+        ? new Set()
+        : new Set(filasFiltradasReimprimir.map((f) => f.despacho_cab_id))
     );
+  };
+
+  interface DespachoGrupoMiembro {
+    codigoCliente: string;
+    nombre: string | null;
+  }
+  interface DespachoGrupo {
+    id: number;
+    nombre: string;
+    miembros: DespachoGrupoMiembro[];
+  }
+  const [despachoGrupos, setDespachoGrupos] = useState<DespachoGrupo[] | null>(null);
+  const [despachoGruposError, setDespachoGruposError] = useState<string | null>(null);
+  const [despachoGruposCargando, setDespachoGruposCargando] = useState(false);
+  const [nombreNuevoGrupo, setNombreNuevoGrupo] = useState("");
+  const [creandoGrupo, setCreandoGrupo] = useState(false);
+  const [grupoExpandido, setGrupoExpandido] = useState<number | null>(null);
+  const [codigoNuevoMiembro, setCodigoNuevoMiembro] = useState("");
+  const [agregandoMiembro, setAgregandoMiembro] = useState(false);
+
+  const cargarDespachoGrupos = async () => {
+    setDespachoGruposCargando(true);
+    setDespachoGruposError(null);
+    try {
+      const res = await fetch("/api/admin/despacho-grupos");
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los grupos.");
+      setDespachoGrupos(data.grupos);
+    } catch (err) {
+      setDespachoGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setDespachoGruposCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "DESP-Grupos" && despachoGrupos === null) cargarDespachoGrupos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const crearDespachoGrupo = async () => {
+    if (!nombreNuevoGrupo.trim()) return;
+    setCreandoGrupo(true);
+    setDespachoGruposError(null);
+    try {
+      const res = await fetch("/api/admin/despacho-grupos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nombre: nombreNuevoGrupo.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo crear el grupo.");
+      setNombreNuevoGrupo("");
+      await cargarDespachoGrupos();
+    } catch (err) {
+      setDespachoGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setCreandoGrupo(false);
+    }
+  };
+
+  const borrarDespachoGrupo = async (id: number) => {
+    if (!confirm("¿Borrar este grupo? Los clientes quedan sin grupo.")) return;
+    try {
+      const res = await fetch(`/api/admin/despacho-grupos/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo borrar el grupo.");
+      await cargarDespachoGrupos();
+    } catch (err) {
+      setDespachoGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  const agregarMiembroGrupo = async (grupoId: number) => {
+    if (!codigoNuevoMiembro.trim()) return;
+    setAgregandoMiembro(true);
+    setDespachoGruposError(null);
+    try {
+      const res = await fetch(`/api/admin/despacho-grupos/${grupoId}/miembros`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codigoCliente: codigoNuevoMiembro.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo agregar el cliente.");
+      setCodigoNuevoMiembro("");
+      await cargarDespachoGrupos();
+    } catch (err) {
+      setDespachoGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setAgregandoMiembro(false);
+    }
+  };
+
+  const quitarMiembroGrupo = async (grupoId: number, codigoCliente: string) => {
+    try {
+      const res = await fetch(`/api/admin/despacho-grupos/${grupoId}/miembros/${encodeURIComponent(codigoCliente)}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo quitar el cliente.");
+      await cargarDespachoGrupos();
+    } catch (err) {
+      setDespachoGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    }
   };
 
   // "INB-EditarArribo" NO va acá -- es un permiso de capacidad (habilita
@@ -4728,6 +4873,7 @@ export default function DashboardLayout() {
              activeTab === "PD-CargaDatos" ? "Pendiente de Despacho - Carga de Datos" :
              activeTab === "DESP-Imprimir" ? "Despacho - Para Imprimir" :
              activeTab === "DESP-Reimprimir" ? "Despacho - Para Reimprimir" :
+             activeTab === "DESP-Grupos" ? "Despacho - Grupos de Clientes" :
              activeTab === "INB-Importar" ? "Inbound - Importar Datos" :
              activeTab === "INB-Resumen" ? "Inbound - Resumen" :
              activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
@@ -7371,21 +7517,60 @@ export default function DashboardLayout() {
               )}
               {despachoImprimirLoading && !despachoImprimirData && (
                 <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
-                  <SkeletonTable rows={6} columns={10} />
+                  <SkeletonTable rows={6} columns={11} />
                 </div>
               )}
 
-              <div className="overflow-x-auto mt-4">
+              <div className="flex items-center gap-3 mt-4 mb-4 flex-wrap">
+                <input
+                  type="text"
+                  value={filtroClienteImprimir}
+                  onChange={(e) => setFiltroClienteImprimir(e.target.value)}
+                  placeholder="Buscar por cliente..."
+                  className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-56"
+                />
+                <select
+                  value={filtroTipoImprimir}
+                  onChange={(e) => setFiltroTipoImprimir(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los tipos</option>
+                  {tiposDisponiblesImprimir.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <select
+                  value={filtroGrupoImprimir}
+                  onChange={(e) => setFiltroGrupoImprimir(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los grupos</option>
+                  {gruposDisponiblesImprimir.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+                {(filtroClienteImprimir || filtroTipoImprimir !== "TODOS" || filtroGrupoImprimir !== "TODOS") && (
+                  <button
+                    onClick={() => {
+                      setFiltroClienteImprimir("");
+                      setFiltroTipoImprimir("TODOS");
+                      setFiltroGrupoImprimir("TODOS");
+                    }}
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-slate-500 font-medium border-b border-slate-200">
                     <tr>
                       <th className="py-3 px-4 text-left">
                         <input
                           type="checkbox"
-                          checked={
-                            (despachoImprimirData?.filas.length || 0) > 0 &&
-                            despachoImprimirSeleccion.size === despachoImprimirData?.filas.length
-                          }
+                          checked={filasFiltradasImprimir.length > 0 && despachoImprimirSeleccion.size === filasFiltradasImprimir.length}
                           onChange={toggleDespachoImprimirTodas}
                           className="rounded border-slate-300"
                         />
@@ -7393,6 +7578,7 @@ export default function DashboardLayout() {
                       <th className="py-3 px-4 text-left">Guía</th>
                       <th className="py-3 px-4 text-left">Fecha creación</th>
                       <th className="py-3 px-4 text-left">Cliente</th>
+                      <th className="py-3 px-4 text-left">Grupo</th>
                       <th className="py-3 px-4 text-left">Transporte</th>
                       <th className="py-3 px-4 text-left">Tipo</th>
                       <th className="py-3 px-4 text-left">Cajas</th>
@@ -7403,7 +7589,7 @@ export default function DashboardLayout() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {(despachoImprimirData?.filas || []).map((fila) => (
+                    {filasFiltradasImprimir.map((fila) => (
                       <tr key={fila.despacho_cab_id}>
                         <td className="py-3 px-4 text-left">
                           <input
@@ -7416,6 +7602,7 @@ export default function DashboardLayout() {
                         <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(fila.fecha_creacion)}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.grupo || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cajas ?? "—"}</td>
@@ -7443,9 +7630,11 @@ export default function DashboardLayout() {
                     ))}
                   </tbody>
                 </table>
-                {despachoImprimirData && despachoImprimirData.filas.length === 0 && (
+                {despachoImprimirData && filasFiltradasImprimir.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-8">
-                    No hay guías pendientes de imprimir. Importá las guías de hoy desde el WMS.
+                    {despachoImprimirData.filas.length === 0
+                      ? "No hay guías pendientes de imprimir. Importá las guías de hoy desde el WMS."
+                      : "Ninguna guía coincide con los filtros."}
                   </p>
                 )}
               </div>
@@ -7497,27 +7686,67 @@ export default function DashboardLayout() {
               )}
               {despachoReimprimirLoading && !despachoReimprimirData && (
                 <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
-                  <SkeletonTable rows={6} columns={8} />
+                  <SkeletonTable rows={6} columns={9} />
                 </div>
               )}
 
-              <div className="overflow-x-auto mt-4">
+              <div className="flex items-center gap-3 mt-4 mb-4 flex-wrap">
+                <input
+                  type="text"
+                  value={filtroClienteReimprimir}
+                  onChange={(e) => setFiltroClienteReimprimir(e.target.value)}
+                  placeholder="Buscar por cliente..."
+                  className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-56"
+                />
+                <select
+                  value={filtroTipoReimprimir}
+                  onChange={(e) => setFiltroTipoReimprimir(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los tipos</option>
+                  {tiposDisponiblesReimprimir.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <select
+                  value={filtroGrupoReimprimir}
+                  onChange={(e) => setFiltroGrupoReimprimir(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los grupos</option>
+                  {gruposDisponiblesReimprimir.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+                {(filtroClienteReimprimir || filtroTipoReimprimir !== "TODOS" || filtroGrupoReimprimir !== "TODOS") && (
+                  <button
+                    onClick={() => {
+                      setFiltroClienteReimprimir("");
+                      setFiltroTipoReimprimir("TODOS");
+                      setFiltroGrupoReimprimir("TODOS");
+                    }}
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+              </div>
+
+              <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-slate-500 font-medium border-b border-slate-200">
                     <tr>
                       <th className="py-3 px-4 text-left">
                         <input
                           type="checkbox"
-                          checked={
-                            (despachoReimprimirData?.filas.length || 0) > 0 &&
-                            despachoReimprimirSeleccion.size === despachoReimprimirData?.filas.length
-                          }
+                          checked={filasFiltradasReimprimir.length > 0 && despachoReimprimirSeleccion.size === filasFiltradasReimprimir.length}
                           onChange={toggleDespachoReimprimirTodas}
                           className="rounded border-slate-300"
                         />
                       </th>
                       <th className="py-3 px-4 text-left">Guía</th>
                       <th className="py-3 px-4 text-left">Cliente</th>
+                      <th className="py-3 px-4 text-left">Grupo</th>
                       <th className="py-3 px-4 text-left">Transporte</th>
                       <th className="py-3 px-4 text-left">Tipo</th>
                       <th className="py-3 px-4 text-left">Guía impresa</th>
@@ -7526,7 +7755,7 @@ export default function DashboardLayout() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {(despachoReimprimirData?.filas || []).map((fila) => (
+                    {filasFiltradasReimprimir.map((fila) => (
                       <tr key={fila.despacho_cab_id}>
                         <td className="py-3 px-4 text-left">
                           <input
@@ -7538,6 +7767,7 @@ export default function DashboardLayout() {
                         </td>
                         <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.grupo || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
                         <td className="py-3 px-4 text-left">
@@ -7560,11 +7790,144 @@ export default function DashboardLayout() {
                     ))}
                   </tbody>
                 </table>
-                {despachoReimprimirData && despachoReimprimirData.filas.length === 0 && (
+                {despachoReimprimirData && filasFiltradasReimprimir.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-8">
-                    No hay guías impresas completas todavía.
+                    {despachoReimprimirData.filas.length === 0
+                      ? "No hay guías impresas completas todavía."
+                      : "Ninguna guía coincide con los filtros."}
                   </p>
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: DESPACHO - GRUPOS DE CLIENTES (ADMIN) ================= */}
+          {activeTab === "DESP-Grupos" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Grupos de clientes</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Los grupos aparecen como columna y filtro en Despacho → Para Imprimir / Para Reimprimir. Un
+                  cliente pertenece a lo sumo a un grupo -- agregarlo a uno nuevo lo saca del anterior.
+                </p>
+                {despachoGruposError && (
+                  <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{despachoGruposError}</div>
+                )}
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Nombre del grupo nuevo"
+                    value={nombreNuevoGrupo}
+                    onChange={(e) => setNombreNuevoGrupo(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && crearDespachoGrupo()}
+                    className="px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none w-72"
+                  />
+                  <button
+                    onClick={crearDespachoGrupo}
+                    disabled={!nombreNuevoGrupo.trim() || creandoGrupo}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                      !nombreNuevoGrupo.trim() || creandoGrupo
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {creandoGrupo ? "Creando..." : "Crear grupo"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-4">Grupos existentes</h2>
+                {despachoGruposCargando && despachoGrupos === null && <p className="text-sm text-slate-400">Cargando...</p>}
+                {despachoGrupos !== null && despachoGrupos.length === 0 && (
+                  <p className="text-sm text-slate-400">Todavía no creaste ningún grupo.</p>
+                )}
+                <div className="space-y-3">
+                  {(despachoGrupos || []).map((g) => {
+                    const expandido = grupoExpandido === g.id;
+                    return (
+                      <div key={g.id} className="border border-slate-200 rounded-lg">
+                        <button
+                          onClick={() => setGrupoExpandido(expandido ? null : g.id)}
+                          className="w-full flex items-center justify-between px-4 py-3 hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-semibold text-slate-800">{g.nombre}</span>
+                            <span className="text-xs text-slate-400">
+                              {g.miembros.length} cliente{g.miembros.length === 1 ? "" : "s"}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                borrarDespachoGrupo(g.id);
+                              }}
+                              className="text-sm text-red-600 hover:underline"
+                            >
+                              Borrar
+                            </span>
+                            <svg className={`w-4 h-4 text-slate-400 transition-transform ${expandido ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+                          </div>
+                        </button>
+                        {expandido && (
+                          <div className="border-t border-slate-200 p-4">
+                            <div className="flex items-center gap-3 mb-4">
+                              <input
+                                type="text"
+                                placeholder="Número de cliente"
+                                value={codigoNuevoMiembro}
+                                onChange={(e) => setCodigoNuevoMiembro(e.target.value)}
+                                onKeyDown={(e) => e.key === "Enter" && agregarMiembroGrupo(g.id)}
+                                className="px-3 py-1.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none w-48"
+                              />
+                              <button
+                                onClick={() => agregarMiembroGrupo(g.id)}
+                                disabled={!codigoNuevoMiembro.trim() || agregandoMiembro}
+                                className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                  !codigoNuevoMiembro.trim() || agregandoMiembro
+                                    ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                }`}
+                              >
+                                Agregar cliente
+                              </button>
+                            </div>
+                            {g.miembros.length === 0 ? (
+                              <p className="text-sm text-slate-400">Sin clientes en este grupo todavía.</p>
+                            ) : (
+                              <table className="w-full text-sm text-left">
+                                <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                  <tr>
+                                    <th className="py-2 px-3 text-left">Número</th>
+                                    <th className="py-2 px-3 text-left">Cliente</th>
+                                    <th className="py-2 px-3 text-left">Acciones</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {g.miembros.map((m) => (
+                                    <tr key={m.codigoCliente}>
+                                      <td className="py-2 px-3 text-left font-medium text-slate-700">{m.codigoCliente}</td>
+                                      <td className="py-2 px-3 text-left text-slate-600">{m.nombre || "—"}</td>
+                                      <td className="py-2 px-3 text-left">
+                                        <button
+                                          onClick={() => quitarMiembroGrupo(g.id, m.codigoCliente)}
+                                          className="text-sm text-red-600 hover:underline"
+                                        >
+                                          Quitar
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
@@ -9882,7 +10245,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

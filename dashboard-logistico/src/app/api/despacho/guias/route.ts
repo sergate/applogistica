@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { parseCodigoClienteDespacho } from "@/lib/pendienteDespachoHelpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,12 +37,35 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw new Error(`Supabase (despacho_guias): ${error.message}`);
 
+    // Grupo de cada guía (por número de cliente, ver /api/admin/despacho-grupos).
+    const codigos = [...new Set((data || []).map((f) => parseCodigoClienteDespacho(f.cliente)).filter(Boolean))];
+    const { data: miembros, error: errorMiembros } =
+      codigos.length > 0
+        ? await supabaseAdmin
+            .from("despacho_grupos_clientes_miembros")
+            .select("codigo_cliente, despacho_grupos_clientes(nombre)")
+            .in("codigo_cliente", codigos as string[])
+        : { data: [], error: null };
+    if (errorMiembros) throw new Error(`Supabase (despacho_grupos_clientes_miembros): ${errorMiembros.message}`);
+
+    const grupoPorCodigo = new Map(
+      (miembros || []).map((m) => {
+        const grupo = Array.isArray(m.despacho_grupos_clientes) ? m.despacho_grupos_clientes[0] : m.despacho_grupos_clientes;
+        return [m.codigo_cliente, (grupo as { nombre: string } | null)?.nombre || null];
+      })
+    );
+
+    const filas = (data || []).map((f) => ({
+      ...f,
+      grupo: grupoPorCodigo.get(parseCodigoClienteDespacho(f.cliente) || "") || null,
+    }));
+
     let updatedAt: string | null = null;
-    for (const fila of data || []) {
+    for (const fila of filas) {
       if (fila.updated_at && (!updatedAt || fila.updated_at > updatedAt)) updatedAt = fila.updated_at;
     }
 
-    return NextResponse.json({ success: true, filas: data || [], updatedAt });
+    return NextResponse.json({ success: true, filas, updatedAt });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
