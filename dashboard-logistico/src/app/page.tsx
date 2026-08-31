@@ -7499,7 +7499,7 @@ export default function DashboardLayout() {
                     payload={{
                       guias: (despachoImprimirData?.filas || [])
                         .filter((f) => despachoImprimirSeleccion.has(f.despacho_cab_id))
-                        .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia })),
+                        .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia, tipo: f.tipo })),
                     }}
                     onCorriendoChange={setDespachoImprimiendoEnCurso}
                     onExito={() => {
@@ -7669,7 +7669,7 @@ export default function DashboardLayout() {
                   payload={{
                     guias: (despachoReimprimirData?.filas || [])
                       .filter((f) => despachoReimprimirSeleccion.has(f.despacho_cab_id))
-                      .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia })),
+                      .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia, tipo: f.tipo })),
                   }}
                   onCorriendoChange={setDespachoReimprimiendoEnCurso}
                   onExito={() => {

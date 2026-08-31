@@ -261,7 +261,7 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
 
   let hechas = 0;
   let conError = 0;
-  for (const { despachoCabId, guia } of guias) {
+  for (const { despachoCabId, guia, tipo: tipoDespacho } of guias) {
     await avisarProgreso(
       config.token,
       pedido.id,
@@ -271,9 +271,10 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
     let ultimoPasoOk = null;
     try {
       await imprimirGuia(paginaWms, guia, {
-        onPaso: (paso, resultado) => {
+        tipoDespacho,
+        onPaso: (paso, resultado, mensaje) => {
           ultimoPasoOk = paso;
-          return avisarEventoDespacho(config.token, { trabajoId: pedido.id, despachoCabId, guia, tipo, paso, resultado });
+          return avisarEventoDespacho(config.token, { trabajoId: pedido.id, despachoCabId, guia, tipo, paso, resultado, mensaje });
         },
       });
     } catch (err) {
