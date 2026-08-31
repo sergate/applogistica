@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
-import { esErrorAuth, esSeccionValida, tienePermisoSeccion, usuarioDesdeSesion } from "@/lib/actualizacionesWms";
+import {
+  esErrorAuth,
+  esSeccionValida,
+  SECCIONES_CON_PAYLOAD_VARIABLE,
+  tienePermisoSeccion,
+  usuarioDesdeSesion,
+} from "@/lib/actualizacionesWms";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +32,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json().catch(() => null);
     const seccion = body?.seccion;
+    const payload = body?.payload ?? null;
     if (!esSeccionValida(seccion)) {
       return NextResponse.json({ success: false, error: "Sección inválida." }, { status: 400 });
     }
@@ -53,6 +60,16 @@ export async function POST(request: NextRequest) {
       Date.now() - new Date(existente.started_at).getTime() > MINUTOS_CORRIENDO_ABANDONADO * 60_000;
 
     if (existente && !abandonado) {
+      // Estas secciones llevan un payload distinto en cada click (ej. qué
+      // guías se seleccionaron) -- reusar el pedido anterior equivaldría a
+      // ignorar en silencio la selección nueva del usuario, así que en vez
+      // de reusar se avisa que ya hay uno en curso.
+      if (SECCIONES_CON_PAYLOAD_VARIABLE.includes(seccion)) {
+        return NextResponse.json(
+          { success: false, error: "Ya tenés una impresión en curso, esperá a que termine." },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ success: true, id: existente.id, estado: existente.estado, reusado: true });
     }
 
@@ -69,7 +86,7 @@ export async function POST(request: NextRequest) {
 
     const { data: nuevo, error } = await supabaseAdmin
       .from("actualizaciones_wms")
-      .insert({ usuario_id: auth.userId, seccion, estado: "pendiente" })
+      .insert({ usuario_id: auth.userId, seccion, estado: "pendiente", payload })
       .select("id, estado")
       .single();
 

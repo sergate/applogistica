@@ -132,6 +132,8 @@ async function main() {
   });
 }
 
+module.exports = { listarDespachos, detalleDespacho, URL_BASE, hoyISO };
+
 if (require.main === module) {
   main().catch((err) => {
     console.error("Error:", err);

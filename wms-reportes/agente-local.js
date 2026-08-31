@@ -25,6 +25,7 @@ const { chromium } = require("playwright");
 
 const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
+const reporteDespachos = require("./reporte-despachos.js");
 const { conLock } = require("./lock.js");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
@@ -154,6 +155,34 @@ async function correrPedido(config, pedido, paginas) {
   return Object.values(manifiesto).flat();
 }
 
+// Trae las guías de despacho de HOY directo del WMS (JSON, sin descargar
+// ningún archivo) y las manda al Tablero -- no usa paginaTablero porque no
+// hay nada que subir por su UI, es un POST directo con el token del agente.
+async function correrPedidoDespachoImportar(config, pedido, paginas) {
+  const { paginaWms } = paginas;
+
+  await avisarProgreso(config.token, pedido.id, 10, "Consultando guías de hoy en el WMS...");
+  await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+  await paginaWms.waitForTimeout(1000);
+  await descargador.chequearSesion(paginaWms);
+
+  const hoy = reporteDespachos.hoyISO();
+  const filas = await reporteDespachos.listarDespachos(paginaWms, hoy, hoy);
+
+  await avisarProgreso(config.token, pedido.id, 70, `Subiendo ${filas.length} guías al Tablero...`);
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/importar`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.token}` },
+    body: JSON.stringify({ trabajoId: pedido.id, filas }),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || `Error subiendo guías al Tablero (HTTP ${res.status}).`);
+  }
+
+  return []; // no hay archivos locales que borrar en este tipo de pedido
+}
+
 // Borra del disco los CSV que se acaban de subir con éxito, para no
 // acumular copias viejas en la carpeta descargas/.
 function borrarArchivos(rutas) {
@@ -216,7 +245,8 @@ async function atenderPedido(config, pedido) {
         let reintentado = false;
         for (;;) {
           try {
-            const archivos = await correrPedido(config, pedido, contextos);
+            const ejecutor = pedido.seccion === "despacho_importar" ? correrPedidoDespachoImportar : correrPedido;
+            const archivos = await ejecutor(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, "OK");
             borrarArchivos(archivos);
             console.log(`  -> #${pedido.id} listo.`);

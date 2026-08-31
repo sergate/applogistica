@@ -264,6 +264,10 @@ export default function DashboardLayout() {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("PD-");
   });
+  const [isDespachoOpen, setIsDespachoOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("DESP-");
+  });
   const [isInboundOpen, setIsInboundOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("INB-");
@@ -1003,6 +1007,44 @@ export default function DashboardLayout() {
     { key: "PD-Urgencias", label: "Seguimiento Urgencias" },
     { key: "PD-CargaDatos", label: "Carga de Datos" },
   ];
+
+  const despachoSubSections = [
+    { key: "DESP-Imprimir", label: "Para Imprimir" },
+    { key: "DESP-Reimprimir", label: "Para Reimprimir" },
+  ];
+
+  interface DespachoGuiaFila {
+    despacho_cab_id: number;
+    guia: string | null;
+    numero_guia: string | null;
+    numero_comprobante: string | null;
+    tipo: string | null;
+    cliente: string | null;
+    transporte: string | null;
+    estado_wms: string | null;
+    fecha_creacion: string | null;
+    cajas: number | null;
+    unidades: number | null;
+    zona: string | null;
+    patente: string | null;
+    guia_impresa: boolean;
+    guia_impresa_en: string | null;
+    guia_impresa_por_nombre: string | null;
+    remito_impreso: boolean;
+    remito_impreso_en: string | null;
+    remito_impreso_por_nombre: string | null;
+  }
+
+  const {
+    data: despachoImprimirData,
+    error: despachoImprimirError,
+    isLoading: despachoImprimirLoading,
+  } = useTabData<{ filas: DespachoGuiaFila[]; updatedAt: string | null }>(
+    activeTab,
+    "DESP-Imprimir",
+    "/api/despacho/guias?vista=imprimir",
+    dataVersion
+  );
 
   // "INB-EditarArribo" NO va acá -- es un permiso de capacidad (habilita
   // editar Arribo CD / marcar arribado dentro de Resumen), no una pestaña.
@@ -4504,6 +4546,28 @@ export default function DashboardLayout() {
           </div>
           )}
 
+          {seccionVisible(despachoSubSections.map((s) => s.key)) && (
+          <div className="pt-2">
+            <button onClick={() => setIsDespachoOpen(!isDespachoOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
+                Despacho
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isDespachoOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isDespachoOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {despachoSubSections.filter((sub) => tienePermiso(sub.key)).map((sub) => (
+                  <button key={sub.key} onClick={() => irA(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
           {seccionVisible(inboundSubSections.map((s) => s.key)) && (
           <div className="pt-2">
             <button onClick={() => setIsInboundOpen(!isInboundOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
@@ -4617,6 +4681,8 @@ export default function DashboardLayout() {
              activeTab === "PD-Propios" ? "Pendiente de Despacho - Propios" :
              activeTab === "PD-Urgencias" ? "Pendiente de Despacho - Seguimiento Urgencias" :
              activeTab === "PD-CargaDatos" ? "Pendiente de Despacho - Carga de Datos" :
+             activeTab === "DESP-Imprimir" ? "Despacho - Para Imprimir" :
+             activeTab === "DESP-Reimprimir" ? "Despacho - Para Reimprimir" :
              activeTab === "INB-Importar" ? "Inbound - Importar Datos" :
              activeTab === "INB-Resumen" ? "Inbound - Resumen" :
              activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
@@ -7207,6 +7273,102 @@ export default function DashboardLayout() {
                     <p className="text-sm text-slate-400 text-center py-8">No hay contenedores cargados todavía.</p>
                   )}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: DESPACHO - PARA IMPRIMIR ================= */}
+          {activeTab === "DESP-Imprimir" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                <h2 className="text-lg font-bold text-slate-800">Despacho — Para Imprimir</h2>
+                {despachoImprimirData && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización: <span className="font-medium text-slate-700">{fmtFecha(despachoImprimirData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-slate-500 mb-4">
+                Guías de despacho del WMS que todavía no se imprimieron completas (guía + remito). Importá las
+                guías de hoy y después seleccioná cuáles mandar a imprimir.
+              </p>
+
+              {tienePermiso("DESP-Imprimir") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="despacho_importar" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
+
+              {despachoImprimirError && (
+                <div className="mt-4 mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar las guías: {despachoImprimirError}
+                </div>
+              )}
+              {despachoImprimirLoading && !despachoImprimirData && (
+                <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={9} />
+                </div>
+              )}
+
+              <div className="overflow-x-auto mt-4">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4 text-left">Guía</th>
+                      <th className="py-3 px-4 text-left">Fecha creación</th>
+                      <th className="py-3 px-4 text-left">Cliente</th>
+                      <th className="py-3 px-4 text-left">Transporte</th>
+                      <th className="py-3 px-4 text-left">Tipo</th>
+                      <th className="py-3 px-4 text-left">Cajas</th>
+                      <th className="py-3 px-4 text-left">Unid.</th>
+                      <th className="py-3 px-4 text-left">Estado WMS</th>
+                      <th className="py-3 px-4 text-left">Guía impresa</th>
+                      <th className="py-3 px-4 text-left">Remito impreso</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(despachoImprimirData?.filas || []).map((fila) => (
+                      <tr key={fila.despacho_cab_id}>
+                        <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(fila.fecha_creacion)}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.cajas ?? "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.unidades ?? "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.estado_wms || "—"}</td>
+                        <td className="py-3 px-4 text-left">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              fila.guia_impresa ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {fila.guia_impresa ? "Sí" : "No"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-left">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                              fila.remito_impreso ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {fila.remito_impreso ? "Sí" : "No"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {despachoImprimirData && despachoImprimirData.filas.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-8">
+                    No hay guías pendientes de imprimir. Importá las guías de hoy desde el WMS.
+                  </p>
+                )}
               </div>
             </div>
           )}
