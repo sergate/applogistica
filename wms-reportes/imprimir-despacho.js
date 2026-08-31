@@ -220,7 +220,14 @@ async function buscarYSeleccionarFila(page, numeroGuia) {
   await filas.first().locator("td.x-selmodel-column").first().click();
 }
 
-async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
+// Los despachos tipo CLIENTE no llevan remito por este circuito -- el WMS
+// lo rechaza con el cartel de GACI (ver descargarPdf). Se evita ni
+// intentarlo para ese tipo en vez de depender de que el cartel aparezca.
+function esTipoSinRemito(tipoDespacho) {
+  return (tipoDespacho || "").trim().toUpperCase() === "CLIENTE";
+}
+
+async function imprimirGuia(page, numeroGuia, { onPaso, impresora, tipoDespacho } = {}) {
   const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
 
   await irADespacho(page);
@@ -233,6 +240,13 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
   console.log("  Enviando guía a la impresora predeterminada...");
   await imprimirPdf(guiaPdf, impresoraConfigurada);
   await onPaso?.("guia", "ok");
+
+  if (esTipoSinRemito(tipoDespacho)) {
+    console.log(`  (tipo ${tipoDespacho}: no lleva remito por acá, se imprime desde GACI -- salteado)`);
+    await onPaso?.("remito", "ok", "No aplica: tipo CLIENTE, el remito se imprime desde GACI.");
+    console.log(`\nListo: guía de ${numeroGuia} enviada a imprimir (sin remito, tipo CLIENTE).`);
+    return;
+  }
 
   // Reseleccionar antes del remito (ver nota en buscarYSeleccionarFila).
   await buscarYSeleccionarFila(page, numeroGuia);
