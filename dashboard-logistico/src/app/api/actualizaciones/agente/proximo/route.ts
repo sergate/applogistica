@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       .update({ estado: "corriendo", started_at: new Date().toISOString() })
       .eq("id", candidato.id)
       .eq("estado", "pendiente") // concurrencia optimista: si alguien más ya lo tomó, esto no matchea nada
-      .select("id, seccion")
+      .select("id, seccion, payload")
       .maybeSingle();
 
     if (error) throw new Error(`Supabase (actualizaciones_wms): ${error.message}`);

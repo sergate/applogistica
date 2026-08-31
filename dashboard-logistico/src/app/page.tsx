@@ -1035,6 +1035,7 @@ export default function DashboardLayout() {
     remito_impreso_por_nombre: string | null;
   }
 
+  const [despachoImprimiendoEnCurso, setDespachoImprimiendoEnCurso] = useState(false);
   const {
     data: despachoImprimirData,
     error: despachoImprimirError,
@@ -1043,8 +1044,24 @@ export default function DashboardLayout() {
     activeTab,
     "DESP-Imprimir",
     "/api/despacho/guias?vista=imprimir",
-    dataVersion
+    dataVersion,
+    { refreshInterval: despachoImprimiendoEnCurso ? 3000 : 0 }
   );
+  const [despachoImprimirSeleccion, setDespachoImprimirSeleccion] = useState<Set<number>>(new Set());
+  const toggleDespachoImprimirFila = (id: number) => {
+    setDespachoImprimirSeleccion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleDespachoImprimirTodas = () => {
+    const filas = despachoImprimirData?.filas || [];
+    setDespachoImprimirSeleccion((prev) =>
+      prev.size === filas.length ? new Set() : new Set(filas.map((f) => f.despacho_cab_id))
+    );
+  };
 
   // "INB-EditarArribo" NO va acá -- es un permiso de capacidad (habilita
   // editar Arribo CD / marcar arribado dentro de Resumen), no una pestaña.
@@ -7301,6 +7318,21 @@ export default function DashboardLayout() {
                 <>
                   <AgenteTokenPanel />
                   <ActualizarAgenteBoton seccion="despacho_importar" onExito={() => setDataVersion((v) => v + 1)} />
+                  <ActualizarAgenteBoton
+                    seccion="despacho_imprimir"
+                    label={`Imprimir seleccionadas (${despachoImprimirSeleccion.size})`}
+                    deshabilitado={despachoImprimirSeleccion.size === 0}
+                    payload={{
+                      guias: (despachoImprimirData?.filas || [])
+                        .filter((f) => despachoImprimirSeleccion.has(f.despacho_cab_id))
+                        .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia })),
+                    }}
+                    onCorriendoChange={setDespachoImprimiendoEnCurso}
+                    onExito={() => {
+                      setDataVersion((v) => v + 1);
+                      setDespachoImprimirSeleccion(new Set());
+                    }}
+                  />
                 </>
               )}
 
@@ -7311,7 +7343,7 @@ export default function DashboardLayout() {
               )}
               {despachoImprimirLoading && !despachoImprimirData && (
                 <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
-                  <SkeletonTable rows={6} columns={9} />
+                  <SkeletonTable rows={6} columns={10} />
                 </div>
               )}
 
@@ -7319,6 +7351,17 @@ export default function DashboardLayout() {
                 <table className="w-full text-sm text-left whitespace-nowrap">
                   <thead className="text-slate-500 font-medium border-b border-slate-200">
                     <tr>
+                      <th className="py-3 px-4 text-left">
+                        <input
+                          type="checkbox"
+                          checked={
+                            (despachoImprimirData?.filas.length || 0) > 0 &&
+                            despachoImprimirSeleccion.size === despachoImprimirData?.filas.length
+                          }
+                          onChange={toggleDespachoImprimirTodas}
+                          className="rounded border-slate-300"
+                        />
+                      </th>
                       <th className="py-3 px-4 text-left">Guía</th>
                       <th className="py-3 px-4 text-left">Fecha creación</th>
                       <th className="py-3 px-4 text-left">Cliente</th>
@@ -7334,6 +7377,14 @@ export default function DashboardLayout() {
                   <tbody className="divide-y divide-slate-100">
                     {(despachoImprimirData?.filas || []).map((fila) => (
                       <tr key={fila.despacho_cab_id}>
+                        <td className="py-3 px-4 text-left">
+                          <input
+                            type="checkbox"
+                            checked={despachoImprimirSeleccion.has(fila.despacho_cab_id)}
+                            onChange={() => toggleDespachoImprimirFila(fila.despacho_cab_id)}
+                            className="rounded border-slate-300"
+                          />
+                        </td>
                         <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(fila.fecha_creacion)}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>

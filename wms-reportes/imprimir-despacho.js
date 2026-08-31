@@ -15,11 +15,29 @@ const { conLock } = require("./lock.js");
 const { URL_BASE, PERFIL_DIR, chequearSesion } = require("./descargar-reportes.js");
 
 const IMPRESIONES_DIR = path.join(__dirname, "impresiones");
+// Se crea al cargar el módulo (no solo al correr el CLI) -- agente-local.js
+// llama a imprimirGuia() directo, sin pasar por main(), y una PC que nunca
+// corrió este script a mano igual necesita la carpeta creada.
+fs.mkdirSync(IMPRESIONES_DIR, { recursive: true });
+
 // PowerShell está bloqueado por política de grupo en las PCs del depósito
 // (y el instalador normal de SumatraPDF cae en la categoría "Freeware" del
 // filtro de contenidos) -- por eso se usa la versión portable, bajada una
 // sola vez a esta carpeta, en vez de -Verb Print de PowerShell.
 const SUMATRA_EXE = path.join(__dirname, "sumatra", "SumatraPDF-3.6.1-64.exe");
+const CONFIG_PATH = path.join(__dirname, "agente-config.json");
+
+// Nombre de impresora configurado en agente-config.json ("impresora": "..."),
+// si existe -- más robusto que -print-to-default, que depende de cuál sea la
+// predeterminada de la PC en el momento (puede cambiar sin que nadie note).
+function leerImpresoraConfigurada() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    return config.impresora || null;
+  } catch {
+    return null;
+  }
+}
 
 const CODIGOS_SALIDA_SUMATRA = {
   2: "no se pudo abrir el archivo (no encontrado o formato no soportado)",
@@ -78,12 +96,13 @@ async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo
   return destino;
 }
 
-function imprimirPdf(pdfPath) {
+function imprimirPdf(pdfPath, impresora) {
   // SumatraPDF imprime y sale de inmediato (sin abrir ventana visible gracias
   // a -silent) -- el código de salida ya indica si la impresión funcionó, no
   // hace falta ninguna espera fija después.
+  const argsImpresora = impresora ? ["-print-to", impresora] : ["-print-to-default"];
   return new Promise((resolve, reject) => {
-    const sp = spawn(SUMATRA_EXE, ["-print-to-default", "-silent", pdfPath], { windowsHide: true });
+    const sp = spawn(SUMATRA_EXE, [...argsImpresora, "-silent", pdfPath], { windowsHide: true });
     sp.on("error", reject);
     sp.on("exit", (code) => {
       if (code === 0) return resolve();
@@ -93,7 +112,13 @@ function imprimirPdf(pdfPath) {
   });
 }
 
-async function imprimirGuia(page, numeroGuia) {
+// onPaso(paso, resultado, mensaje?) se llama después de CADA paso (no solo
+// al final) para que quien llama (agente-local.js) pueda registrar "guía
+// impresa" apenas pasa, sin esperar a que el remito también termine -- si el
+// remito falla después, la guía ya quedó marcada.
+async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
+  const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
+
   await clickMenuItem(page, "Despacho");
   await page.waitForTimeout(800);
 
@@ -116,13 +141,15 @@ async function imprimirGuia(page, numeroGuia) {
   const guiaPdf = await descargarPdf(page, "Imprimir guia", "Imprimir guias", `guia_${numeroGuia}_${timestamp()}.pdf`);
   console.log(`  -> ${guiaPdf}`);
   console.log("  Enviando guía a la impresora predeterminada...");
-  await imprimirPdf(guiaPdf);
+  await imprimirPdf(guiaPdf, impresoraConfigurada);
+  await onPaso?.("guia", "ok");
 
   console.log(`> Descargando remito de la guía ${numeroGuia}...`);
   const remitoPdf = await descargarPdf(page, "Imprimir remito", "Imprimir remitos", `remito_${numeroGuia}_${timestamp()}.pdf`);
   console.log(`  -> ${remitoPdf}`);
   console.log("  Enviando remito a la impresora predeterminada...");
-  await imprimirPdf(remitoPdf);
+  await imprimirPdf(remitoPdf, impresoraConfigurada);
+  await onPaso?.("remito", "ok");
 
   console.log(`\nListo: remito y guía de ${numeroGuia} enviados a imprimir.`);
 }
@@ -133,8 +160,6 @@ async function main() {
     console.error("Uso: node imprimir-despacho.js <numero_de_guia>");
     process.exit(1);
   }
-
-  fs.mkdirSync(IMPRESIONES_DIR, { recursive: true });
 
   await conLock(async () => {
     const context = await chromium.launchPersistentContext(PERFIL_DIR, {
@@ -153,6 +178,8 @@ async function main() {
     }
   });
 }
+
+module.exports = { imprimirGuia, IMPRESIONES_DIR };
 
 if (require.main === module) {
   main().catch((err) => {

@@ -26,6 +26,7 @@ const { chromium } = require("playwright");
 const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
 const reporteDespachos = require("./reporte-despachos.js");
+const { imprimirGuia } = require("./imprimir-despacho.js");
 const { conLock } = require("./lock.js");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
@@ -227,6 +228,80 @@ async function avisarResultado(token, id, exito, mensaje) {
   });
 }
 
+// Avisa el resultado de UN paso (guía o remito) de UNA guía dentro de un
+// pedido de impresión/reimpresión -- el Tablero lo usa para el log de
+// auditoría y, si salió bien, para actualizar en vivo la columna Sí/No de
+// esa guía en la grilla (no hace falta esperar a que termine el lote).
+async function avisarEventoDespacho(token, { trabajoId, despachoCabId, guia, tipo, paso, resultado, mensaje }) {
+  await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/evento`, {
+    method: "POST",
+    headers: headersAgente(token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ trabajoId, despachoCabId, guia, tipo, paso, resultado, mensaje }),
+  }).catch((err) => {
+    console.error("No pude avisar un evento de impresión al Tablero:", err.message);
+  });
+}
+
+// Imprime (o reimprime) la guía + remito de cada guía del payload, una por
+// una -- cada guía en su propio try/catch para que una que falle no aborte
+// el resto del lote. "tipo" es solo para el log de auditoría (impresion vs
+// reimpresion); el circuito de impresión en sí es idéntico.
+async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
+  const { paginaWms } = paginas;
+  const guias = pedido.payload?.guias;
+  if (!Array.isArray(guias) || guias.length === 0) {
+    throw new Error("El pedido no tiene guías para imprimir (payload vacío).");
+  }
+
+  await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+  await paginaWms.waitForTimeout(1000);
+  await descargador.chequearSesion(paginaWms);
+
+  let hechas = 0;
+  let conError = 0;
+  for (const { despachoCabId, guia } of guias) {
+    await avisarProgreso(
+      config.token,
+      pedido.id,
+      Math.round((hechas / guias.length) * 100),
+      `Imprimiendo guía ${guia} (${hechas + 1}/${guias.length})...`
+    );
+    let ultimoPasoOk = null;
+    try {
+      await imprimirGuia(paginaWms, guia, {
+        onPaso: (paso, resultado) => {
+          ultimoPasoOk = paso;
+          return avisarEventoDespacho(config.token, { trabajoId: pedido.id, despachoCabId, guia, tipo, paso, resultado });
+        },
+      });
+    } catch (err) {
+      conError++;
+      const mensaje = err instanceof Error ? err.message : "Error inesperado";
+      console.error(`  (falló la guía ${guia}: ${mensaje})`);
+      // imprimirGuia va guía -> remito en orden: si el último onPaso avisado
+      // fue "guia", el que falló fue el remito; si no llegó a avisar nada,
+      // falló en la guía misma.
+      const pasoFallido = ultimoPasoOk === "guia" ? "remito" : "guia";
+      await avisarEventoDespacho(config.token, {
+        trabajoId: pedido.id,
+        despachoCabId,
+        guia,
+        tipo,
+        paso: pasoFallido,
+        resultado: "error",
+        mensaje,
+      });
+    }
+    hechas++;
+  }
+
+  if (conError > 0) {
+    throw new Error(`${conError} de ${guias.length} guías fallaron -- revisar el log de eventos.`);
+  }
+
+  return []; // no hay archivos locales que borrar en este tipo de pedido
+}
+
 async function buscarProximoPedido(token) {
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/proximo`, {
     headers: headersAgente(token),
@@ -259,8 +334,12 @@ async function atenderPedido(config, pedido) {
         let reintentado = false;
         for (;;) {
           try {
-            const ejecutor = pedido.seccion === "despacho_importar" ? correrPedidoDespachoImportar : correrPedido;
-            const archivos = await ejecutor(config, pedido, contextos);
+            const archivos =
+              pedido.seccion === "despacho_importar"
+                ? await correrPedidoDespachoImportar(config, pedido, contextos)
+                : pedido.seccion === "despacho_imprimir"
+                ? await correrPedidoDespachoImprimir(config, pedido, contextos, "impresion")
+                : await correrPedido(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, "OK");
             borrarArchivos(archivos);
             console.log(`  -> #${pedido.id} listo.`);
