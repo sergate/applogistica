@@ -302,6 +302,11 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
       });
     }
     hechas++;
+    // Pausa corta entre guías: en un lote de varias, encadenarlas sin
+    // respiro le da menos margen al WMS para asentar la pantalla entre una
+    // y la próxima (visto en producción: una máscara de carga que no llega
+    // a despejarse a tiempo).
+    await paginaWms.waitForTimeout(800);
   }
 
   if (conError > 0) {

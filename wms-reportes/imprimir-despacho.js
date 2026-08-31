@@ -9,10 +9,13 @@
 
 const path = require("path");
 const fs = require("fs");
-const { spawn } = require("child_process");
+const { spawn, execFile } = require("child_process");
+const { promisify } = require("util");
 const { chromium } = require("playwright");
 const { conLock } = require("./lock.js");
 const { URL_BASE, PERFIL_DIR, chequearSesion } = require("./descargar-reportes.js");
+
+const execFileP = promisify(execFile);
 
 const IMPRESIONES_DIR = path.join(__dirname, "impresiones");
 // Se crea al cargar el módulo (no solo al correr el CLI) -- agente-local.js
@@ -68,7 +71,7 @@ async function clickBotonExt(page, texto, { exact = true } = {}) {
 
 async function esperarGridCargado(page) {
   await page.waitForTimeout(300);
-  await page.locator(".x-mask").first().waitFor({ state: "hidden", timeout: 15000 }).catch(() => {});
+  await page.locator(".x-mask").first().waitFor({ state: "hidden", timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(500);
 }
 
@@ -84,7 +87,7 @@ async function cerrarCartelWms(page) {
 
 async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo) {
   await clickBotonExt(page, textoBotonImprimir);
-  await page.locator(".x-window:visible", { hasText: tituloModal }).first().waitFor({ state: "visible", timeout: 15000 });
+  await page.locator(".x-window:visible", { hasText: tituloModal }).first().waitFor({ state: "visible", timeout: 25000 });
 
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
@@ -93,13 +96,15 @@ async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo
   const destino = path.join(IMPRESIONES_DIR, nombreArchivo);
   await download.saveAs(destino);
   await cerrarCartelWms(page);
+  // El WMS puede dejar la pantalla tapada con una máscara de carga después
+  // de cerrar el cartel -- si el que llama pasa directo a la próxima guía
+  // sin esperar a que se despeje, el click en "Despacho" de esa guía queda
+  // bloqueado (visto en producción al imprimir varias guías seguidas).
+  await esperarGridCargado(page);
   return destino;
 }
 
-function imprimirPdf(pdfPath, impresora) {
-  // SumatraPDF imprime y sale de inmediato (sin abrir ventana visible gracias
-  // a -silent) -- el código de salida ya indica si la impresión funcionó, no
-  // hace falta ninguna espera fija después.
+function correrSumatra(pdfPath, impresora) {
   const argsImpresora = impresora ? ["-print-to", impresora] : ["-print-to-default"];
   return new Promise((resolve, reject) => {
     const sp = spawn(SUMATRA_EXE, [...argsImpresora, "-silent", pdfPath], { windowsHide: true });
@@ -112,6 +117,46 @@ function imprimirPdf(pdfPath, impresora) {
   });
 }
 
+// SumatraPDF sale apenas termina de MANDAR el documento a la cola de
+// Windows, no cuando la impresora física termina de sacarlo -- para un
+// remito de 50+ páginas eso puede tardar varios minutos más. Se consulta la
+// cola real (wmic, no requiere PowerShell) hasta que no queden trabajos de
+// esta impresora, así la próxima guía del lote no arranca mientras la
+// anterior todavía se está imprimiendo.
+async function hayTrabajosEnCola(nombreImpresora) {
+  try {
+    const { stdout } = await execFileP("wmic", ["printjob", "get", "Name"], {
+      encoding: "buffer",
+      timeout: 10000,
+    });
+    const texto = stdout.toString("utf16le").toLowerCase();
+    return texto.includes(nombreImpresora.toLowerCase());
+  } catch {
+    // "No hay instancias disponibles" en algunos Windows sale por código de
+    // error en vez de por stdout vacío -- se interpreta como cola vacía, no
+    // como falla real (wmic tampoco está garantizado a futuro, así que un
+    // fallo acá no debe trabar todo el flujo de impresión).
+    return false;
+  }
+}
+
+async function esperarColaVacia(nombreImpresora, { timeoutMs = 5 * 60_000, intervaloMs = 2000 } = {}) {
+  if (!nombreImpresora) return; // sin impresora configurada (-print-to-default) no hay nombre por el cual filtrar
+  const limite = Date.now() + timeoutMs;
+  while (await hayTrabajosEnCola(nombreImpresora)) {
+    if (Date.now() >= limite) {
+      console.log(`  (la cola de "${nombreImpresora}" sigue con trabajos después de ${Math.round(timeoutMs / 1000)}s, sigo igual)`);
+      return;
+    }
+    await new Promise((r) => setTimeout(r, intervaloMs));
+  }
+}
+
+async function imprimirPdf(pdfPath, impresora) {
+  await correrSumatra(pdfPath, impresora);
+  await esperarColaVacia(impresora);
+}
+
 // onPaso(paso, resultado, mensaje?) se llama después de CADA paso (no solo
 // al final) para que quien llama (agente-local.js) pueda registrar "guía
 // impresa" apenas pasa, sin esperar a que el remito también termine -- si el
@@ -119,6 +164,10 @@ function imprimirPdf(pdfPath, impresora) {
 async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
   const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
 
+  // Defensivo: si la guía anterior del lote quedó a mitad de camino (falló
+  // con una máscara de carga todavía tapando la pantalla), esperar a que se
+  // despeje antes de intentar clickear "Despacho" de nuevo.
+  await page.locator(".x-mask").first().waitFor({ state: "hidden", timeout: 20000 }).catch(() => {});
   await clickMenuItem(page, "Despacho");
   await page.waitForTimeout(800);
 
