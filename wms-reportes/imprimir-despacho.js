@@ -150,12 +150,11 @@ async function irADespacho(page) {
 // al final) para que quien llama (agente-local.js) pueda registrar "guía
 // impresa" apenas pasa, sin esperar a que el remito también termine -- si el
 // remito falla después, la guía ya quedó marcada.
-async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
-  const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
-
-  await irADespacho(page);
-  await page.waitForTimeout(800);
-
+// Busca la guía y selecciona su fila -- se llama de nuevo antes del remito
+// (no solo una vez al principio) porque el WMS parece refrescar la grilla
+// después de imprimir la guía y perder la selección: el botón "Imprimir
+// remito" quedaba sin efecto (nunca aparecía su modal) si no se reseleccionaba.
+async function buscarYSeleccionarFila(page, numeroGuia) {
   const campoGuia = page.locator('input[placeholder="Guia"]').first();
   await campoGuia.click();
   await page.keyboard.press("Control+A");
@@ -170,6 +169,14 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
   if (cantidad > 1) throw new Error(`Se encontraron ${cantidad} guías para el número ${numeroGuia}; revisar a mano.`);
 
   await filas.first().locator("td.x-selmodel-column").first().click();
+}
+
+async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
+  const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
+
+  await irADespacho(page);
+  await page.waitForTimeout(800);
+  await buscarYSeleccionarFila(page, numeroGuia);
 
   console.log(`> Descargando guía ${numeroGuia}...`);
   const guiaPdf = await descargarPdf(page, "Imprimir guia", "Imprimir guias", `guia_${numeroGuia}_${timestamp()}.pdf`);
@@ -177,6 +184,9 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora } = {}) {
   console.log("  Enviando guía a la impresora predeterminada...");
   await imprimirPdf(guiaPdf, impresoraConfigurada);
   await onPaso?.("guia", "ok");
+
+  // Reseleccionar antes del remito (ver nota en buscarYSeleccionarFila).
+  await buscarYSeleccionarFila(page, numeroGuia);
 
   console.log(`> Descargando remito de la guía ${numeroGuia}...`);
   const remitoPdf = await descargarPdf(page, "Imprimir remito", "Imprimir remitos", `remito_${numeroGuia}_${timestamp()}.pdf`);
