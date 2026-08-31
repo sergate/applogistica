@@ -1063,6 +1063,34 @@ export default function DashboardLayout() {
     );
   };
 
+  const [despachoReimprimiendoEnCurso, setDespachoReimprimiendoEnCurso] = useState(false);
+  const {
+    data: despachoReimprimirData,
+    error: despachoReimprimirError,
+    isLoading: despachoReimprimirLoading,
+  } = useTabData<{ filas: DespachoGuiaFila[]; updatedAt: string | null }>(
+    activeTab,
+    "DESP-Reimprimir",
+    "/api/despacho/guias?vista=reimprimir",
+    dataVersion,
+    { refreshInterval: despachoReimprimiendoEnCurso ? 3000 : 0 }
+  );
+  const [despachoReimprimirSeleccion, setDespachoReimprimirSeleccion] = useState<Set<number>>(new Set());
+  const toggleDespachoReimprimirFila = (id: number) => {
+    setDespachoReimprimirSeleccion((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleDespachoReimprimirTodas = () => {
+    const filas = despachoReimprimirData?.filas || [];
+    setDespachoReimprimirSeleccion((prev) =>
+      prev.size === filas.length ? new Set() : new Set(filas.map((f) => f.despacho_cab_id))
+    );
+  };
+
   // "INB-EditarArribo" NO va acá -- es un permiso de capacidad (habilita
   // editar Arribo CD / marcar arribado dentro de Resumen), no una pestaña.
   const inboundSubSections = [
@@ -7418,6 +7446,123 @@ export default function DashboardLayout() {
                 {despachoImprimirData && despachoImprimirData.filas.length === 0 && (
                   <p className="text-sm text-slate-400 text-center py-8">
                     No hay guías pendientes de imprimir. Importá las guías de hoy desde el WMS.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: DESPACHO - PARA REIMPRIMIR ================= */}
+          {activeTab === "DESP-Reimprimir" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                <h2 className="text-lg font-bold text-slate-800">Despacho — Para Reimprimir</h2>
+                {despachoReimprimirData && (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <circle cx="12" cy="12" r="10" strokeLinecap="round" strokeLinejoin="round" />
+                      <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Última actualización: <span className="font-medium text-slate-700">{fmtFecha(despachoReimprimirData.updatedAt)}</span>
+                  </div>
+                )}
+              </div>
+              <p className="text-sm text-slate-500 mb-4">
+                Guías que ya se imprimieron completas (guía + remito). Cada reimpresión queda registrada con tu
+                usuario y la fecha/hora.
+              </p>
+
+              {tienePermiso("DESP-Reimprimir") && (
+                <ActualizarAgenteBoton
+                  seccion="despacho_reimprimir"
+                  label={`Reimprimir seleccionadas (${despachoReimprimirSeleccion.size})`}
+                  deshabilitado={despachoReimprimirSeleccion.size === 0}
+                  payload={{
+                    guias: (despachoReimprimirData?.filas || [])
+                      .filter((f) => despachoReimprimirSeleccion.has(f.despacho_cab_id))
+                      .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia })),
+                  }}
+                  onCorriendoChange={setDespachoReimprimiendoEnCurso}
+                  onExito={() => {
+                    setDataVersion((v) => v + 1);
+                    setDespachoReimprimirSeleccion(new Set());
+                  }}
+                />
+              )}
+
+              {despachoReimprimirError && (
+                <div className="mt-4 mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  Error al cargar las guías: {despachoReimprimirError}
+                </div>
+              )}
+              {despachoReimprimirLoading && !despachoReimprimirData && (
+                <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
+                  <SkeletonTable rows={6} columns={8} />
+                </div>
+              )}
+
+              <div className="overflow-x-auto mt-4">
+                <table className="w-full text-sm text-left whitespace-nowrap">
+                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                    <tr>
+                      <th className="py-3 px-4 text-left">
+                        <input
+                          type="checkbox"
+                          checked={
+                            (despachoReimprimirData?.filas.length || 0) > 0 &&
+                            despachoReimprimirSeleccion.size === despachoReimprimirData?.filas.length
+                          }
+                          onChange={toggleDespachoReimprimirTodas}
+                          className="rounded border-slate-300"
+                        />
+                      </th>
+                      <th className="py-3 px-4 text-left">Guía</th>
+                      <th className="py-3 px-4 text-left">Cliente</th>
+                      <th className="py-3 px-4 text-left">Transporte</th>
+                      <th className="py-3 px-4 text-left">Tipo</th>
+                      <th className="py-3 px-4 text-left">Guía impresa</th>
+                      <th className="py-3 px-4 text-left">Remito impreso</th>
+                      <th className="py-3 px-4 text-left">Última impresión</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(despachoReimprimirData?.filas || []).map((fila) => (
+                      <tr key={fila.despacho_cab_id}>
+                        <td className="py-3 px-4 text-left">
+                          <input
+                            type="checkbox"
+                            checked={despachoReimprimirSeleccion.has(fila.despacho_cab_id)}
+                            onChange={() => toggleDespachoReimprimirFila(fila.despacho_cab_id)}
+                            className="rounded border-slate-300"
+                          />
+                        </td>
+                        <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
+                        <td className="py-3 px-4 text-left">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                            Sí
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-left">
+                          <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                            Sí
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-left text-slate-600">
+                          {fmtFecha(fila.remito_impreso_en || fila.guia_impresa_en)}
+                          {(fila.remito_impreso_por_nombre || fila.guia_impresa_por_nombre) && (
+                            <span className="text-slate-400"> — {fila.remito_impreso_por_nombre || fila.guia_impresa_por_nombre}</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {despachoReimprimirData && despachoReimprimirData.filas.length === 0 && (
+                  <p className="text-sm text-slate-400 text-center py-8">
+                    No hay guías impresas completas todavía.
                   </p>
                 )}
               </div>

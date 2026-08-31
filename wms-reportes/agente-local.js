@@ -339,6 +339,8 @@ async function atenderPedido(config, pedido) {
                 ? await correrPedidoDespachoImportar(config, pedido, contextos)
                 : pedido.seccion === "despacho_imprimir"
                 ? await correrPedidoDespachoImprimir(config, pedido, contextos, "impresion")
+                : pedido.seccion === "despacho_reimprimir"
+                ? await correrPedidoDespachoImprimir(config, pedido, contextos, "reimpresion")
                 : await correrPedido(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, "OK");
             borrarArchivos(archivos);
