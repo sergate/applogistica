@@ -1,9 +1,12 @@
 // Agente Local: corre en la PC de un usuario del depósito y atiende sus
 // pedidos de actualización del Tablero Logístico. Modo recomendado: --loop,
-// disparado UNA vez al iniciar sesión de Windows (con reinicio automático si
-// se cae), sin ninguna ventana visible -- consulta cada pocos segundos si hay
-// algo para hacer, y solo ahí abre el navegador. Ver INSTALACION-AGENTE.md
-// para la configuración completa.
+// mantenido vivo por un "vigía" (agente-vigia-oculto.vbs) que el Programador
+// de tareas dispara cada 1 minuto -- las PCs de dominio bloquean el
+// disparador "al iniciar sesión" por política de grupo, así que el vigía se
+// fija si el --loop ya está corriendo y lo levanta si no. Sin ninguna
+// ventana visible -- consulta cada pocos segundos si hay algo para hacer, y
+// solo ahí abre el navegador. Ver INSTALACION-AGENTE.md para la
+// configuración completa.
 //
 // Primer uso (una sola vez por PC): configurar el token y loguearse.
 //   1. Copiá agente-config.example.json a agente-config.json y pegá tu token
