@@ -84,21 +84,20 @@ echo esten logueadas volve aca y apreta una tecla.
 pause
 node agente-local.js --login
 
-REM --- 5. Tareas programadas ---
+REM --- 5. Tarea programada ---
+REM Nota: en PCs de dominio la politica de grupo suele bloquear triggers
+REM "al iniciar sesion" (/sc onlogon), asi que usamos un "vigia" que se
+REM dispara cada 1 minuto (el minimo permitido) y arranca el modo --loop
+REM solo si todavia no esta corriendo -- si el Agente se cae por lo que
+REM sea, este mismo mecanismo lo vuelve a levantar solo.
 echo.
-echo Configurando las Tareas Programadas de Windows...
-schtasks /create /tn "Agente WMS" /tr "wscript.exe \"%~dp0agente-loop-oculto.vbs\"" /sc onlogon /f
+echo Configurando la Tarea Programada de Windows...
+schtasks /create /tn "Agente WMS" /tr "wscript.exe \"%~dp0agente-vigia-oculto.vbs\"" /sc minute /mo 1 /f
 if errorlevel 1 (
   echo No pude crear la tarea "Agente WMS" automaticamente.
   echo Segui el "Paso 6" de INSTALACION-AGENTE.md para armarla a mano.
 ) else (
-  echo [OK] Tarea "Agente WMS" creada -- corre en segundo plano desde que iniciás sesion, respuesta en segundos.
-)
-schtasks /create /tn "Agente WMS (respaldo)" /tr "wscript.exe \"%~dp0agente-once-oculto.vbs\"" /sc minute /mo 5 /f
-if errorlevel 1 (
-  echo No pude crear la tarea "Agente WMS (respaldo)" automaticamente.
-) else (
-  echo [OK] Tarea "Agente WMS (respaldo)" creada -- red de seguridad cada 5 minutos por si la de arriba se cae.
+  echo [OK] Tarea "Agente WMS" creada -- el Agente va a estar corriendo en segundo plano en menos de 1 minuto.
 )
 
 echo.

@@ -117,26 +117,30 @@ evitarlo, agregá `wmsUsuario`/`wmsClave` a `agente-config.json` (ver
 
 ## Paso 6: Programar que el Agente responda en segundos, no en minutos
 
-El Agente queda invisible, corriendo en segundo plano desde que iniciás
-sesión en Windows: se fija cada pocos segundos si hay algo para hacer, y si
-no hay nada no abre el navegador para nada (no consume recursos de más). Se
-arma con **dos** tareas, para que la experiencia sea fluida pero también
-robusta si algo llegara a fallar:
+El Agente queda invisible, corriendo en segundo plano: una vez arrancado, se
+fija cada ~2-3 segundos si hay algo para hacer, y si no hay nada no abre el
+navegador para nada (no consume recursos de más).
 
-- **"Agente WMS"** (la que hace el trabajo pesado): arranca una vez al
-  iniciar sesión y queda corriendo, consultando cada ~2-3 segundos.
-- **"Agente WMS (respaldo)"**: corre cada 5 minutos, una pasada corta. Es
-  una red de seguridad -- si por lo que sea la tarea de arriba se cayó, esta
-  igual va a atrapar cualquier pedido pendiente en, como mucho, 5 minutos.
+**Nota:** en las PCs del depósito (de dominio), la política de grupo suele
+bloquear crear tareas con disparador "al iniciar sesión" (el mismo tipo de
+restricción que ya bloqueaba PowerShell en estas máquinas) -- el único
+disparador que sí se deja crear es uno que se repite cada N minutos, con 1
+minuto como mínimo. Por eso se arma con un solo **"vigía"**: una tarea que
+se dispara cada 1 minuto, se fija si el Agente ya está corriendo en modo
+`--loop`, y si no lo está, lo arranca. Una vez arriba, el Agente responde en
+segundos; y si se llegara a caer por lo que sea, el mismo vigía lo vuelve a
+levantar en, como mucho, 1 minuto -- sin necesitar una tarea de respaldo
+aparte.
 
-Si usaste `instalar-agente.bat`, las dos tareas ya quedaron creadas solas y
-podés saltear el resto de este paso. Para armarlas a mano:
+Si usaste `instalar-agente.bat`, la tarea ya quedó creada sola y podés
+saltear el resto de este paso. Para armarla a mano:
 
 1. Apretá `Win + R`, escribí `taskschd.msc` y Enter (se abre el **Programador
    de tareas** de Windows).
 2. En el panel de la derecha, click en **"Crear tarea básica..."**.
 3. **Nombre**: `Agente WMS`. Siguiente.
-4. **Desencadenador**: elegí **"Al iniciar sesión"**. Siguiente.
+4. **Desencadenador**: elegí "Diariamente". Siguiente. Dejá la fecha/hora que
+   proponga. Siguiente.
 5. **Acción**: "Iniciar un programa". Siguiente.
 6. En **"Programa o script"** poné:
    ```
@@ -145,27 +149,31 @@ podés saltear el resto de este paso. Para armarlas a mano:
    En **"Agregar argumentos"** poné la ruta completa al archivo `.vbs`, entre
    comillas, por ejemplo:
    ```
-   "C:\Agente-WMS\wms-reportes\agente-loop-oculto.vbs"
+   "C:\Agente-WMS\wms-reportes\agente-vigia-oculto.vbs"
    ```
    Siguiente, y **Finalizar**.
-7. Repetí los pasos 2-6 para la tarea de respaldo: **Nombre** `Agente WMS
-   (respaldo)`, **Desencadenador** "Diariamente" (dejá la hora que proponga),
-   y en Propiedades → Desencadenadores → Editar, marcá **"Repetir la tarea
-   cada:"** → **5 minutos**, duración **"Indefinidamente"**. El script esta
-   vez es:
-   ```
-   "C:\Agente-WMS\wms-reportes\agente-once-oculto.vbs"
-   ```
-8. En **ambas** tareas, pestaña **General**: dejá tildado "Ejecutar solo
-   cuando el usuario haya iniciado sesión".
+7. Buscá la tarea "Agente WMS" en la lista del Programador, click derecho →
+   **Propiedades**.
+   - Pestaña **Desencadenadores** → seleccioná el que creaste → **Editar**.
+   - Marcá **"Repetir la tarea cada:"** y elegí **1 minuto**, con duración
+     **"Indefinidamente"**. Aceptar.
+   - Pestaña **General**: dejá tildado "Ejecutar solo cuando el usuario haya
+     iniciado sesión".
+   - Aceptar todo.
 
-Listo — a partir de ahora, mientras tu usuario esté logueado en Windows, el
-botón "Actualizar esta sección (WMS)" te va a responder en pocos segundos,
-sin ninguna ventana visible.
+Si en tu PC el disparador "Al iniciar sesión" sí te deja crearse (algunas
+PCs personales, fuera del dominio, no tienen esa restricción), podés usar
+ese en vez del de "Diariamente + repetir cada 1 minuto" apuntando
+directamente a `agente-loop-oculto.vbs` -- es equivalente, arranca un poco
+antes. Si no estás seguro, la opción del vigía de arriba funciona en
+cualquier PC, así que es la recomendada.
 
-### Alternativa manual (para probar sin configurar las tareas)
+Listo — a partir de ahora el botón "Actualizar esta sección (WMS)" te va a
+responder en pocos segundos, sin ninguna ventana visible.
 
-Si por ahora solo querés probarlo sin armar las tareas programadas, podés
+### Alternativa manual (para probar sin configurar la tarea)
+
+Si por ahora solo querés probarlo sin armar la tarea programada, podés
 dejar esto corriendo en una consola (`cmd`) mientras trabajás:
 
 ```bash
@@ -182,7 +190,7 @@ node agente-local.js --once
 
 ## Probarlo
 
-1. Con las tareas programadas ya configuradas (o corriendo `--loop` a mano),
+1. Con la tarea programada ya configurada (o corriendo `--loop` a mano),
    entrá al Tablero y andá a cualquier pantalla "Importar Datos".
 2. Apretá **"Actualizar esta sección (WMS)"**.
 3. Debería pasar a "Esperando al Agente Local..." en pocos segundos y después
@@ -197,11 +205,10 @@ suben con éxito, así esa carpeta no acumula copias viejas.
 ## Problemas comunes
 
 - **"No detectamos que tu Agente Local esté corriendo"** (después de 30
-  segundos): revisá que las tareas "Agente WMS" y "Agente WMS (respaldo)"
-  existan en el Programador de tareas y estén habilitadas (click derecho →
-  no debería decir "Deshabilitada"). Si "Agente WMS" figura como
-  "Preparada" en vez de "En ejecución", probá cerrar sesión de Windows y
-  volver a entrar -- esa tarea arranca al iniciar sesión.
+  segundos): revisá que la tarea "Agente WMS" exista en el Programador de
+  tareas y esté habilitada (click derecho → no debería decir
+  "Deshabilitada"). El vigía tarda hasta 1 minuto en levantar el Agente la
+  primera vez -- esperá un minuto y volvé a probar.
 - **El Agente tira error de sesión** (WMS o Tablero): la sesión guardada
   venció. Repetí el Paso 5 (`node agente-local.js --login`) para renovarla.
 - **Token inválido**: alguien generó un token nuevo desde el Tablero (eso
