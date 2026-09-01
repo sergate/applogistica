@@ -10,6 +10,7 @@ import {
   num,
   ultimaActualizacionEcom,
 } from "@/lib/ecomHelpers";
+import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest) {
       { success: false, error: "Faltan configurar SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY." },
       { status: 500 }
     );
+  }
+
+  const auth = await requireAuth();
+  if (esErrorAuth(auth)) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante)
@@ -125,6 +131,9 @@ export async function GET(request: NextRequest) {
         pendSep: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.canceladasSinStock - acc.sep),
         unidadesCanceladasPorClientes: acc.canceladasPorClientes,
         unidadesCanceladasSinStock: acc.canceladasSinStock,
+        // Con "Demanda Total: No", canceladasSinStock ya da 0 (OD_CARGA_CAMION
+        // queda afuera de "contables"), así que este % también da 0 solo.
+        porcentajeCancelaciones: acc.uni > 0 ? (acc.canceladasSinStock / acc.uni) * 100 : 0,
         cantidadPedidos: acc.pedidos.size,
       }))
       .sort((a, b) => b.uni - a.uni);

@@ -1,20 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { parseCodigoClienteDespacho } from "@/lib/pendienteDespachoHelpers";
+import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// Sin chequeo de sesión, mismo criterio que el resto de las rutas de
-// "resumen" de la app (ej. pendiente-despacho/clientes/resumen): el tab ya
-// queda oculto client-side si el usuario no tiene el permiso correspondiente.
 export async function GET(request: NextRequest) {
   if (!supabaseEnvOk) {
     return NextResponse.json(
       { success: false, error: "Faltan configurar SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY." },
       { status: 500 }
     );
+  }
+
+  const auth = await requireAuth();
+  if (esErrorAuth(auth)) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   try {

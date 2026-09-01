@@ -10,6 +10,7 @@ import {
   num,
   canalDeOoll,
 } from "@/lib/ecomHelpers";
+import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,11 @@ export async function GET(request: NextRequest) {
       { success: false, error: "Faltan configurar SUPABASE_URL y/o SUPABASE_SERVICE_ROLE_KEY." },
       { status: 500 }
     );
+  }
+
+  const auth = await requireAuth();
+  if (esErrorAuth(auth)) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   const marca = request.nextUrl.searchParams.get("marca");
@@ -87,6 +93,7 @@ export async function GET(request: NextRequest) {
         pendSep: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.canceladasSinStock - acc.sep),
         unidadesCanceladasPorClientes: acc.canceladasPorClientes,
         unidadesCanceladasSinStock: acc.canceladasSinStock,
+        porcentajeCancelaciones: acc.uni > 0 ? (acc.canceladasSinStock / acc.uni) * 100 : 0,
         cantidadPedidos: acc.pedidos.size,
       }))
       .sort((a, b) => b.uni - a.uni);

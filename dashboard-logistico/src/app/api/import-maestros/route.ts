@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { invalidateCache } from "@/lib/queryCache";
+import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 
@@ -73,6 +74,11 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 }
     );
+  }
+
+  const auth = await requireAuth();
+  if (esErrorAuth(auth)) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   try {

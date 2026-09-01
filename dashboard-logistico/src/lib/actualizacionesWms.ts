@@ -1,5 +1,7 @@
-import { createClient as createServerAuthClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { requireAuth, esErrorAuth } from "@/lib/auth";
+
+export { esErrorAuth };
 
 export const SECCIONES_VALIDAS = [
   "no_ecom",
@@ -29,15 +31,7 @@ export function esSeccionValida(v: unknown): v is SeccionActualizacion {
 }
 
 /** Identifica al usuario logueado en el navegador (cookie de sesión de Supabase). */
-export async function usuarioDesdeSesion(): Promise<{ userId: string } | { error: string; status: number }> {
-  const authClient = await createServerAuthClient();
-  const {
-    data: { user },
-  } = await authClient.auth.getUser();
-
-  if (!user) return { error: "No autenticado.", status: 401 };
-  return { userId: user.id };
-}
+export const usuarioDesdeSesion = requireAuth;
 
 /** Identifica al Agente Local a partir de su token personal (header Authorization: Bearer <token>). */
 export async function usuarioDesdeTokenAgente(
@@ -58,10 +52,6 @@ export async function usuarioDesdeTokenAgente(
   if (!data) return { error: "Token inválido o revocado.", status: 401 };
 
   return { userId: data.usuario_id };
-}
-
-export function esErrorAuth(v: { userId: string } | { error: string; status: number }): v is { error: string; status: number } {
-  return "error" in v;
 }
 
 // Permiso (subseccion_key de src/lib/secciones.ts) que habilita el botón
