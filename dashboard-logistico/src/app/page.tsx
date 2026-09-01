@@ -1167,6 +1167,7 @@ export default function DashboardLayout() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === "DESP-Grupos" && despachoGrupos === null) cargarDespachoGrupos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
