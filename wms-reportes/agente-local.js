@@ -1,8 +1,9 @@
 // Agente Local: corre en la PC de un usuario del depósito y atiende sus
-// pedidos de actualización del Tablero Logístico. Pensado para correr "una
-// vez" (--once) disparado por el Programador de tareas de Windows cada 1-2
-// minutos, sin ninguna ventana visible -- así nadie tiene una ventana para
-// cerrar por error. Ver INSTALACION-AGENTE.md para la configuración completa.
+// pedidos de actualización del Tablero Logístico. Modo recomendado: --loop,
+// disparado UNA vez al iniciar sesión de Windows (con reinicio automático si
+// se cae), sin ninguna ventana visible -- consulta cada pocos segundos si hay
+// algo para hacer, y solo ahí abre el navegador. Ver INSTALACION-AGENTE.md
+// para la configuración completa.
 //
 // Primer uso (una sola vez por PC): configurar el token y loguearse.
 //   1. Copiá agente-config.example.json a agente-config.json y pegá tu token
@@ -11,13 +12,15 @@
 //      Se abren dos ventanas de Edge (WMS y Tablero) -- iniciá sesión en
 //      cada una, volvé a la consola y apretá Enter.
 //
-// Uso (lo dispara el Programador de tareas, ver INSTALACION-AGENTE.md):
-//   node agente-local.js --once
-//     Se fija si hay UN pedido pendiente; si hay, lo corre y termina; si no
-//     hay, termina al toque (no abre el navegador para nada).
-//
-// Uso alternativo (ventana siempre abierta, para pruebas manuales):
+// Uso recomendado (lo dispara el Programador de tareas, ver
+// INSTALACION-AGENTE.md): ventana invisible que queda corriendo y consulta
+// cada INTERVALO_POLLING_MS si hay un pedido pendiente; si no hay nada, no
+// abre el navegador para nada.
 //   node agente-local.js --loop
+//
+// Uso alternativo (una sola pasada y termina; queda por compatibilidad con
+// instalaciones viejas que todavía disparan la tarea cada 1 minuto):
+//   node agente-local.js --once
 
 const fs = require("fs");
 const path = require("path");
@@ -33,7 +36,7 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // Mismo override que actualizar-tablero.js, para poder apuntar el agente a
 // un deploy preview en vez de a producción sin tocar código.
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
-const INTERVALO_POLLING_MS = 8000; // solo se usa en --loop
+const INTERVALO_POLLING_MS = 2500; // solo se usa en --loop
 
 // Deploys de preview de Vercel (ej. el de la rama "test") pueden tener
 // activada la protección SSO, que redirige cualquier request sin sesión de
@@ -399,8 +402,10 @@ async function modoUnaVez() {
   await atenderPedido(config, pedido);
 }
 
-// Modo con ventana siempre abierta, para pruebas manuales (Ctrl+C para
-// parar). El uso real pensado es --once vía el Programador de tareas.
+// Modo recomendado: proceso único, invisible, que queda corriendo y
+// consulta cada INTERVALO_POLLING_MS. Se dispara una vez al iniciar sesión
+// de Windows (ver INSTALACION-AGENTE.md), con "Reiniciar si falla" tildado
+// en el Programador de tareas para que se recupere solo ante un error.
 async function modoLoop() {
   const config = leerConfig();
   console.log("Agente Local corriendo (modo loop). Ctrl+C para detener.\n");

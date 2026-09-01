@@ -84,15 +84,21 @@ echo esten logueadas volve aca y apreta una tecla.
 pause
 node agente-local.js --login
 
-REM --- 5. Tarea programada ---
+REM --- 5. Tareas programadas ---
 echo.
-echo Configurando la Tarea Programada de Windows...
-schtasks /create /tn "Agente WMS" /tr "wscript.exe \"%~dp0agente-once-oculto.vbs\"" /sc minute /mo 1 /f
+echo Configurando las Tareas Programadas de Windows...
+schtasks /create /tn "Agente WMS" /tr "wscript.exe \"%~dp0agente-loop-oculto.vbs\"" /sc onlogon /f
 if errorlevel 1 (
-  echo No pude crear la tarea programada automaticamente.
+  echo No pude crear la tarea "Agente WMS" automaticamente.
   echo Segui el "Paso 6" de INSTALACION-AGENTE.md para armarla a mano.
 ) else (
-  echo [OK] Tarea programada "Agente WMS" creada -- corre cada 1 minuto en segundo plano.
+  echo [OK] Tarea "Agente WMS" creada -- corre en segundo plano desde que iniciás sesion, respuesta en segundos.
+)
+schtasks /create /tn "Agente WMS (respaldo)" /tr "wscript.exe \"%~dp0agente-once-oculto.vbs\"" /sc minute /mo 5 /f
+if errorlevel 1 (
+  echo No pude crear la tarea "Agente WMS (respaldo)" automaticamente.
+) else (
+  echo [OK] Tarea "Agente WMS (respaldo)" creada -- red de seguridad cada 5 minutos por si la de arriba se cae.
 )
 
 echo.
@@ -100,6 +106,7 @@ echo ================================================
 echo   Instalacion completa
 echo ================================================
 echo El boton "Actualizar esta seccion (WMS)" del Tablero ya te deberia
-echo funcionar (puede tardar hasta 1 minuto en la primera corrida).
+echo funcionar en pocos segundos. Si por algun motivo no arranco todavia
+echo (recien instalaste), cerra sesion de Windows y volve a entrar una vez.
 echo.
 pause
