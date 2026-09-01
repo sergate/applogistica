@@ -87,6 +87,7 @@ export async function GET(request: NextRequest) {
         pendSep: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.canceladasSinStock - acc.sep),
         unidadesCanceladasPorClientes: acc.canceladasPorClientes,
         unidadesCanceladasSinStock: acc.canceladasSinStock,
+        porcentajeCancelaciones: acc.uni > 0 ? (acc.canceladasSinStock / acc.uni) * 100 : 0,
         cantidadPedidos: acc.pedidos.size,
       }))
       .sort((a, b) => b.uni - a.uni);

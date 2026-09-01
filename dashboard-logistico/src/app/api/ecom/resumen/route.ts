@@ -125,6 +125,9 @@ export async function GET(request: NextRequest) {
         pendSep: Math.max(0, acc.uni - acc.canceladasPorClientes - acc.canceladasSinStock - acc.sep),
         unidadesCanceladasPorClientes: acc.canceladasPorClientes,
         unidadesCanceladasSinStock: acc.canceladasSinStock,
+        // Con "Demanda Total: No", canceladasSinStock ya da 0 (OD_CARGA_CAMION
+        // queda afuera de "contables"), así que este % también da 0 solo.
+        porcentajeCancelaciones: acc.uni > 0 ? (acc.canceladasSinStock / acc.uni) * 100 : 0,
         cantidadPedidos: acc.pedidos.size,
       }))
       .sort((a, b) => b.uni - a.uni);

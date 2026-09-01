@@ -85,6 +85,7 @@ interface MarcaResumenEcom {
   pendSep: number;
   unidadesCanceladasPorClientes: number;
   unidadesCanceladasSinStock: number;
+  porcentajeCancelaciones: number;
   cantidadPedidos: number;
 }
 
@@ -97,6 +98,7 @@ interface CanalResumenEcom {
   pendSep: number;
   unidadesCanceladasPorClientes: number;
   unidadesCanceladasSinStock: number;
+  porcentajeCancelaciones: number;
   cantidadPedidos: number;
 }
 
@@ -2176,6 +2178,7 @@ export default function DashboardLayout() {
     pendSep: fmtNum(m.pendSep),
     unidadesCanceladasPorClientes: fmtNum(m.unidadesCanceladasPorClientes),
     unidadesCanceladasSinStock: fmtNum(m.unidadesCanceladasSinStock),
+    porcentajeCancelaciones: `${m.porcentajeCancelaciones.toFixed(2)}%`,
     cantidadPedidos: fmtNum(m.cantidadPedidos),
   }));
 
@@ -5911,6 +5914,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Pend. Sep.</th>
                         <th className="py-3 px-4 text-left">Unidades Canceladas por Clientes</th>
                         <th className="py-3 px-4 text-left">Unidades Canceladas sin stock</th>
+                        <th className="py-3 px-4 text-left">% Cancelaciones</th>
                         <th className="py-3 px-4 text-left">Cantidad de Pedidos</th>
                       </tr>
                     </thead>
@@ -5925,6 +5929,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left font-semibold text-red-500">{marca.pendSep}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladasPorClientes}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{marca.unidadesCanceladasSinStock}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{marca.porcentajeCancelaciones}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{marca.cantidadPedidos}</td>
                         </tr>
                       ))}
@@ -5967,6 +5972,7 @@ export default function DashboardLayout() {
                             <th className="py-3 px-4 text-left">Pend. Sep.</th>
                             <th className="py-3 px-4 text-left">Unidades Canceladas por Clientes</th>
                             <th className="py-3 px-4 text-left">Unidades Canceladas sin stock</th>
+                            <th className="py-3 px-4 text-left">% Cancelaciones</th>
                             <th className="py-3 px-4 text-left">Cantidad de Pedidos</th>
                           </tr>
                         </thead>
@@ -5984,6 +5990,7 @@ export default function DashboardLayout() {
                               <td className="py-3 px-4 text-left font-semibold text-red-500">{fmtNum(canal.pendSep)}</td>
                               <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladasPorClientes)}</td>
                               <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.unidadesCanceladasSinStock)}</td>
+                              <td className="py-3 px-4 text-left text-slate-600">{canal.porcentajeCancelaciones.toFixed(2)}%</td>
                               <td className="py-3 px-4 text-left text-slate-600">{fmtNum(canal.cantidadPedidos)}</td>
                             </tr>
                           ))}
