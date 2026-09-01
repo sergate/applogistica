@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
 import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion } from "@/lib/resumenHelpers";
+import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic"; // nunca cachear: siempre consultar Supabase de nuevo
@@ -15,6 +16,11 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 }
     );
+  }
+
+  const auth = await requireAuth();
+  if (esErrorAuth(auth)) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
   // Filtro opcional por fecha: ?desde=YYYY-MM-DD y/o ?hasta=YYYY-MM-DD (ambos inclusive).
