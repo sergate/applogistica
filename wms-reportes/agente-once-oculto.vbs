@@ -1,6 +1,7 @@
 ' Corre "node agente-local.js --once" sin mostrar ninguna ventana.
-' Lo usa el Programador de tareas de Windows (ver INSTALACION-AGENTE.md) para
-' revisar pedidos pendientes cada 1-2 minutos, de forma invisible.
+' Tarea de RESPALDO (ver INSTALACION-AGENTE.md, "Agente WMS (respaldo)"):
+' una pasada corta cada 5 minutos, para atrapar pedidos pendientes si la
+' tarea principal en modo --loop (agente-loop-oculto.vbs) se hubiera caído.
 
 Dim fso, scriptDir, shell
 Set fso = CreateObject("Scripting.FileSystemObject")
