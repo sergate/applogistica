@@ -1092,6 +1092,37 @@ export default function DashboardLayout() {
         : new Set(filasFiltradasImprimir.map((f) => f.despacho_cab_id))
     );
   };
+  const [marcandoManualImprimir, setMarcandoManualImprimir] = useState(false);
+  const marcarSeleccionadasComoImpresas = async () => {
+    if (despachoImprimirSeleccion.size === 0) return;
+    if (
+      !confirm(
+        `¿Marcar ${despachoImprimirSeleccion.size} guía(s) como ya impresas manualmente? ` +
+          `Se van a mover a "Para Reimprimir" sin pasar por el Agente Local.`
+      )
+    ) {
+      return;
+    }
+    setMarcandoManualImprimir(true);
+    try {
+      const guias = (despachoImprimirData?.filas || [])
+        .filter((f) => despachoImprimirSeleccion.has(f.despacho_cab_id))
+        .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia }));
+      const res = await fetch("/api/admin/despacho-guias/marcar-impresas", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guias }),
+      });
+      const data = await res.json();
+      if (!data.success) throw new Error(data.error || "Error inesperado");
+      setDataVersion((v) => v + 1);
+      setDespachoImprimirSeleccion(new Set());
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error inesperado marcando las guías como impresas.");
+    } finally {
+      setMarcandoManualImprimir(false);
+    }
+  };
 
   const [despachoReimprimiendoEnCurso, setDespachoReimprimiendoEnCurso] = useState(false);
   const {
@@ -7515,6 +7546,19 @@ export default function DashboardLayout() {
                       setDespachoImprimirSeleccion(new Set());
                     }}
                   />
+                  {tienePermiso("DESP-Grupos") && (
+                    <button
+                      type="button"
+                      onClick={marcarSeleccionadasComoImpresas}
+                      disabled={despachoImprimirSeleccion.size === 0 || marcandoManualImprimir}
+                      title="Solo para casos donde la guía y el remito ya se imprimieron a mano, fuera del sistema."
+                      className="ml-2 mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {marcandoManualImprimir
+                        ? "Marcando..."
+                        : `Marcar como impresas (manual) (${despachoImprimirSeleccion.size})`}
+                    </button>
+                  )}
                 </>
               )}
 
