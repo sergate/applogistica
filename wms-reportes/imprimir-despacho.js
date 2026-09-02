@@ -204,10 +204,22 @@ async function irADespacho(page) {
 // después de imprimir la guía y perder la selección: el botón "Imprimir
 // remito" quedaba sin efecto (nunca aparecía su modal) si no se reseleccionaba.
 async function buscarYSeleccionarFila(page, numeroGuia) {
-  const campoGuia = page.locator('input[placeholder="Guia"]').first();
+  const campoGuia = page.locator('input[placeholder="Guia"]:visible').first();
   await campoGuia.click();
   await page.keyboard.press("Control+A");
   await page.keyboard.type(String(numeroGuia));
+
+  // Si el WMS llegó a dejar un campo duplicado/oculto en el DOM (visto en
+  // producción: se tipeaba en un campo que no era el visible, y la
+  // búsqueda seguía mostrando resultados de la guía anterior sin ningún
+  // error de Playwright), este chequeo lo detecta acá en vez de fallar
+  // recién 25s después con un mensaje genérico de "el modal no apareció".
+  const valorEscrito = await campoGuia.inputValue().catch(() => null);
+  if (valorEscrito !== String(numeroGuia)) {
+    throw new Error(
+      `El campo de búsqueda de guía quedó con "${valorEscrito}" después de tipear "${numeroGuia}" -- probablemente hay más de un campo "Guia" en la pantalla.`
+    );
+  }
 
   await clickBotonExt(page, "Buscar");
   await esperarGridCargado(page);
@@ -216,6 +228,12 @@ async function buscarYSeleccionarFila(page, numeroGuia) {
   const cantidad = await filas.count();
   if (cantidad === 0) throw new Error(`No se encontró ninguna guía con número ${numeroGuia}.`);
   if (cantidad > 1) throw new Error(`Se encontraron ${cantidad} guías para el número ${numeroGuia}; revisar a mano.`);
+
+  const textoFila = await filas.first().innerText().catch(() => "");
+  const regexGuia = new RegExp(`(^|\\D)${escapeRegex(String(numeroGuia))}(\\D|$)`);
+  if (textoFila && !regexGuia.test(textoFila)) {
+    throw new Error(`Se buscó la guía ${numeroGuia} pero la fila encontrada no la menciona: "${textoFila.replace(/\s+/g, " ").slice(0, 200)}".`);
+  }
 
   await filas.first().locator("td.x-selmodel-column").first().click();
 }
