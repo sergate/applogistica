@@ -13,7 +13,8 @@
 //   node reporte-picking.js 2026-08-27              -> desde esa fecha
 //   node reporte-picking.js 2026-08-25 2026-08-28   -> rango de fechas
 //   node reporte-picking.js --excluir=meli,intra    -> saltea esos planes
-//     (se puede combinar con las fechas, en cualquier orden)
+//   node reporte-picking.js --solo-agrupados         -> solo planes con agrupación
+//     (los flags se pueden combinar entre sí y con las fechas, en cualquier orden)
 
 const path = require("path");
 const fs = require("fs");
@@ -113,11 +114,21 @@ function excluirPorNombre(planes, terminos) {
   return planes.filter((p) => !terminos.some((t) => (p.nombre || "").toUpperCase().includes(t)));
 }
 
-async function generarFilas(page, fechaDesde, fechaHasta, excluirTerminos = []) {
+// Se queda solo con los planes que tienen una agrupación cargada
+// (agrupacionId / agrupacion_nombre) -- en la mayoría de los planes viene
+// null, así que esto recorta bastante el volumen antes de bajar detalle.
+function soloAgrupados(planes) {
+  const descartados = planes.filter((p) => !p.agrupacionId && !p.agrupacion_nombre);
+  console.log(`  Descartando ${descartados.length} planes sin agrupación.`);
+  return planes.filter((p) => p.agrupacionId || p.agrupacion_nombre);
+}
+
+async function generarFilas(page, fechaDesde, fechaHasta, excluirTerminos = [], filtrarAgrupados = false) {
   console.log(`Buscando planes de picking entre ${fechaDesde} y ${fechaHasta || fechaDesde}...`);
   const planesSinFiltrar = await listarPlanesPicking(page, fechaDesde, fechaHasta);
   console.log(`  ${planesSinFiltrar.length} planes encontrados.`);
-  const planes = excluirPorNombre(planesSinFiltrar, excluirTerminos);
+  let planes = excluirPorNombre(planesSinFiltrar, excluirTerminos);
+  if (filtrarAgrupados) planes = soloAgrupados(planes);
   console.log(`  Bajando el detalle de ${planes.length}...`);
 
   const filasBusqueda = planes.map((p) => ({
@@ -182,6 +193,7 @@ async function main() {
         .map((t) => t.trim().toUpperCase())
         .filter(Boolean)
     : [];
+  const soloAgrupadosFlag = argsCli.includes("--solo-agrupados");
   const [fechaDesdeArg, fechaHastaArg] = argsCli.filter((a) => !a.startsWith("--"));
   const fechaDesde = fechaDesdeArg || hoyISO();
   const fechaHasta = fechaHastaArg || "";
@@ -200,7 +212,13 @@ async function main() {
       await page.waitForTimeout(1000);
       await chequearSesion(page);
 
-      const { filasBusqueda, filasDetalle } = await generarFilas(page, fechaDesde, fechaHasta, excluirTerminos);
+      const { filasBusqueda, filasDetalle } = await generarFilas(
+        page,
+        fechaDesde,
+        fechaHasta,
+        excluirTerminos,
+        soloAgrupadosFlag
+      );
 
       const marca = timestamp();
       const destinoBusqueda = path.join(DESCARGAS_DIR, `picking_busqueda_${marca}.csv`);
