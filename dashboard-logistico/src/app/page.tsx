@@ -1012,7 +1012,7 @@ export default function DashboardLayout() {
 
   const despachoSubSections = [
     { key: "DESP-Imprimir", label: "Para Imprimir" },
-    { key: "DESP-Reimprimir", label: "Para Reimprimir" },
+    { key: "DESP-Reimprimir", label: "Guías Impresas" },
     { key: "DESP-Grupos", label: "Grupos de Clientes (Admin)" },
   ];
 
@@ -1098,7 +1098,7 @@ export default function DashboardLayout() {
     if (
       !confirm(
         `¿Marcar ${despachoImprimirSeleccion.size} guía(s) como ya impresas manualmente? ` +
-          `Se van a mover a "Para Reimprimir" sin pasar por el Agente Local.`
+          `Se van a mover a "Guías Impresas" sin pasar por el Agente Local.`
       )
     ) {
       return;
@@ -4944,7 +4944,7 @@ export default function DashboardLayout() {
              activeTab === "PD-Urgencias" ? "Pendiente de Despacho - Seguimiento Urgencias" :
              activeTab === "PD-CargaDatos" ? "Pendiente de Despacho - Carga de Datos" :
              activeTab === "DESP-Imprimir" ? "Despacho - Para Imprimir" :
-             activeTab === "DESP-Reimprimir" ? "Despacho - Para Reimprimir" :
+             activeTab === "DESP-Reimprimir" ? "Despacho - Guías Impresas" :
              activeTab === "DESP-Grupos" ? "Despacho - Grupos de Clientes" :
              activeTab === "INB-Importar" ? "Inbound - Importar Datos" :
              activeTab === "INB-Resumen" ? "Inbound - Resumen" :
@@ -7734,7 +7734,7 @@ export default function DashboardLayout() {
           {activeTab === "DESP-Reimprimir" && (
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
               <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
-                <h2 className="text-lg font-bold text-slate-800">Despacho — Para Reimprimir</h2>
+                <h2 className="text-lg font-bold text-slate-800">Despacho — Guías Impresas</h2>
                 {despachoReimprimirData && (
                   <div className="flex items-center gap-2 text-xs text-slate-500">
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
@@ -7896,7 +7896,7 @@ export default function DashboardLayout() {
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800 mb-1">Configuración general</h2>
                 <p className="text-sm text-slate-500 mb-4">
-                  Estos ajustes afectan lo que ve cualquier usuario en Despacho → Para Imprimir / Para Reimprimir.
+                  Estos ajustes afectan lo que ve cualquier usuario en Despacho → Para Imprimir / Guías Impresas.
                 </p>
                 {despachoConfigError && (
                   <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{despachoConfigError}</div>
@@ -7910,7 +7910,7 @@ export default function DashboardLayout() {
                     className="w-4 h-4"
                   />
                   <span className="text-sm text-slate-700">
-                    Ocultar guías de tipo CLIENTE en Para Imprimir / Para Reimprimir
+                    Ocultar guías de tipo CLIENTE en Para Imprimir / Guías Impresas
                   </span>
                   {despachoConfigGuardando && <span className="text-xs text-slate-400">Guardando...</span>}
                 </label>
@@ -7919,7 +7919,7 @@ export default function DashboardLayout() {
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800 mb-1">Grupos de clientes</h2>
                 <p className="text-sm text-slate-500 mb-4">
-                  Los grupos aparecen como columna y filtro en Despacho → Para Imprimir / Para Reimprimir. Un
+                  Los grupos aparecen como columna y filtro en Despacho → Para Imprimir / Guías Impresas. Un
                   cliente pertenece a lo sumo a un grupo -- agregarlo a uno nuevo lo saca del anterior.
                 </p>
                 {despachoGruposError && (
