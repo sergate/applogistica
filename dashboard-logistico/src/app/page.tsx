@@ -3675,7 +3675,10 @@ export default function DashboardLayout() {
 
   const [filtroCanalPDP, setFiltroCanalPDP] = useState("TODAS");
   const [filtroTipoPDP, setFiltroTipoPDP] = useState("TODAS");
-  const [filtroCurvaPDP, setFiltroCurvaPDP] = useState("TODAS");
+  // Selección múltiple: array vacío = sin filtrar (todas las curvas).
+  const [filtroCurvaPDP, setFiltroCurvaPDP] = useState<string[]>([]);
+  const [curvaDropdownAbiertoPDP, setCurvaDropdownAbiertoPDP] = useState(false);
+  const curvaDropdownRefPDP = useRef<HTMLDivElement>(null);
   const [filtroGrupoPDP, setFiltroGrupoPDP] = useState("TODOS");
   const [filtroClientePDP, setFiltroClientePDP] = useState("");
   const [clienteExpandidoPDP, setClienteExpandidoPDP] = useState<string | null>(null);
@@ -3687,12 +3690,27 @@ export default function DashboardLayout() {
     new Set((pdPropiosData?.filas ?? []).map((f) => f.grupo || "SIN GRUPO"))
   ).sort();
 
+  const toggleFiltroCurvaPDP = (curva: string) => {
+    setFiltroCurvaPDP((prev) => (prev.includes(curva) ? prev.filter((c) => c !== curva) : [...prev, curva]));
+  };
+
+  useEffect(() => {
+    if (!curvaDropdownAbiertoPDP) return;
+    const onClickFuera = (e: MouseEvent) => {
+      if (curvaDropdownRefPDP.current && !curvaDropdownRefPDP.current.contains(e.target as Node)) {
+        setCurvaDropdownAbiertoPDP(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickFuera);
+    return () => document.removeEventListener("mousedown", onClickFuera);
+  }, [curvaDropdownAbiertoPDP]);
+
   const { filasFiltradasPDP, filasTablaPDP, subtotalPDP } = useMemo(() => {
     const filasFiltradasPDP = (pdPropiosData?.filas ?? []).filter(
       (f) =>
         (filtroCanalPDP === "TODAS" || f.canal === filtroCanalPDP) &&
         (filtroTipoPDP === "TODAS" || f.tipo === filtroTipoPDP) &&
-        (filtroCurvaPDP === "TODAS" || f.curva === filtroCurvaPDP) &&
+        (filtroCurvaPDP.length === 0 || filtroCurvaPDP.includes(f.curva)) &&
         (filtroGrupoPDP === "TODOS" || (f.grupo || "SIN GRUPO") === filtroGrupoPDP) &&
         (!filtroClientePDP.trim() || f.cliente.toLowerCase().includes(filtroClientePDP.trim().toLowerCase()))
     );
@@ -7137,16 +7155,43 @@ export default function DashboardLayout() {
                   ))}
                 </select>
 
-                <select
-                  value={filtroCurvaPDP}
-                  onChange={(e) => setFiltroCurvaPDP(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <option value="TODAS">Todas las curvas</option>
-                  {curvasDisponiblesPDP.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <div className="relative" ref={curvaDropdownRefPDP}>
+                  <button
+                    type="button"
+                    onClick={() => setCurvaDropdownAbiertoPDP((v) => !v)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    {filtroCurvaPDP.length === 0
+                      ? "Todas las curvas"
+                      : `${filtroCurvaPDP.length} curva${filtroCurvaPDP.length === 1 ? "" : "s"} seleccionada${filtroCurvaPDP.length === 1 ? "" : "s"}`}
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <polyline points="6 9 12 15 18 9" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {curvaDropdownAbiertoPDP && (
+                    <div className="absolute z-10 mt-1 w-56 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg p-2">
+                      <button
+                        type="button"
+                        onClick={() => setFiltroCurvaPDP(filtroCurvaPDP.length === curvasDisponiblesPDP.length ? [] : curvasDisponiblesPDP)}
+                        className="w-full text-left px-2 py-1.5 rounded text-xs font-medium text-blue-600 hover:bg-blue-50"
+                      >
+                        {filtroCurvaPDP.length === curvasDisponiblesPDP.length ? "Deseleccionar todas" : "Seleccionar todas"}
+                      </button>
+                      <div className="border-t border-slate-100 my-1" />
+                      {curvasDisponiblesPDP.map((c) => (
+                        <label key={c} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={filtroCurvaPDP.includes(c)}
+                            onChange={() => toggleFiltroCurvaPDP(c)}
+                            className="w-3.5 h-3.5"
+                          />
+                          {c}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <select
                   value={filtroGrupoPDP}
@@ -7171,7 +7216,7 @@ export default function DashboardLayout() {
                   onClick={() => {
                     setFiltroCanalPDP("TODAS");
                     setFiltroTipoPDP("TODAS");
-                    setFiltroCurvaPDP("TODAS");
+                    setFiltroCurvaPDP([]);
                     setFiltroGrupoPDP("TODOS");
                     setFiltroClientePDP("");
                   }}
