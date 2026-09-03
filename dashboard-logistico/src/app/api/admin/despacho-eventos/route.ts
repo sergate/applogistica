@@ -36,7 +36,15 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw new Error(`Supabase (despacho_impresion_eventos): ${error.message}`);
 
-    return NextResponse.json({ success: true, eventos: data || [] });
+    const usuarioIds = [...new Set((data || []).map((e) => e.usuario_id).filter(Boolean))];
+    const { data: usuarios } = usuarioIds.length
+      ? await supabaseAdmin.from("usuarios").select("id, nombre").in("id", usuarioIds)
+      : { data: [] };
+    const nombrePorId = new Map((usuarios || []).map((u) => [u.id, u.nombre]));
+
+    const eventos = (data || []).map((e) => ({ ...e, usuario_nombre: nombrePorId.get(e.usuario_id) || null }));
+
+    return NextResponse.json({ success: true, eventos });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado" },

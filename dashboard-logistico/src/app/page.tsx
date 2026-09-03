@@ -1217,6 +1217,38 @@ export default function DashboardLayout() {
     }
   };
 
+  interface DespachoEvento {
+    id: number;
+    trabajo_id: number | null;
+    despacho_cab_id: number;
+    guia: string | null;
+    tipo: string;
+    paso: string;
+    resultado: string;
+    mensaje: string | null;
+    usuario_nombre: string | null;
+    ocurrido_en: string;
+  }
+  const [despachoEventos, setDespachoEventos] = useState<DespachoEvento[] | null>(null);
+  const [despachoEventosError, setDespachoEventosError] = useState<string | null>(null);
+  const [despachoEventosCargando, setDespachoEventosCargando] = useState(false);
+  const [despachoEventosSoloErrores, setDespachoEventosSoloErrores] = useState(true);
+
+  const cargarDespachoEventos = async () => {
+    setDespachoEventosCargando(true);
+    setDespachoEventosError(null);
+    try {
+      const res = await fetch(`/api/admin/despacho-eventos?limit=200${despachoEventosSoloErrores ? "&soloErrores=1" : ""}`);
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar el log.");
+      setDespachoEventos(data.eventos);
+    } catch (err) {
+      setDespachoEventosError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setDespachoEventosCargando(false);
+    }
+  };
+
   const cargarDespachoGrupos = async () => {
     setDespachoGruposCargando(true);
     setDespachoGruposError(null);
@@ -1237,8 +1269,16 @@ export default function DashboardLayout() {
     if (activeTab === "DESP-Grupos" && despachoGrupos === null) cargarDespachoGrupos();
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === "DESP-Grupos" && despachoOcultarTipoCliente === null) cargarDespachoConfig();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (activeTab === "DESP-Grupos" && despachoEventos === null) cargarDespachoEventos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (activeTab === "DESP-Grupos" && despachoEventos !== null) cargarDespachoEventos();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [despachoEventosSoloErrores]);
 
   const crearDespachoGrupo = async () => {
     if (!nombreNuevoGrupo.trim()) return;
@@ -8108,6 +8148,82 @@ export default function DashboardLayout() {
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                  <h2 className="text-lg font-bold text-slate-800">Log de eventos de impresión</h2>
+                  <div className="flex items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-sm text-slate-600 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={despachoEventosSoloErrores}
+                        onChange={(e) => setDespachoEventosSoloErrores(e.target.checked)}
+                        className="w-3.5 h-3.5"
+                      />
+                      Solo errores
+                    </label>
+                    <button
+                      onClick={cargarDespachoEventos}
+                      disabled={despachoEventosCargando}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                    >
+                      {despachoEventosCargando ? "Actualizando..." : "Actualizar"}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-sm text-slate-500 mb-4">
+                  Cada intento de imprimir la guía o el remito de un despacho (éxito o error), con quién y cuándo lo
+                  pidió. Solo visible para admins -- útil para ver el motivo puntual de una falla sin depender de la
+                  consola del Agente Local, que corre sin ventana visible.
+                </p>
+                {despachoEventosError && (
+                  <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{despachoEventosError}</div>
+                )}
+                {despachoEventosCargando && despachoEventos === null && <p className="text-sm text-slate-400">Cargando...</p>}
+                {despachoEventos !== null && despachoEventos.length === 0 && (
+                  <p className="text-sm text-slate-400">
+                    {despachoEventosSoloErrores ? "Sin errores registrados." : "Sin eventos registrados todavía."}
+                  </p>
+                )}
+                {despachoEventos !== null && despachoEventos.length > 0 && (
+                  <div className="overflow-x-auto max-h-[28rem] overflow-y-auto">
+                    <table className="w-full text-sm text-left whitespace-nowrap">
+                      <thead className="sticky top-0 bg-white">
+                        <tr className="text-slate-500 font-medium border-b border-slate-200">
+                          <th className="py-2 px-3 text-left">Fecha</th>
+                          <th className="py-2 px-3 text-left">Guía</th>
+                          <th className="py-2 px-3 text-left">Tipo</th>
+                          <th className="py-2 px-3 text-left">Paso</th>
+                          <th className="py-2 px-3 text-left">Resultado</th>
+                          <th className="py-2 px-3 text-left">Usuario</th>
+                          <th className="py-2 px-3 text-left">Mensaje</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {despachoEventos.map((ev) => (
+                          <tr key={ev.id}>
+                            <td className="py-2 px-3 text-left text-slate-500">{fmtFecha(ev.ocurrido_en)}</td>
+                            <td className="py-2 px-3 text-left font-medium text-slate-700">{ev.guia || "—"}</td>
+                            <td className="py-2 px-3 text-left text-slate-600">{ev.tipo}</td>
+                            <td className="py-2 px-3 text-left text-slate-600">{ev.paso}</td>
+                            <td className="py-2 px-3 text-left">
+                              <span
+                                className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                  ev.resultado === "ok" ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"
+                                }`}
+                              >
+                                {ev.resultado === "ok" ? "OK" : "Error"}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-left text-slate-600">{ev.usuario_nombre || "—"}</td>
+                            <td className="py-2 px-3 text-left text-slate-500 whitespace-pre-wrap max-w-md">{ev.mensaje || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
