@@ -74,7 +74,8 @@ REM --- 3. Token personal ---
 echo.
 if exist agente-config.json (
   echo [OK] Ya existe agente-config.json, no lo piso.
-  echo      Si queres cambiar el token, borralo y volve a correr este instalador.
+  echo      Si queres cambiar el token o las credenciales del WMS, borralo
+  echo      y volve a correr este instalador.
 ) else (
   echo Necesitas tu token personal del Agente Local.
   echo Consigelo en el Tablero: cualquier pantalla "Importar Datos" -^>
@@ -86,12 +87,36 @@ if exist agente-config.json (
     pause
     exit /b 1
   )
-  (
-    echo {
-    echo   "token": "!TOKEN!"
-    echo }
-  ) > agente-config.json
-  echo [OK] Token guardado en agente-config.json.
+
+  echo.
+  echo Opcional pero recomendado: la sesion del WMS vence cada tanto. Si le
+  echo pasas el usuario y la contrasena del WMS, el Agente se reloguea solo
+  echo cuando haga falta -- si no, vas a tener que correr agente-login.bat
+  echo a mano cada vez que la sesion venza. Queda guardada en texto plano
+  echo en agente-config.json, en esta PC nomas ^(no se sube a ningun lado^).
+  echo Dejala vacia y apreta Enter si preferis no guardarla.
+  set /p WMSUSUARIO="Usuario del WMS (opcional): "
+  set "WMSCLAVE="
+  if not "!WMSUSUARIO!"=="" (
+    set /p WMSCLAVE="Contrasena del WMS: "
+  )
+
+  if "!WMSUSUARIO!"=="" (
+    (
+      echo {
+      echo   "token": "!TOKEN!"
+      echo }
+    ) > agente-config.json
+  ) else (
+    (
+      echo {
+      echo   "token": "!TOKEN!",
+      echo   "wmsUsuario": "!WMSUSUARIO!",
+      echo   "wmsClave": "!WMSCLAVE!"
+      echo }
+    ) > agente-config.json
+  )
+  echo [OK] Configuracion guardada en agente-config.json.
 )
 
 REM --- 4. Login WMS + Tablero ---

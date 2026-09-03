@@ -26,8 +26,14 @@ esto -- solo copiar la carpeta y loguearse.
    ni instalar nada -- pasa directo a pedirte el token y abrir las dos
    ventanas de login (WMS y Tablero).
 3. Pegá tu token (lo generás en el Tablero, pantalla "Importar Datos" ->
-   panel "Agente Local" -> "Generar mi token"), iniciá sesión en las dos
-   ventanas que se abren, y el instalador arma solo la Tarea Programada.
+   panel "Agente Local" -> "Generar mi token"). Después te va a preguntar
+   el usuario y contraseña del WMS -- **recomendado completarlo**: la
+   sesión del WMS vence cada tanto, y sin esto el Agente no se puede
+   reloguear solo cuando pase (queda mostrando el error "no se puede
+   loguear al WMS" hasta que corras `agente-login.bat` a mano). Podés
+   dejarlo vacío si preferís no guardar la contraseña en esa PC. Por
+   último iniciá sesión en las dos ventanas que se abren, y el instalador
+   arma solo la Tarea Programada.
 
 Listo -- no hace falta correr `npm install` ni `npx playwright install` ni
 tener Node.js preinstalado en esa PC. Los `.bat`/`.vbs` del paquete detectan
