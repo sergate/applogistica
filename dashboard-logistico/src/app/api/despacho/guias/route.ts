@@ -67,10 +67,21 @@ export async function GET(request: NextRequest) {
       })
     );
 
-    const filas = (data || []).map((f) => ({
+    let filas = (data || []).map((f) => ({
       ...f,
       grupo: grupoPorCodigo.get(parseCodigoClienteDespacho(f.cliente) || "") || null,
     }));
+
+    // "Guías Impresas" (reimprimir) va por última impresión -- la más
+    // reciente entre guía y remito, no por fecha de creación del despacho.
+    if (vista === "reimprimir") {
+      const ultimaImpresion = (f: (typeof filas)[number]) => {
+        const t1 = f.guia_impresa_en ? new Date(f.guia_impresa_en).getTime() : 0;
+        const t2 = f.remito_impreso_en ? new Date(f.remito_impreso_en).getTime() : 0;
+        return Math.max(t1, t2);
+      };
+      filas = [...filas].sort((a, b) => ultimaImpresion(b) - ultimaImpresion(a));
+    }
 
     let updatedAt: string | null = null;
     for (const fila of filas) {
