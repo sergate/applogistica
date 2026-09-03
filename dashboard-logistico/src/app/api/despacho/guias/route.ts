@@ -26,12 +26,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Falta "vista" (imprimir|reimprimir).' }, { status: 400 });
     }
 
-    // Los despachos ECOM no pasan por este circuito de impresión.
+    const { data: config } = await supabaseAdmin
+      .from("despacho_configuracion")
+      .select("ocultar_tipo_cliente")
+      .eq("id", 1)
+      .maybeSingle();
+
+    // Los despachos ECOM no pasan por este circuito de impresión. El
+    // ocultamiento de tipo CLIENTE es configurable por el admin (panel
+    // "Grupos de Clientes" -> /api/admin/despacho-configuracion).
     let query = supabaseAdmin
       .from("despacho_guias")
       .select("*")
       .neq("tipo", "ECOM")
       .order("fecha_creacion", { ascending: false });
+    if (config?.ocultar_tipo_cliente) query = query.neq("tipo", "CLIENTE");
     query =
       vista === "reimprimir"
         ? query.eq("guia_impresa", true).eq("remito_impreso", true)
