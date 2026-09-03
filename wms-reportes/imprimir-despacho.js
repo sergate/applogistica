@@ -173,8 +173,20 @@ function correrSumatra(pdfPath, impresora) {
 // ahora se confía en que SumatraPDF ya espera a que el documento esté
 // completamente encolado antes de salir (documentado así), que es lo mismo
 // que ya veníamos usando cuando las impresiones funcionaron bien.
-async function imprimirPdf(pdfPath, impresora) {
-  await correrSumatra(pdfPath, impresora);
+async function imprimirPdf(pdfPath, impresora, copias = 1) {
+  for (let i = 0; i < copias; i++) {
+    await correrSumatra(pdfPath, impresora);
+  }
+}
+
+// Cantidad de copias de la GUÍA (no del remito) según el tipo de despacho --
+// pedido puntual del depósito: PROPIO sale en 2 copias, FRANQUICIA en 4;
+// cualquier otro tipo sigue en 1 copia como siempre.
+function copiasGuiaParaTipo(tipoDespacho) {
+  const t = (tipoDespacho || "").trim().toUpperCase();
+  if (t === "PROPIO") return 2;
+  if (t === "FRANQUICIA") return 4;
+  return 1;
 }
 
 // Una vez que la máscara de carga del WMS queda trabada, NO se despeja sola
@@ -256,8 +268,9 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora, tipoDespacho 
   console.log(`> Descargando guía ${numeroGuia}...`);
   const guiaPdf = await descargarPdf(page, "Imprimir guia", "Imprimir guias", `guia_${numeroGuia}_${timestamp()}.pdf`);
   console.log(`  -> ${guiaPdf}`);
-  console.log("  Enviando guía a la impresora predeterminada...");
-  await imprimirPdf(guiaPdf, impresoraConfigurada);
+  const copiasGuia = copiasGuiaParaTipo(tipoDespacho);
+  console.log(`  Enviando guía a la impresora predeterminada${copiasGuia > 1 ? ` (${copiasGuia} copias, tipo ${tipoDespacho})` : ""}...`);
+  await imprimirPdf(guiaPdf, impresoraConfigurada, copiasGuia);
   await onPaso?.("guia", "ok");
 
   if (esTipoSinRemito(tipoDespacho)) {
