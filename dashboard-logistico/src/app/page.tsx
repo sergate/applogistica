@@ -3658,6 +3658,7 @@ export default function DashboardLayout() {
     canal: string;
     tipo: string;
     curva: string;
+    grupo: string | null;
     unidades: number;
   }
 
@@ -3675,12 +3676,16 @@ export default function DashboardLayout() {
   const [filtroCanalPDP, setFiltroCanalPDP] = useState("TODAS");
   const [filtroTipoPDP, setFiltroTipoPDP] = useState("TODAS");
   const [filtroCurvaPDP, setFiltroCurvaPDP] = useState("TODAS");
+  const [filtroGrupoPDP, setFiltroGrupoPDP] = useState("TODOS");
   const [filtroClientePDP, setFiltroClientePDP] = useState("");
   const [clienteExpandidoPDP, setClienteExpandidoPDP] = useState<string | null>(null);
 
   const canalesDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.canal))).sort();
   const tiposDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.curva))).sort();
+  const gruposDisponiblesPDP = Array.from(
+    new Set((pdPropiosData?.filas ?? []).map((f) => f.grupo || "SIN GRUPO"))
+  ).sort();
 
   const { filasFiltradasPDP, filasTablaPDP, subtotalPDP } = useMemo(() => {
     const filasFiltradasPDP = (pdPropiosData?.filas ?? []).filter(
@@ -3688,12 +3693,13 @@ export default function DashboardLayout() {
         (filtroCanalPDP === "TODAS" || f.canal === filtroCanalPDP) &&
         (filtroTipoPDP === "TODAS" || f.tipo === filtroTipoPDP) &&
         (filtroCurvaPDP === "TODAS" || f.curva === filtroCurvaPDP) &&
+        (filtroGrupoPDP === "TODOS" || (f.grupo || "SIN GRUPO") === filtroGrupoPDP) &&
         (!filtroClientePDP.trim() || f.cliente.toLowerCase().includes(filtroClientePDP.trim().toLowerCase()))
     );
 
     const consolidadoClientesPDP = new Map<
       string,
-      { codigoCliente: string; cliente: string; canal: string; cajas: number; unidades: number }
+      { codigoCliente: string; cliente: string; canal: string; grupo: string | null; cajas: number; unidades: number }
     >();
     for (const f of filasFiltradasPDP) {
       if (!consolidadoClientesPDP.has(f.codigoCliente)) {
@@ -3701,6 +3707,7 @@ export default function DashboardLayout() {
           codigoCliente: f.codigoCliente,
           cliente: f.cliente,
           canal: f.canal,
+          grupo: f.grupo,
           cajas: 0,
           unidades: 0,
         });
@@ -3721,7 +3728,7 @@ export default function DashboardLayout() {
 
     return { filasFiltradasPDP, filasTablaPDP, subtotalPDP };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdPropiosData, filtroCanalPDP, filtroTipoPDP, filtroCurvaPDP, filtroClientePDP]);
+  }, [pdPropiosData, filtroCanalPDP, filtroTipoPDP, filtroCurvaPDP, filtroGrupoPDP, filtroClientePDP]);
 
   const detalleClienteExpandidoPDP = useMemo(
     () => (clienteExpandidoPDP ? filasFiltradasPDP.filter((f) => f.codigoCliente === clienteExpandidoPDP) : []),
@@ -3737,6 +3744,7 @@ export default function DashboardLayout() {
     const filasResumen = filasTablaPDP.map((f) => ({
       Canal: f.canal,
       Cliente: f.cliente,
+      Grupo: f.grupo || "",
       Cajas: f.cajas,
       Unidades: f.unidades,
     }));
@@ -3744,6 +3752,7 @@ export default function DashboardLayout() {
       Número: f.numero,
       Canal: f.canal,
       Cliente: f.cliente,
+      Grupo: f.grupo || "",
       Tipo: f.tipo,
       Curva: f.curva,
       Unidades: f.unidades,
@@ -7139,6 +7148,17 @@ export default function DashboardLayout() {
                   ))}
                 </select>
 
+                <select
+                  value={filtroGrupoPDP}
+                  onChange={(e) => setFiltroGrupoPDP(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los grupos</option>
+                  {gruposDisponiblesPDP.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+
                 <input
                   type="text"
                   value={filtroClientePDP}
@@ -7152,6 +7172,7 @@ export default function DashboardLayout() {
                     setFiltroCanalPDP("TODAS");
                     setFiltroTipoPDP("TODAS");
                     setFiltroCurvaPDP("TODAS");
+                    setFiltroGrupoPDP("TODOS");
                     setFiltroClientePDP("");
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -7188,7 +7209,7 @@ export default function DashboardLayout() {
                   <thead>
                     {filasTablaPDP.length > 0 && (
                       <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                        <td className="py-3 px-4 text-left" colSpan={2}>
+                        <td className="py-3 px-4 text-left" colSpan={3}>
                           Subtotal — {filasTablaPDP.length} cliente{filasTablaPDP.length === 1 ? "" : "s"}
                         </td>
                         <td className="py-3 px-4 text-left">{fmtNum(subtotalPDP.cajas)}</td>
@@ -7198,6 +7219,7 @@ export default function DashboardLayout() {
                     <tr className="text-slate-500 font-medium border-b border-slate-200">
                       <th className="py-3 px-4 text-left">Canal</th>
                       <th className="py-3 px-4 text-left">Cliente</th>
+                      <th className="py-3 px-4 text-left">Grupo</th>
                       <th className="py-3 px-4 text-left">Cajas</th>
                       <th className="py-3 px-4 text-left">Unidades</th>
                     </tr>
@@ -7214,13 +7236,14 @@ export default function DashboardLayout() {
                         >
                           <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.grupo || "-"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.unidades)}</td>
                         </tr>
 
                         {estaExpandido && (
                           <tr>
-                            <td colSpan={4} className="bg-slate-50 px-4 py-4">
+                            <td colSpan={5} className="bg-slate-50 px-4 py-4">
                               <p className="text-xs font-semibold text-slate-500 mb-2">
                                 Detalle por caja — {row.cliente}
                               </p>

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseEnvOk } from "@/lib/supabaseClient";
+import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { fetchAllPendienteDespachoPropios, parseCodigoCliente } from "@/lib/pendienteDespachoHelpers";
 import { fetchClientesInfo } from "@/lib/resumenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
@@ -32,7 +32,7 @@ export async function GET() {
 
     let updatedAt: string | null = null;
 
-    const filas = pendientes.map((r) => {
+    const filasSinGrupo = pendientes.map((r) => {
       const codigo = parseCodigoCliente(r.cliente);
       const info = codigo ? clientesInfo.get(codigo) : undefined;
 
@@ -48,6 +48,27 @@ export async function GET() {
         unidades: num(r.unidades),
       };
     });
+
+    // Grupo de cada cliente (mismos grupos que se arman en Despacho -> Grupos
+    // de Clientes, ver /api/admin/despacho-grupos).
+    const codigos = [...new Set(filasSinGrupo.map((f) => f.codigoCliente).filter((c) => c !== "SIN CODIGO"))];
+    const { data: miembros, error: errorMiembros } =
+      codigos.length > 0
+        ? await supabaseAdmin
+            .from("despacho_grupos_clientes_miembros")
+            .select("codigo_cliente, despacho_grupos_clientes(nombre)")
+            .in("codigo_cliente", codigos)
+        : { data: [], error: null };
+    if (errorMiembros) throw new Error(`Supabase (despacho_grupos_clientes_miembros): ${errorMiembros.message}`);
+
+    const grupoPorCodigo = new Map(
+      (miembros || []).map((m) => {
+        const grupo = Array.isArray(m.despacho_grupos_clientes) ? m.despacho_grupos_clientes[0] : m.despacho_grupos_clientes;
+        return [m.codigo_cliente, (grupo as { nombre: string } | null)?.nombre || null];
+      })
+    );
+
+    const filas = filasSinGrupo.map((f) => ({ ...f, grupo: grupoPorCodigo.get(f.codigoCliente) || null }));
 
     return NextResponse.json({ success: true, filas, updatedAt });
   } catch (err) {
