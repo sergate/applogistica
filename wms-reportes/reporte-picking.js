@@ -12,6 +12,8 @@
 //   node reporte-picking.js                        -> planes de hoy
 //   node reporte-picking.js 2026-08-27              -> desde esa fecha
 //   node reporte-picking.js 2026-08-25 2026-08-28   -> rango de fechas
+//   node reporte-picking.js --excluir=meli,intra    -> saltea esos planes
+//     (se puede combinar con las fechas, en cualquier orden)
 
 const path = require("path");
 const fs = require("fs");
@@ -101,10 +103,22 @@ const COLUMNAS_DETALLE = [
   "sin_stock",
 ];
 
-async function generarFilas(page, fechaDesde, fechaHasta) {
+// Filtra por nombre de plan (ej. "116842-MELI/FLEX", "116841-INTRA 3/9") --
+// no hay un campo estructurado que distinga estos tipos, el WMS los separa
+// solo por convención de nombre.
+function excluirPorNombre(planes, terminos) {
+  if (!terminos.length) return planes;
+  const excluidos = planes.filter((p) => terminos.some((t) => (p.nombre || "").toUpperCase().includes(t)));
+  console.log(`  Excluyendo ${excluidos.length} planes por nombre (${terminos.join(", ")}).`);
+  return planes.filter((p) => !terminos.some((t) => (p.nombre || "").toUpperCase().includes(t)));
+}
+
+async function generarFilas(page, fechaDesde, fechaHasta, excluirTerminos = []) {
   console.log(`Buscando planes de picking entre ${fechaDesde} y ${fechaHasta || fechaDesde}...`);
-  const planes = await listarPlanesPicking(page, fechaDesde, fechaHasta);
-  console.log(`  ${planes.length} planes encontrados. Bajando el detalle de cada uno...`);
+  const planesSinFiltrar = await listarPlanesPicking(page, fechaDesde, fechaHasta);
+  console.log(`  ${planesSinFiltrar.length} planes encontrados.`);
+  const planes = excluirPorNombre(planesSinFiltrar, excluirTerminos);
+  console.log(`  Bajando el detalle de ${planes.length}...`);
 
   const filasBusqueda = planes.map((p) => ({
     picking_id: p.pickingId,
@@ -159,7 +173,16 @@ async function generarFilas(page, fechaDesde, fechaHasta) {
 }
 
 async function main() {
-  const [fechaDesdeArg, fechaHastaArg] = process.argv.slice(2);
+  const argsCli = process.argv.slice(2);
+  const argExcluir = argsCli.find((a) => a.startsWith("--excluir="));
+  const excluirTerminos = argExcluir
+    ? argExcluir
+        .slice("--excluir=".length)
+        .split(",")
+        .map((t) => t.trim().toUpperCase())
+        .filter(Boolean)
+    : [];
+  const [fechaDesdeArg, fechaHastaArg] = argsCli.filter((a) => !a.startsWith("--"));
   const fechaDesde = fechaDesdeArg || hoyISO();
   const fechaHasta = fechaHastaArg || "";
 
@@ -177,7 +200,7 @@ async function main() {
       await page.waitForTimeout(1000);
       await chequearSesion(page);
 
-      const { filasBusqueda, filasDetalle } = await generarFilas(page, fechaDesde, fechaHasta);
+      const { filasBusqueda, filasDetalle } = await generarFilas(page, fechaDesde, fechaHasta, excluirTerminos);
 
       const marca = timestamp();
       const destinoBusqueda = path.join(DESCARGAS_DIR, `picking_busqueda_${marca}.csv`);
