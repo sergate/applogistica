@@ -1182,6 +1182,41 @@ export default function DashboardLayout() {
   const [codigoNuevoMiembro, setCodigoNuevoMiembro] = useState("");
   const [agregandoMiembro, setAgregandoMiembro] = useState(false);
 
+  const [despachoOcultarTipoCliente, setDespachoOcultarTipoCliente] = useState<boolean | null>(null);
+  const [despachoConfigError, setDespachoConfigError] = useState<string | null>(null);
+  const [despachoConfigGuardando, setDespachoConfigGuardando] = useState(false);
+
+  const cargarDespachoConfig = async () => {
+    try {
+      const res = await fetch("/api/admin/despacho-configuracion");
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar la configuración.");
+      setDespachoOcultarTipoCliente(data.ocultarTipoCliente);
+    } catch (err) {
+      setDespachoConfigError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  const cambiarDespachoOcultarTipoCliente = async (valor: boolean) => {
+    setDespachoConfigGuardando(true);
+    setDespachoConfigError(null);
+    try {
+      const res = await fetch("/api/admin/despacho-configuracion", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ocultarTipoCliente: valor }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar.");
+      setDespachoOcultarTipoCliente(data.ocultarTipoCliente);
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setDespachoConfigError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setDespachoConfigGuardando(false);
+    }
+  };
+
   const cargarDespachoGrupos = async () => {
     setDespachoGruposCargando(true);
     setDespachoGruposError(null);
@@ -1200,6 +1235,8 @@ export default function DashboardLayout() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (activeTab === "DESP-Grupos" && despachoGrupos === null) cargarDespachoGrupos();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (activeTab === "DESP-Grupos" && despachoOcultarTipoCliente === null) cargarDespachoConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -7856,6 +7893,29 @@ export default function DashboardLayout() {
           {/* ================= PESTAÑA: DESPACHO - GRUPOS DE CLIENTES (ADMIN) ================= */}
           {activeTab === "DESP-Grupos" && (
             <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Configuración general</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Estos ajustes afectan lo que ve cualquier usuario en Despacho → Para Imprimir / Para Reimprimir.
+                </p>
+                {despachoConfigError && (
+                  <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{despachoConfigError}</div>
+                )}
+                <label className="flex items-center gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={despachoOcultarTipoCliente ?? false}
+                    disabled={despachoOcultarTipoCliente === null || despachoConfigGuardando}
+                    onChange={(e) => cambiarDespachoOcultarTipoCliente(e.target.checked)}
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm text-slate-700">
+                    Ocultar guías de tipo CLIENTE en Para Imprimir / Para Reimprimir
+                  </span>
+                  {despachoConfigGuardando && <span className="text-xs text-slate-400">Guardando...</span>}
+                </label>
+              </div>
+
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800 mb-1">Grupos de clientes</h2>
                 <p className="text-sm text-slate-500 mb-4">
