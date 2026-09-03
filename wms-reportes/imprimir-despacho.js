@@ -7,6 +7,7 @@
 // Uso:
 //   node imprimir-despacho.js 105732
 
+require("./entorno-portable.js");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");

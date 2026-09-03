@@ -1,12 +1,15 @@
 @echo off
-cd /d "C:\Users\jsilva\Documents\GitHub\applogistica\wms-reportes"
+cd /d "%~dp0"
+set "NODE_EXE=node"
+if exist "%~dp0node-portable\node.exe" set "NODE_EXE=%~dp0node-portable\node.exe"
+
 echo === Descargando reportes del WMS ===
-node descargar-reportes.js
+"%NODE_EXE%" descargar-reportes.js
 if errorlevel 1 goto error
 
 echo.
 echo === Subiendo datos al Tablero Logistico ===
-node actualizar-tablero.js
+"%NODE_EXE%" actualizar-tablero.js
 if errorlevel 1 goto error
 
 echo.

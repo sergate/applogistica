@@ -7,6 +7,23 @@ echo   Instalador del Agente Local - Tablero WMS
 echo ================================================
 echo.
 
+REM Si esta carpeta ya trae todo empaquetado (paquete portable: Node.js,
+REM dependencias y el navegador de Playwright ya instalados adentro), no
+REM hace falta descargar ni instalar nada -- se salta directo al login.
+set "NODE_EXE=node"
+set "PAQUETE_PORTABLE=0"
+if exist "%~dp0node-portable\node.exe" (
+  set "NODE_EXE=%~dp0node-portable\node.exe"
+  set "PAQUETE_PORTABLE=1"
+)
+if exist "%~dp0node_modules\playwright-core\.local-browsers" set "PAQUETE_PORTABLE=1"
+
+if "!PAQUETE_PORTABLE!"=="1" (
+  echo [OK] Paquete portable detectado -- Node.js, dependencias y el
+  echo      navegador ya estan incluidos en esta carpeta. Nada para descargar.
+  goto token
+)
+
 REM --- 1. Node.js (se instala solo si falta) ---
 node -v >nul 2>&1
 if errorlevel 1 (
@@ -52,6 +69,7 @@ if errorlevel 1 (
 )
 echo [OK] Navegador instalado.
 
+:token
 REM --- 3. Token personal ---
 echo.
 if exist agente-config.json (
@@ -82,7 +100,7 @@ echo Ahora se van a abrir 2 ventanas del navegador ^(WMS y Tablero^).
 echo Inicia sesion en las DOS con tu usuario habitual, y cuando ambas
 echo esten logueadas volve aca y apreta una tecla.
 pause
-node agente-local.js --login
+"%NODE_EXE%" agente-local.js --login
 
 REM --- 5. Tarea programada ---
 REM Nota: en PCs de dominio la politica de grupo suele bloquear triggers
