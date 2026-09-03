@@ -83,7 +83,7 @@ async function cerrarCartelWms(page) {
     .click({ timeout: 15000 });
 }
 
-async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo) {
+async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo, cantidadCopias) {
   await clickBotonExt(page, textoBotonImprimir);
 
   // Para ciertos casos (ej. "los remitos de clientes se deben imprimir
@@ -136,6 +136,22 @@ async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo
     throw new Error(`El modal "${tituloModal}" no apareció después de 25s.`);
   }
 
+  // El modal trae un campo "Cantidad de impresiones" que el WMS autocompleta
+  // según el tipo de despacho (CLIENTE 3, FRANQUICIA 4, PROPIO 2) -- pero
+  // dentro de una misma corrida (varias guías con el mismo navegador) ese
+  // campo queda "pegado" al valor de la guía anterior en vez de resetear
+  // solo al default de la guía nueva. Si nos pasan el valor correcto, lo
+  // fijamos a mano antes de descargar para no depender de ese default.
+  if (cantidadCopias != null) {
+    const campoCantidad = modalLoc.locator('input[name="cantidad"]:visible').first();
+    if (await campoCantidad.count()) {
+      await campoCantidad.click();
+      await page.keyboard.press("Control+A");
+      await page.keyboard.type(String(cantidadCopias));
+      await page.keyboard.press("Tab");
+    }
+  }
+
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
     clickBotonExt(page, "Descargar PDF"),
@@ -173,20 +189,24 @@ function correrSumatra(pdfPath, impresora) {
 // ahora se confía en que SumatraPDF ya espera a que el documento esté
 // completamente encolado antes de salir (documentado así), que es lo mismo
 // que ya veníamos usando cuando las impresiones funcionaron bien.
-async function imprimirPdf(pdfPath, impresora, copias = 1) {
-  for (let i = 0; i < copias; i++) {
-    await correrSumatra(pdfPath, impresora);
-  }
+async function imprimirPdf(pdfPath, impresora) {
+  await correrSumatra(pdfPath, impresora);
 }
 
-// Cantidad de copias de la GUÍA (no del remito) según el tipo de despacho --
-// pedido puntual del depósito: PROPIO sale en 2 copias, FRANQUICIA en 4;
-// cualquier otro tipo sigue en 1 copia como siempre.
-function copiasGuiaParaTipo(tipoDespacho) {
+// Cantidad de impresiones de la GUÍA que hay que dejar cargada en el modal
+// del WMS ("Cantidad de impresiones") según el tipo de despacho -- el WMS ya
+// las autocompleta así al abrir el modal a mano, pero dentro de una misma
+// corrida automatizada (varias guías con el mismo navegador) el campo queda
+// pegado al valor de la guía anterior en vez de resetear solo. Se fija a
+// mano en descargarPdf() para no depender de ese default. El PDF descargado
+// ya sale con esa cantidad de páginas/copias adentro -- no hay que repetir
+// la impresión por fuera.
+const CANTIDAD_IMPRESIONES_POR_TIPO = { CLIENTE: 3, FRANQUICIA: 4, PROPIO: 2 };
+function cantidadImpresionesParaTipo(tipoDespacho) {
   const t = (tipoDespacho || "").trim().toUpperCase();
-  if (t === "PROPIO") return 2;
-  if (t === "FRANQUICIA") return 4;
-  return 1;
+  return Object.prototype.hasOwnProperty.call(CANTIDAD_IMPRESIONES_POR_TIPO, t)
+    ? CANTIDAD_IMPRESIONES_POR_TIPO[t]
+    : null;
 }
 
 // Una vez que la máscara de carga del WMS queda trabada, NO se despeja sola
@@ -266,11 +286,19 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora, tipoDespacho 
   await buscarYSeleccionarFila(page, numeroGuia);
 
   console.log(`> Descargando guía ${numeroGuia}...`);
-  const guiaPdf = await descargarPdf(page, "Imprimir guia", "Imprimir guias", `guia_${numeroGuia}_${timestamp()}.pdf`);
+  const cantidadImpresiones = cantidadImpresionesParaTipo(tipoDespacho);
+  const guiaPdf = await descargarPdf(
+    page,
+    "Imprimir guia",
+    "Imprimir guias",
+    `guia_${numeroGuia}_${timestamp()}.pdf`,
+    cantidadImpresiones
+  );
   console.log(`  -> ${guiaPdf}`);
-  const copiasGuia = copiasGuiaParaTipo(tipoDespacho);
-  console.log(`  Enviando guía a la impresora predeterminada${copiasGuia > 1 ? ` (${copiasGuia} copias, tipo ${tipoDespacho})` : ""}...`);
-  await imprimirPdf(guiaPdf, impresoraConfigurada, copiasGuia);
+  console.log(
+    `  Enviando guía a la impresora predeterminada${cantidadImpresiones ? ` (${cantidadImpresiones} impresiones, tipo ${tipoDespacho})` : ""}...`
+  );
+  await imprimirPdf(guiaPdf, impresoraConfigurada);
   await onPaso?.("guia", "ok");
 
   if (esTipoSinRemito(tipoDespacho)) {
