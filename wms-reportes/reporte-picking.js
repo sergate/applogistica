@@ -16,6 +16,7 @@
 //   node reporte-picking.js --solo-agrupados         -> solo planes con agrupación
 //     (los flags se pueden combinar entre sí y con las fechas, en cualquier orden)
 
+require("./entorno-portable.js");
 const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");

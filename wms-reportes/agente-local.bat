@@ -1,7 +1,9 @@
 @echo off
 REM Modo con ventana visible, para pruebas manuales -- el uso real pensado
 REM es la tarea programada + agente-vigia-oculto.vbs (ver INSTALACION-AGENTE.md).
-cd /d "C:\Users\jsilva\Documents\GitHub\applogistica\wms-reportes"
+cd /d "%~dp0"
+set "NODE_EXE=node"
+if exist "%~dp0node-portable\node.exe" set "NODE_EXE=%~dp0node-portable\node.exe"
 echo Agente Local corriendo (modo prueba). No cierres esta ventana.
-node agente-local.js --loop
+"%NODE_EXE%" agente-local.js --loop
 pause

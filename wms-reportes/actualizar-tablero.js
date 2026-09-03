@@ -13,6 +13,7 @@
 //   node actualizar-tablero.js                        -> las 4 secciones
 //   node actualizar-tablero.js no_ecom ecom            -> solo esas
 
+require("./entorno-portable.js");
 const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");

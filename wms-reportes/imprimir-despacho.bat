@@ -1,5 +1,7 @@
 @echo off
 cd /d "%~dp0"
-node imprimir-despacho.js %*
+set "NODE_EXE=node"
+if exist "%~dp0node-portable\node.exe" set "NODE_EXE=%~dp0node-portable\node.exe"
+"%NODE_EXE%" imprimir-despacho.js %*
 echo.
 pause

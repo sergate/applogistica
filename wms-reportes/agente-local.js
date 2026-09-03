@@ -25,6 +25,7 @@
 // instalaciones viejas que todavía disparan la tarea cada 1 minuto):
 //   node agente-local.js --once
 
+require("./entorno-portable.js");
 const fs = require("fs");
 const path = require("path");
 const { chromium } = require("playwright");

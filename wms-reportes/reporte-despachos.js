@@ -11,6 +11,7 @@
 //   node reporte-despachos.js 2026-08-27              -> desde esa fecha
 //   node reporte-despachos.js 2026-08-25 2026-08-28   -> rango de fechas
 
+require("./entorno-portable.js");
 const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");

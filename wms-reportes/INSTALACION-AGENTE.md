@@ -10,7 +10,33 @@ tiene que estar corriendo en TU máquina para que el botón te funcione a vos.
 
 ---
 
-## Instalación rápida (recomendado)
+## Paquete portable (recomendado -- no descarga NADA en la PC de destino)
+
+Existe una versión de esta carpeta que ya trae adentro todo lo necesario:
+Node.js, las dependencias, el navegador de Playwright y SumatraPDF. La PC
+del depósito no necesita internet ni permisos de administrador para nada de
+esto -- solo copiar la carpeta y loguearse.
+
+1. Copiá la carpeta `wms-reportes` completa a `C:\` en la PC de destino (por
+   pendrive, carpeta compartida, o el medio que uses). Por ejemplo, que
+   quede en `C:\wms-reportes`. Pesa varios cientos de MB por el navegador
+   incluido -- es normal, tarda un rato copiarla.
+2. Doble clic en **`instalar-agente.bat`**. Como detecta que ya está todo
+   empaquetado adentro (`node-portable`, `node_modules`), NO intenta bajar
+   ni instalar nada -- pasa directo a pedirte el token y abrir las dos
+   ventanas de login (WMS y Tablero).
+3. Pegá tu token (lo generás en el Tablero, pantalla "Importar Datos" ->
+   panel "Agente Local" -> "Generar mi token"), iniciá sesión en las dos
+   ventanas que se abren, y el instalador arma solo la Tarea Programada.
+
+Listo -- no hace falta correr `npm install` ni `npx playwright install` ni
+tener Node.js preinstalado en esa PC. Los `.bat`/`.vbs` del paquete detectan
+solos el Node.js incluido (`node-portable\node.exe`) y lo usan en vez del
+del sistema.
+
+---
+
+## Instalación rápida (si no tenés la carpeta portable, solo el código fuente)
 
 1. Copiá la carpeta `wms-reportes` completa a tu PC (ver Paso 1 más abajo si
    necesitás detalle).

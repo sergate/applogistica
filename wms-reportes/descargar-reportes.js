@@ -8,6 +8,7 @@
 //   node descargar-reportes.js                -> corre todos los reportes de REPORTES
 //   node descargar-reportes.js grupo tienda    -> corre solo esos ids
 
+require("./entorno-portable.js");
 const path = require("path");
 const fs = require("fs");
 const { chromium } = require("playwright");

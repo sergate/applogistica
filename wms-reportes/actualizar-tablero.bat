@@ -1,5 +1,7 @@
 @echo off
-cd /d "C:\Users\jsilva\Documents\GitHub\applogistica\wms-reportes"
-node actualizar-tablero.js %*
+cd /d "%~dp0"
+set "NODE_EXE=node"
+if exist "%~dp0node-portable\node.exe" set "NODE_EXE=%~dp0node-portable\node.exe"
+"%NODE_EXE%" actualizar-tablero.js %*
 echo.
 pause
