@@ -1137,6 +1137,7 @@ export default function DashboardLayout() {
     { refreshInterval: despachoReimprimiendoEnCurso ? 3000 : 0 }
   );
   const [despachoReimprimirSeleccion, setDespachoReimprimirSeleccion] = useState<Set<number>>(new Set());
+  const [despachoReimprimirDocumentos, setDespachoReimprimirDocumentos] = useState<"ambos" | "guia" | "remito">("ambos");
   const toggleDespachoReimprimirFila = (id: number) => {
     setDespachoReimprimirSeleccion((prev) => {
       const next = new Set(prev);
@@ -7859,21 +7860,33 @@ export default function DashboardLayout() {
               </p>
 
               {tienePermiso("DESP-Reimprimir") && (
-                <ActualizarAgenteBoton
-                  seccion="despacho_reimprimir"
-                  label={`Reimprimir seleccionadas (${despachoReimprimirSeleccion.size})`}
-                  deshabilitado={despachoReimprimirSeleccion.size === 0}
-                  payload={{
-                    guias: (despachoReimprimirData?.filas || [])
-                      .filter((f) => despachoReimprimirSeleccion.has(f.despacho_cab_id))
-                      .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia, tipo: f.tipo })),
-                  }}
-                  onCorriendoChange={setDespachoReimprimiendoEnCurso}
-                  onExito={() => {
-                    setDataVersion((v) => v + 1);
-                    setDespachoReimprimirSeleccion(new Set());
-                  }}
-                />
+                <div className="flex items-center gap-3 flex-wrap">
+                  <select
+                    value={despachoReimprimirDocumentos}
+                    onChange={(e) => setDespachoReimprimirDocumentos(e.target.value as "ambos" | "guia" | "remito")}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="ambos">Guía y remito</option>
+                    <option value="guia">Solo guía</option>
+                    <option value="remito">Solo remito</option>
+                  </select>
+                  <ActualizarAgenteBoton
+                    seccion="despacho_reimprimir"
+                    label={`Reimprimir seleccionadas (${despachoReimprimirSeleccion.size})`}
+                    deshabilitado={despachoReimprimirSeleccion.size === 0}
+                    payload={{
+                      documentos: despachoReimprimirDocumentos,
+                      guias: (despachoReimprimirData?.filas || [])
+                        .filter((f) => despachoReimprimirSeleccion.has(f.despacho_cab_id))
+                        .map((f) => ({ despachoCabId: f.despacho_cab_id, guia: f.guia, tipo: f.tipo })),
+                    }}
+                    onCorriendoChange={setDespachoReimprimiendoEnCurso}
+                    onExito={() => {
+                      setDataVersion((v) => v + 1);
+                      setDespachoReimprimirSeleccion(new Set());
+                    }}
+                  />
+                </div>
               )}
 
               {despachoReimprimirError && (
