@@ -278,28 +278,40 @@ function esTipoSinRemito(tipoDespacho) {
   return (tipoDespacho || "").trim().toUpperCase() === "CLIENTE";
 }
 
-async function imprimirGuia(page, numeroGuia, { onPaso, impresora, tipoDespacho } = {}) {
+async function imprimirGuia(
+  page,
+  numeroGuia,
+  { onPaso, impresora, tipoDespacho, incluirGuia = true, incluirRemito = true } = {}
+) {
   const impresoraConfigurada = impresora !== undefined ? impresora : leerImpresoraConfigurada();
 
   await irADespacho(page);
   await page.waitForTimeout(800);
-  await buscarYSeleccionarFila(page, numeroGuia);
 
-  console.log(`> Descargando guía ${numeroGuia}...`);
-  const cantidadImpresiones = cantidadImpresionesParaTipo(tipoDespacho);
-  const guiaPdf = await descargarPdf(
-    page,
-    "Imprimir guia",
-    "Imprimir guias",
-    `guia_${numeroGuia}_${timestamp()}.pdf`,
-    cantidadImpresiones
-  );
-  console.log(`  -> ${guiaPdf}`);
-  console.log(
-    `  Enviando guía a la impresora predeterminada${cantidadImpresiones ? ` (${cantidadImpresiones} impresiones, tipo ${tipoDespacho})` : ""}...`
-  );
-  await imprimirPdf(guiaPdf, impresoraConfigurada);
-  await onPaso?.("guia", "ok");
+  if (incluirGuia) {
+    await buscarYSeleccionarFila(page, numeroGuia);
+
+    console.log(`> Descargando guía ${numeroGuia}...`);
+    const cantidadImpresiones = cantidadImpresionesParaTipo(tipoDespacho);
+    const guiaPdf = await descargarPdf(
+      page,
+      "Imprimir guia",
+      "Imprimir guias",
+      `guia_${numeroGuia}_${timestamp()}.pdf`,
+      cantidadImpresiones
+    );
+    console.log(`  -> ${guiaPdf}`);
+    console.log(
+      `  Enviando guía a la impresora predeterminada${cantidadImpresiones ? ` (${cantidadImpresiones} impresiones, tipo ${tipoDespacho})` : ""}...`
+    );
+    await imprimirPdf(guiaPdf, impresoraConfigurada);
+    await onPaso?.("guia", "ok");
+  }
+
+  if (!incluirRemito) {
+    console.log(`\nListo: guía de ${numeroGuia}${incluirGuia ? " enviada a imprimir" : ""} (remito no solicitado).`);
+    return;
+  }
 
   if (esTipoSinRemito(tipoDespacho)) {
     console.log(`  (tipo ${tipoDespacho}: no lleva remito por acá, se imprime desde GACI -- salteado)`);
@@ -308,7 +320,9 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora, tipoDespacho 
     return;
   }
 
-  // Reseleccionar antes del remito (ver nota en buscarYSeleccionarFila).
+  // Reseleccionar antes del remito (ver nota en buscarYSeleccionarFila) --
+  // hace falta también si incluirGuia era false, porque todavía no se
+  // seleccionó ninguna fila en ese caso.
   await buscarYSeleccionarFila(page, numeroGuia);
 
   console.log(`> Descargando remito de la guía ${numeroGuia}...`);
@@ -318,7 +332,7 @@ async function imprimirGuia(page, numeroGuia, { onPaso, impresora, tipoDespacho 
   await imprimirPdf(remitoPdf, impresoraConfigurada);
   await onPaso?.("remito", "ok");
 
-  console.log(`\nListo: remito y guía de ${numeroGuia} enviados a imprimir.`);
+  console.log(`\nListo: remito${incluirGuia ? " y guía" : ""} de ${numeroGuia} enviados a imprimir.`);
 }
 
 async function main() {

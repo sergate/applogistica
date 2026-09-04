@@ -261,6 +261,12 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
   if (!Array.isArray(guias) || guias.length === 0) {
     throw new Error("El pedido no tiene guías para imprimir (payload vacío).");
   }
+  // "documentos": "ambos" (default) | "guia" | "remito" -- qué imprimir de
+  // cada guía del lote. Pensado sobre todo para reimpresión puntual (ej.
+  // se perdió solo el remito, no hace falta reimprimir la guía de nuevo).
+  const documentos = pedido.payload?.documentos || "ambos";
+  const incluirGuia = documentos !== "remito";
+  const incluirRemito = documentos !== "guia";
 
   await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
   await paginaWms.waitForTimeout(1000);
@@ -279,6 +285,8 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
     try {
       await imprimirGuia(paginaWms, guia, {
         tipoDespacho,
+        incluirGuia,
+        incluirRemito,
         onPaso: (paso, resultado, mensaje) => {
           ultimoPasoOk = paso;
           return avisarEventoDespacho(config.token, { trabajoId: pedido.id, despachoCabId, guia, tipo, paso, resultado, mensaje });
@@ -297,8 +305,9 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
       console.error(`  (falló la guía ${guia}: ${mensaje})`);
       // imprimirGuia va guía -> remito en orden: si el último onPaso avisado
       // fue "guia", el que falló fue el remito; si no llegó a avisar nada,
-      // falló en la guía misma.
-      const pasoFallido = ultimoPasoOk === "guia" ? "remito" : "guia";
+      // falló en lo primero que se intentó (guía, o remito si no se pidió
+      // guía en este lote).
+      const pasoFallido = ultimoPasoOk === "guia" ? "remito" : incluirGuia ? "guia" : "remito";
       await avisarEventoDespacho(config.token, {
         trabajoId: pedido.id,
         despachoCabId,
