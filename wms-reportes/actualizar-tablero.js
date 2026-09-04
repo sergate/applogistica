@@ -113,7 +113,7 @@ async function esperarResultadoOcupacion(page, timeout = 600000) {
 
 async function chequearSesion(page) {
   let haySesion = await page
-    .getByText("Status de preparación", { exact: true })
+    .getByText("Cerrar sesión", { exact: true })
     .first()
     .waitFor({ state: "visible", timeout: 15000 })
     .then(() => true)
@@ -134,7 +134,7 @@ async function chequearSesion(page) {
       if (emailLleno && claveLlena) {
         await page.getByRole("button", { name: "Ingresar", exact: true }).click();
         haySesion = await page
-          .getByText("Status de preparación", { exact: true })
+          .getByText("Cerrar sesión", { exact: true })
           .first()
           .waitFor({ state: "visible", timeout: 15000 })
           .then(() => true)
