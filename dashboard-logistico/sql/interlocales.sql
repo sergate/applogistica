@@ -33,8 +33,8 @@ create table if not exists interlocales (
 
   fecha date not null,
 
-  -- CHK / CQ / AW tildado a mano en el rótulo.
-  marca text check (marca in ('CHEEKY', 'COMO QUIERES', 'AWADA')),
+  -- CHK / CQ / AW / ET5 tildado a mano en el rótulo.
+  marca text check (marca in ('CHEEKY', 'COMO QUIERES', 'AWADA', 'ESTUDIO 5')),
 
   temporada text,
   tipo text,
