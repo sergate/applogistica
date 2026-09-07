@@ -10488,6 +10488,7 @@ export default function DashboardLayout() {
                       <option value="CHEEKY">CHK - Cheeky</option>
                       <option value="COMO QUIERES">CQ - Como Quieres</option>
                       <option value="AWADA">AW - Awada</option>
+                      <option value="ESTUDIO 5">ET5 - Estudio 5</option>
                     </select>
                   </div>
 

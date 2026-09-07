@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const MARCAS_VALIDAS = ["CHEEKY", "COMO QUIERES", "AWADA"] as const;
+const MARCAS_VALIDAS = ["CHEEKY", "COMO QUIERES", "AWADA", "ESTUDIO 5"] as const;
 
 // Listado de interlocales, filtrable por estado (default "pendiente"),
 // local destino y fecha -- es como la futura Hoja de Ruta va a buscar qué
