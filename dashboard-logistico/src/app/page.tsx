@@ -278,6 +278,10 @@ export default function DashboardLayout() {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("ALM-");
   });
+  const [isExpedicionOpen, setIsExpedicionOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("EXP-");
+  });
   const [isAdminOpen, setIsAdminOpen] = useState(() => {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("ADMIN-");
@@ -1362,6 +1366,244 @@ export default function DashboardLayout() {
     { key: "ALM-Resumen", label: "Resumen" },
     { key: "ALM-Configuracion", label: "Configuración" },
   ];
+
+  const expedicionSubSections = [
+    { key: "EXP-Interlocales", label: "Interlocales" },
+    { key: "EXP-HojaRuta", label: "Hoja de Ruta" },
+  ];
+
+  interface InterlocalFila {
+    id: number;
+    numero_movimiento: string;
+    numero_remito: string | null;
+    local_origen_codigo: string;
+    local_origen_nombre: string | null;
+    local_destino_codigo: string;
+    local_destino_nombre: string | null;
+    domicilio_entrega: string | null;
+    fecha: string;
+    marca: string | null;
+    temporada: string | null;
+    tipo: string | null;
+    grupo: string | null;
+    subgrupo: string | null;
+    talle: string | null;
+    confecciono: string | null;
+    encargada: string | null;
+    estado: string;
+    registrado_por_nombre: string | null;
+    registrado_en: string;
+  }
+
+  const {
+    data: interlocalesData,
+    error: interlocalesError,
+    isLoading: interlocalesLoading,
+    mutate: mutateInterlocales,
+  } = useTabData<{ filas: InterlocalFila[] }>(
+    activeTab,
+    "EXP-Interlocales",
+    "/api/interlocales?estado=pendiente",
+    dataVersion
+  );
+
+  const interlocalFormVacio = {
+    localDestinoCodigo: "",
+    domicilioEntrega: "",
+    fecha: new Date().toISOString().slice(0, 10),
+    localOrigenCodigo: "",
+    temporada: "",
+    tipo: "",
+    grupo: "",
+    subgrupo: "",
+    talle: "",
+    numeroMovimiento: "",
+    numeroRemito: "",
+    confecciono: "",
+    encargada: "",
+    marca: "",
+  };
+  const [interlocalForm, setInterlocalForm] = useState(interlocalFormVacio);
+  const [interlocalGuardando, setInterlocalGuardando] = useState(false);
+  const [interlocalGuardadoError, setInterlocalGuardadoError] = useState<string | null>(null);
+  const [interlocalGuardadoOk, setInterlocalGuardadoOk] = useState(false);
+  const [busquedaOrigen, setBusquedaOrigen] = useState<{ codigo: string; nombre: string }[]>([]);
+  const [busquedaDestino, setBusquedaDestino] = useState<{ codigo: string; nombre: string }[]>([]);
+  const interlocalBusquedaTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buscarClientesDebounced = (q: string, setResultados: (v: { codigo: string; nombre: string }[]) => void) => {
+    if (interlocalBusquedaTimeout.current) clearTimeout(interlocalBusquedaTimeout.current);
+    if (q.trim().length < 2) {
+      setResultados([]);
+      return;
+    }
+    interlocalBusquedaTimeout.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/clientes?q=${encodeURIComponent(q.trim())}`);
+        const data = await res.json();
+        setResultados(data.success ? data.clientes || [] : []);
+      } catch {
+        setResultados([]);
+      }
+    }, 300);
+  };
+
+  const actualizarInterlocalForm = (campo: keyof typeof interlocalFormVacio, valor: string) => {
+    setInterlocalForm((prev) => ({ ...prev, [campo]: valor }));
+    setInterlocalGuardadoOk(false);
+  };
+
+  const registrarInterlocal = async () => {
+    setInterlocalGuardando(true);
+    setInterlocalGuardadoError(null);
+    setInterlocalGuardadoOk(false);
+    try {
+      const res = await fetch("/api/interlocales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(interlocalForm),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo registrar el interlocal.");
+      setInterlocalForm(interlocalFormVacio);
+      setInterlocalGuardadoOk(true);
+      mutateInterlocales();
+    } catch (err) {
+      setInterlocalGuardadoError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setInterlocalGuardando(false);
+    }
+  };
+
+  interface HojaDeRutaFila {
+    id: number;
+    fecha: string;
+    local_codigo: string;
+    local_nombre: string | null;
+    transporte: string | null;
+    patente: string | null;
+    chofer: string | null;
+    estado: string;
+    creado_por_nombre: string | null;
+    creado_en: string;
+  }
+
+  const {
+    data: hojasDeRutaData,
+    error: hojasDeRutaError,
+    isLoading: hojasDeRutaLoading,
+    mutate: mutateHojasDeRuta,
+  } = useTabData<{ filas: HojaDeRutaFila[] }>(activeTab, "EXP-HojaRuta", "/api/hoja-ruta", dataVersion);
+
+  const [hdrFecha, setHdrFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  const [hdrLocalCodigo, setHdrLocalCodigo] = useState("");
+  const [busquedaLocalHdr, setBusquedaLocalHdr] = useState<{ codigo: string; nombre: string }[]>([]);
+  const [hdrDisponiblesInterlocales, setHdrDisponiblesInterlocales] = useState<InterlocalFila[]>([]);
+  const [hdrDisponiblesDespachos, setHdrDisponiblesDespachos] = useState<DespachoGuiaFila[]>([]);
+  const [hdrBuscando, setHdrBuscando] = useState(false);
+  const [hdrBuscarError, setHdrBuscarError] = useState<string | null>(null);
+  const [hdrYaSeBusco, setHdrYaSeBusco] = useState(false);
+  const [hdrSeleccionInterlocales, setHdrSeleccionInterlocales] = useState<Set<number>>(new Set());
+  const [hdrSeleccionDespachos, setHdrSeleccionDespachos] = useState<Set<number>>(new Set());
+  const [hdrTransporte, setHdrTransporte] = useState("");
+  const [hdrPatente, setHdrPatente] = useState("");
+  const [hdrChofer, setHdrChofer] = useState("");
+  const [hdrCreando, setHdrCreando] = useState(false);
+  const [hdrCrearError, setHdrCrearError] = useState<string | null>(null);
+
+  const buscarDisponiblesHdr = async () => {
+    if (!hdrLocalCodigo || !hdrFecha) return;
+    setHdrBuscando(true);
+    setHdrBuscarError(null);
+    try {
+      const res = await fetch(
+        `/api/hoja-ruta/disponibles?localDestino=${encodeURIComponent(hdrLocalCodigo)}&fecha=${encodeURIComponent(hdrFecha)}`
+      );
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo buscar lo disponible.");
+      setHdrDisponiblesInterlocales(data.interlocales || []);
+      setHdrDisponiblesDespachos(data.despachos || []);
+      setHdrSeleccionInterlocales(new Set());
+      setHdrSeleccionDespachos(new Set());
+      setHdrYaSeBusco(true);
+    } catch (err) {
+      setHdrBuscarError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setHdrBuscando(false);
+    }
+  };
+
+  const toggleHdrInterlocal = (id: number) => {
+    setHdrSeleccionInterlocales((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleHdrDespacho = (id: number) => {
+    setHdrSeleccionDespachos((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const crearHojaDeRuta = async () => {
+    const items = [
+      ...[...hdrSeleccionInterlocales].map((id) => ({ tipo: "interlocal", referenciaId: id })),
+      ...[...hdrSeleccionDespachos].map((id) => ({ tipo: "despacho", referenciaId: id })),
+    ];
+    if (items.length === 0) return;
+    setHdrCreando(true);
+    setHdrCrearError(null);
+    try {
+      const res = await fetch("/api/hoja-ruta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fecha: hdrFecha,
+          localCodigo: hdrLocalCodigo,
+          transporte: hdrTransporte,
+          patente: hdrPatente,
+          chofer: hdrChofer,
+          items,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo crear la Hoja de Ruta.");
+      setHdrTransporte("");
+      setHdrPatente("");
+      setHdrChofer("");
+      setHdrDisponiblesInterlocales([]);
+      setHdrDisponiblesDespachos([]);
+      setHdrYaSeBusco(false);
+      setDataVersion((v) => v + 1);
+      mutateHojasDeRuta();
+      window.open(`/hoja-ruta/${data.hoja.id}/imprimir`, "_blank");
+    } catch (err) {
+      setHdrCrearError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setHdrCreando(false);
+    }
+  };
+
+  const [hdrAnulando, setHdrAnulando] = useState<number | null>(null);
+  const anularHojaDeRuta = async (id: number) => {
+    if (!confirm("¿Anular esta Hoja de Ruta? Los interlocales y guías que tenía adentro vuelven a quedar disponibles.")) return;
+    setHdrAnulando(id);
+    try {
+      const res = await fetch(`/api/hoja-ruta/${id}/anular`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo anular la Hoja de Ruta.");
+      mutateHojasDeRuta();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error inesperado anulando la Hoja de Ruta.");
+    } finally {
+      setHdrAnulando(null);
+    }
+  };
 
   const adminSubSections = [
     { key: "ADMIN-Perfiles", label: "Perfiles" },
@@ -4942,6 +5184,28 @@ export default function DashboardLayout() {
           </div>
           )}
 
+          {seccionVisible(expedicionSubSections.map((s) => s.key)) && (
+          <div className="pt-2">
+            <button onClick={() => setIsExpedicionOpen(!isExpedicionOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4M16 17H4m0 0l4 4m-4-4l4-4" /></svg>
+                Expedición
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isExpedicionOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isExpedicionOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {expedicionSubSections.filter((sub) => tienePermiso(sub.key)).map((sub) => (
+                  <button key={sub.key} onClick={() => irA(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
           {seccionVisible(adminSubSections.map((s) => s.key)) && (
           <div className="pt-2">
             <button onClick={() => setIsAdminOpen(!isAdminOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
@@ -5019,6 +5283,8 @@ export default function DashboardLayout() {
              activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
              activeTab === "ALM-Resumen" ? "Ocupación Almacén - Resumen" :
              activeTab === "ALM-Configuracion" ? "Ocupación Almacén - Configuración" :
+             activeTab === "EXP-Interlocales" ? "Expedición - Interlocales" :
+             activeTab === "EXP-HojaRuta" ? "Expedición - Hoja de Ruta" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -10161,6 +10427,546 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: EXPEDICIÓN - INTERLOCALES ================= */}
+          {activeTab === "EXP-Interlocales" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-4xl">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Registrar Interlocal</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Transcribí los datos del rótulo físico &quot;GRUPO ALTATEX / INTERLOCAL&quot; pegado al bulto, en el
+                  mismo orden en que aparecen en el papel.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Destino (código local) *</label>
+                    <input
+                      type="text"
+                      list="interlocal-destino-list"
+                      value={interlocalForm.localDestinoCodigo}
+                      onChange={(e) => {
+                        actualizarInterlocalForm("localDestinoCodigo", e.target.value);
+                        buscarClientesDebounced(e.target.value, setBusquedaDestino);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <datalist id="interlocal-destino-list">
+                      {busquedaDestino.map((c) => (
+                        <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Domicilio de entrega</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.domicilioEntrega}
+                      onChange={(e) => actualizarInterlocalForm("domicilioEntrega", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Fecha *</label>
+                    <input
+                      type="date"
+                      value={interlocalForm.fecha}
+                      onChange={(e) => actualizarInterlocalForm("fecha", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Marca (CHK / CQ / AW)</label>
+                    <select
+                      value={interlocalForm.marca}
+                      onChange={(e) => actualizarInterlocalForm("marca", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Sin marca</option>
+                      <option value="CHEEKY">CHK - Cheeky</option>
+                      <option value="COMO QUIERES">CQ - Como Quieres</option>
+                      <option value="AWADA">AW - Awada</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Local N° (origen) *</label>
+                    <input
+                      type="text"
+                      list="interlocal-origen-list"
+                      value={interlocalForm.localOrigenCodigo}
+                      onChange={(e) => {
+                        actualizarInterlocalForm("localOrigenCodigo", e.target.value);
+                        buscarClientesDebounced(e.target.value, setBusquedaOrigen);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <datalist id="interlocal-origen-list">
+                      {busquedaOrigen.map((c) => (
+                        <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Temporada N°</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.temporada}
+                      onChange={(e) => actualizarInterlocalForm("temporada", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Tipo</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.tipo}
+                      onChange={(e) => actualizarInterlocalForm("tipo", e.target.value)}
+                      placeholder="ej. Primera"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Grupo</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.grupo}
+                      onChange={(e) => actualizarInterlocalForm("grupo", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Subgrupo</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.subgrupo}
+                      onChange={(e) => actualizarInterlocalForm("subgrupo", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Talle</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.talle}
+                      onChange={(e) => actualizarInterlocalForm("talle", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">N° de Movimiento *</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.numeroMovimiento}
+                      onChange={(e) => actualizarInterlocalForm("numeroMovimiento", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">N° de Remito</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.numeroRemito}
+                      onChange={(e) => actualizarInterlocalForm("numeroRemito", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Confeccionó</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.confecciono}
+                      onChange={(e) => actualizarInterlocalForm("confecciono", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Encargada</label>
+                    <input
+                      type="text"
+                      value={interlocalForm.encargada}
+                      onChange={(e) => actualizarInterlocalForm("encargada", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                {interlocalGuardadoError && (
+                  <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    {interlocalGuardadoError}
+                  </div>
+                )}
+                {interlocalGuardadoOk && (
+                  <div className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                    Interlocal registrado correctamente.
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 mt-6">
+                  <button
+                    onClick={registrarInterlocal}
+                    disabled={
+                      interlocalGuardando ||
+                      !interlocalForm.numeroMovimiento ||
+                      !interlocalForm.localOrigenCodigo ||
+                      !interlocalForm.localDestinoCodigo ||
+                      !interlocalForm.fecha
+                    }
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                      interlocalGuardando
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {interlocalGuardando ? "Registrando..." : "Registrar Interlocal"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Interlocales pendientes</h2>
+                <p className="text-sm text-slate-500 mb-4">Todavía no se incluyeron en ninguna Hoja de Ruta.</p>
+
+                {interlocalesError && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    Error al cargar los interlocales: {interlocalesError}
+                  </div>
+                )}
+                {interlocalesLoading && !interlocalesData && (
+                  <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={9} />
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Fecha</th>
+                        <th className="py-3 px-4 text-left">Origen</th>
+                        <th className="py-3 px-4 text-left">Destino</th>
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">N° Movimiento</th>
+                        <th className="py-3 px-4 text-left">N° Remito</th>
+                        <th className="py-3 px-4 text-left">Confeccionó</th>
+                        <th className="py-3 px-4 text-left">Encargada</th>
+                        <th className="py-3 px-4 text-left">Registrado por</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(interlocalesData?.filas || []).map((f) => (
+                        <tr key={f.id}>
+                          <td className="py-3 px-4 text-left">{f.fecha}</td>
+                          <td className="py-3 px-4 text-left">{f.local_origen_codigo} — {f.local_origen_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.local_destino_codigo} — {f.local_destino_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
+                          <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.confecciono || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.encargada || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.registrado_por_nombre || "—"}</td>
+                        </tr>
+                      ))}
+                      {(interlocalesData?.filas || []).length === 0 && !interlocalesLoading && (
+                        <tr>
+                          <td colSpan={9} className="py-6 px-4 text-center text-slate-400">
+                            No hay interlocales pendientes.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: EXPEDICIÓN - HOJA DE RUTA ================= */}
+          {activeTab === "EXP-HojaRuta" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Armar Hoja de Ruta</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Elegí local y fecha para traer los interlocales pendientes y los despachos del WMS todavía sin
+                  incluir en otra hoja.
+                </p>
+
+                <div className="flex items-end gap-3 flex-wrap mb-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Local destino</label>
+                    <input
+                      type="text"
+                      list="hdr-local-list"
+                      value={hdrLocalCodigo}
+                      onChange={(e) => {
+                        setHdrLocalCodigo(e.target.value);
+                        buscarClientesDebounced(e.target.value, setBusquedaLocalHdr);
+                      }}
+                      className="w-48 px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <datalist id="hdr-local-list">
+                      {busquedaLocalHdr.map((c) => (
+                        <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Fecha</label>
+                    <input
+                      type="date"
+                      value={hdrFecha}
+                      onChange={(e) => setHdrFecha(e.target.value)}
+                      className="px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={buscarDisponiblesHdr}
+                    disabled={hdrBuscando || !hdrLocalCodigo || !hdrFecha}
+                    className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      hdrBuscando || !hdrLocalCodigo || !hdrFecha
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {hdrBuscando ? "Buscando..." : "Buscar disponibles"}
+                  </button>
+                </div>
+
+                {hdrBuscarError && (
+                  <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{hdrBuscarError}</div>
+                )}
+
+                {hdrYaSeBusco && (
+                  <>
+                    <h3 className="text-sm font-bold text-slate-700 mt-4 mb-2">
+                      Interlocales pendientes ({hdrDisponiblesInterlocales.length})
+                    </h3>
+                    {hdrDisponiblesInterlocales.length === 0 ? (
+                      <p className="text-sm text-slate-400 mb-4">No hay interlocales pendientes para este local/fecha.</p>
+                    ) : (
+                      <div className="overflow-x-auto mb-4">
+                        <table className="w-full text-sm text-left whitespace-nowrap">
+                          <thead className="text-slate-500 font-medium border-b border-slate-200">
+                            <tr>
+                              <th className="py-2 px-3"></th>
+                              <th className="py-2 px-3 text-left">Origen</th>
+                              <th className="py-2 px-3 text-left">N° Movimiento</th>
+                              <th className="py-2 px-3 text-left">N° Remito</th>
+                              <th className="py-2 px-3 text-left">Marca</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {hdrDisponiblesInterlocales.map((f) => (
+                              <tr key={f.id}>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={hdrSeleccionInterlocales.has(f.id)}
+                                    onChange={() => toggleHdrInterlocal(f.id)}
+                                    className="rounded border-slate-300"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-left">{f.local_origen_codigo} — {f.local_origen_nombre || "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.numero_movimiento}</td>
+                                <td className="py-2 px-3 text-left">{f.numero_remito || "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.marca || "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <h3 className="text-sm font-bold text-slate-700 mt-4 mb-2">
+                      Despachos WMS disponibles ({hdrDisponiblesDespachos.length})
+                    </h3>
+                    {hdrDisponiblesDespachos.length === 0 ? (
+                      <p className="text-sm text-slate-400 mb-4">No hay despachos WMS disponibles para este local/fecha.</p>
+                    ) : (
+                      <div className="overflow-x-auto mb-4">
+                        <table className="w-full text-sm text-left whitespace-nowrap">
+                          <thead className="text-slate-500 font-medium border-b border-slate-200">
+                            <tr>
+                              <th className="py-2 px-3"></th>
+                              <th className="py-2 px-3 text-left">Cliente</th>
+                              <th className="py-2 px-3 text-left">Guía</th>
+                              <th className="py-2 px-3 text-left">Tipo</th>
+                              <th className="py-2 px-3 text-left">Cajas</th>
+                              <th className="py-2 px-3 text-left">Unid.</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100">
+                            {hdrDisponiblesDespachos.map((f) => (
+                              <tr key={f.despacho_cab_id}>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="checkbox"
+                                    checked={hdrSeleccionDespachos.has(f.despacho_cab_id)}
+                                    onChange={() => toggleHdrDespacho(f.despacho_cab_id)}
+                                    className="rounded border-slate-300"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-left">{f.cliente || "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.numero_guia || f.guia || "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.tipo || "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.cajas ?? "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.unidades ?? "—"}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Transporte</label>
+                        <input
+                          type="text"
+                          value={hdrTransporte}
+                          onChange={(e) => setHdrTransporte(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Patente</label>
+                        <input
+                          type="text"
+                          value={hdrPatente}
+                          onChange={(e) => setHdrPatente(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">Chofer</label>
+                        <input
+                          type="text"
+                          value={hdrChofer}
+                          onChange={(e) => setHdrChofer(e.target.value)}
+                          className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    {hdrCrearError && (
+                      <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{hdrCrearError}</div>
+                    )}
+
+                    <div className="mt-4">
+                      <button
+                        onClick={crearHojaDeRuta}
+                        disabled={hdrCreando || hdrSeleccionInterlocales.size + hdrSeleccionDespachos.size === 0}
+                        className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                          hdrCreando || hdrSeleccionInterlocales.size + hdrSeleccionDespachos.size === 0
+                            ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                            : "bg-blue-600 text-white hover:bg-blue-700"
+                        }`}
+                      >
+                        {hdrCreando
+                          ? "Creando..."
+                          : `Confirmar e imprimir (${hdrSeleccionInterlocales.size + hdrSeleccionDespachos.size} ítems)`}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Histórico de Hojas de Ruta</h2>
+
+                {hojasDeRutaError && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    Error al cargar el histórico: {hojasDeRutaError}
+                  </div>
+                )}
+                {hojasDeRutaLoading && !hojasDeRutaData && (
+                  <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={8} />
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Fecha</th>
+                        <th className="py-3 px-4 text-left">Local</th>
+                        <th className="py-3 px-4 text-left">Transporte</th>
+                        <th className="py-3 px-4 text-left">Patente</th>
+                        <th className="py-3 px-4 text-left">Chofer</th>
+                        <th className="py-3 px-4 text-left">Estado</th>
+                        <th className="py-3 px-4 text-left">Creado por</th>
+                        <th className="py-3 px-4 text-left">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(hojasDeRutaData?.filas || []).map((h) => (
+                        <tr key={h.id}>
+                          <td className="py-3 px-4 text-left">{h.fecha}</td>
+                          <td className="py-3 px-4 text-left">{h.local_codigo} — {h.local_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{h.transporte || "—"}</td>
+                          <td className="py-3 px-4 text-left">{h.patente || "—"}</td>
+                          <td className="py-3 px-4 text-left">{h.chofer || "—"}</td>
+                          <td className="py-3 px-4 text-left">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                h.estado === "impresa"
+                                  ? "bg-emerald-50 text-emerald-700"
+                                  : h.estado === "anulada"
+                                  ? "bg-red-50 text-red-700"
+                                  : "bg-amber-50 text-amber-700"
+                              }`}
+                            >
+                              {h.estado}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-left">{h.creado_por_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">
+                            <a
+                              href={`/hoja-ruta/${h.id}/imprimir`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-blue-600 hover:underline mr-3"
+                            >
+                              Ver / Reimprimir
+                            </a>
+                            {h.estado !== "anulada" && (
+                              <button
+                                onClick={() => anularHojaDeRuta(h.id)}
+                                disabled={hdrAnulando === h.id}
+                                className="text-red-600 hover:underline disabled:opacity-50"
+                              >
+                                {hdrAnulando === h.id ? "Anulando..." : "Anular"}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {(hojasDeRutaData?.filas || []).length === 0 && !hojasDeRutaLoading && (
+                        <tr>
+                          <td colSpan={8} className="py-6 px-4 text-center text-slate-400">
+                            Todavía no se creó ninguna Hoja de Ruta.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ================= PESTAÑA: ADMIN - PERFILES ================= */}
           {activeTab === "ADMIN-Perfiles" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -10554,7 +11360,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

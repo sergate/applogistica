@@ -98,6 +98,13 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     ],
   },
   {
+    nombre: "Expedición",
+    subsecciones: [
+      { key: "EXP-Interlocales", label: "Interlocales" },
+      { key: "EXP-HojaRuta", label: "Hoja de Ruta" },
+    ],
+  },
+  {
     nombre: "Administración",
     subsecciones: [
       { key: "ADMIN-Perfiles", label: "Perfiles" },
