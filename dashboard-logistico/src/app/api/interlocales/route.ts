@@ -105,6 +105,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const cantidadBultos = Number(body?.cantidadBultos);
+    if (body?.cantidadBultos !== undefined && (!Number.isInteger(cantidadBultos) || cantidadBultos < 1)) {
+      return NextResponse.json({ success: false, error: "La cantidad de bultos tiene que ser un entero mayor a 0." }, { status: 400 });
+    }
+
     const { data: usuario } = await supabaseAdmin.from("usuarios").select("nombre").eq("id", auth.userId).single();
 
     const { data, error } = await supabaseAdmin
@@ -116,16 +121,10 @@ export async function POST(request: NextRequest) {
         local_origen_nombre: nombrePorCodigo.get(localOrigenCodigo) || null,
         local_destino_codigo: localDestinoCodigo,
         local_destino_nombre: nombrePorCodigo.get(localDestinoCodigo) || null,
-        domicilio_entrega: typeof body?.domicilioEntrega === "string" ? body.domicilioEntrega.trim() || null : null,
         fecha,
         marca,
-        temporada: typeof body?.temporada === "string" ? body.temporada.trim() || null : null,
-        tipo: typeof body?.tipo === "string" ? body.tipo.trim() || null : null,
-        grupo: typeof body?.grupo === "string" ? body.grupo.trim() || null : null,
-        subgrupo: typeof body?.subgrupo === "string" ? body.subgrupo.trim() || null : null,
-        talle: typeof body?.talle === "string" ? body.talle.trim() || null : null,
-        confecciono: typeof body?.confecciono === "string" ? body.confecciono.trim() || null : null,
-        encargada: typeof body?.encargada === "string" ? body.encargada.trim() || null : null,
+        cantidad_bultos: Number.isInteger(cantidadBultos) && cantidadBultos >= 1 ? cantidadBultos : 1,
+        observaciones: typeof body?.observaciones === "string" ? body.observaciones.trim() || null : null,
         registrado_por_id: auth.userId,
         registrado_por_nombre: usuario?.nombre || null,
       })

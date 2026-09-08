@@ -1384,16 +1384,10 @@ export default function DashboardLayout() {
     local_origen_nombre: string | null;
     local_destino_codigo: string;
     local_destino_nombre: string | null;
-    domicilio_entrega: string | null;
     fecha: string;
     marca: string | null;
-    temporada: string | null;
-    tipo: string | null;
-    grupo: string | null;
-    subgrupo: string | null;
-    talle: string | null;
-    confecciono: string | null;
-    encargada: string | null;
+    cantidad_bultos: number;
+    observaciones: string | null;
     estado: string;
     registrado_por_nombre: string | null;
     registrado_en: string;
@@ -1413,19 +1407,13 @@ export default function DashboardLayout() {
 
   const interlocalFormVacio = {
     localDestinoCodigo: "",
-    domicilioEntrega: "",
     fecha: new Date().toISOString().slice(0, 10),
     localOrigenCodigo: "",
-    temporada: "",
-    tipo: "",
-    grupo: "",
-    subgrupo: "",
-    talle: "",
     numeroMovimiento: "",
     numeroRemito: "",
-    confecciono: "",
-    encargada: "",
     marca: "",
+    cantidadBultos: "1",
+    observaciones: "",
   };
   const [interlocalForm, setInterlocalForm] = useState(interlocalFormVacio);
   const [interlocalGuardando, setInterlocalGuardando] = useState(false);
@@ -10526,16 +10514,6 @@ export default function DashboardLayout() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Domicilio de entrega</label>
-                    <input
-                      type="text"
-                      value={interlocalForm.domicilioEntrega}
-                      onChange={(e) => actualizarInterlocalForm("domicilioEntrega", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Fecha *</label>
                     <input
                       type="date"
@@ -10580,57 +10558,6 @@ export default function DashboardLayout() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Temporada N°</label>
-                    <input
-                      type="text"
-                      value={interlocalForm.temporada}
-                      onChange={(e) => actualizarInterlocalForm("temporada", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Tipo</label>
-                    <input
-                      type="text"
-                      value={interlocalForm.tipo}
-                      onChange={(e) => actualizarInterlocalForm("tipo", e.target.value)}
-                      placeholder="ej. Primera"
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Grupo</label>
-                    <input
-                      type="text"
-                      value={interlocalForm.grupo}
-                      onChange={(e) => actualizarInterlocalForm("grupo", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Subgrupo</label>
-                    <input
-                      type="text"
-                      value={interlocalForm.subgrupo}
-                      onChange={(e) => actualizarInterlocalForm("subgrupo", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Talle</label>
-                    <input
-                      type="text"
-                      value={interlocalForm.talle}
-                      onChange={(e) => actualizarInterlocalForm("talle", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-
-                  <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">N° de Movimiento *</label>
                     <input
                       type="text"
@@ -10651,21 +10578,24 @@ export default function DashboardLayout() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Confeccionó</label>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Bultos</label>
                     <input
-                      type="text"
-                      value={interlocalForm.confecciono}
-                      onChange={(e) => actualizarInterlocalForm("confecciono", e.target.value)}
+                      type="number"
+                      min={1}
+                      step={1}
+                      value={interlocalForm.cantidadBultos}
+                      onChange={(e) => actualizarInterlocalForm("cantidadBultos", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Encargada</label>
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Observaciones</label>
                     <input
                       type="text"
-                      value={interlocalForm.encargada}
-                      onChange={(e) => actualizarInterlocalForm("encargada", e.target.value)}
+                      placeholder="ej. qué va dentro del bulto"
+                      value={interlocalForm.observaciones}
+                      onChange={(e) => actualizarInterlocalForm("observaciones", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
@@ -10728,8 +10658,8 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">N° Movimiento</th>
                         <th className="py-3 px-4 text-left">N° Remito</th>
-                        <th className="py-3 px-4 text-left">Confeccionó</th>
-                        <th className="py-3 px-4 text-left">Encargada</th>
+                        <th className="py-3 px-4 text-left">Bultos</th>
+                        <th className="py-3 px-4 text-left">Observaciones</th>
                         <th className="py-3 px-4 text-left">Registrado por</th>
                       </tr>
                     </thead>
@@ -10742,8 +10672,8 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
                           <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
-                          <td className="py-3 px-4 text-left">{f.confecciono || "—"}</td>
-                          <td className="py-3 px-4 text-left">{f.encargada || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
+                          <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.registrado_por_nombre || "—"}</td>
                         </tr>
                       ))}

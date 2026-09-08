@@ -45,9 +45,10 @@ create table if not exists interlocales (
   confecciono text,
   encargada text,
 
-  -- Un rótulo = un bulto (confirmado con el usuario), se deja la columna
-  -- por si el circuito cambia más adelante.
+  -- Cantidad de bultos del interlocal (editable desde el formulario, ya no
+  -- se asume 1 bulto por rótulo).
   cantidad_bultos integer not null default 1,
+  observaciones text,
 
   estado text not null default 'pendiente'
     check (estado in ('pendiente', 'en_hoja_de_ruta', 'despachado', 'anulado')),

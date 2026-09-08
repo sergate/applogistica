@@ -10,8 +10,9 @@ interface InterlocalDetalle {
   local_origen_nombre: string | null;
   local_destino_codigo: string;
   local_destino_nombre: string | null;
-  domicilio_entrega: string | null;
   marca: string | null;
+  cantidad_bultos: number;
+  observaciones: string | null;
 }
 
 interface DespachoDetalle {
@@ -117,7 +118,8 @@ export default function ImprimirHojaDeRutaPage() {
               <th className="py-2 pr-2">Referencia</th>
               <th className="py-2 pr-2">N° Remito/Comprobante</th>
               <th className="py-2 pr-2 text-right">Bultos/Cajas</th>
-              <th className="py-2 text-right">Unidades</th>
+              <th className="py-2 pr-2 text-right">Unidades</th>
+              <th className="py-2">Observaciones</th>
             </tr>
           </thead>
           <tbody>
@@ -131,8 +133,9 @@ export default function ImprimirHojaDeRutaPage() {
                     <td className="py-2 pr-2">{d ? `${d.local_destino_codigo} — ${d.local_destino_nombre || "—"}` : "—"}</td>
                     <td className="py-2 pr-2">Mov. {d?.numero_movimiento || "—"}</td>
                     <td className="py-2 pr-2">{d?.numero_remito || "—"}</td>
-                    <td className="py-2 pr-2 text-right">1</td>
-                    <td className="py-2 text-right">—</td>
+                    <td className="py-2 pr-2 text-right">{d?.cantidad_bultos ?? 1}</td>
+                    <td className="py-2 pr-2 text-right">—</td>
+                    <td className="py-2">{d?.observaciones || "—"}</td>
                   </tr>
                 );
               }
@@ -145,7 +148,8 @@ export default function ImprimirHojaDeRutaPage() {
                   <td className="py-2 pr-2">{d?.numero_guia || d?.guia || "—"}</td>
                   <td className="py-2 pr-2">{d?.numero_comprobante || "—"}</td>
                   <td className="py-2 pr-2 text-right">{d?.cajas ?? "—"}</td>
-                  <td className="py-2 text-right">{d?.unidades ?? "—"}</td>
+                  <td className="py-2 pr-2 text-right">{d?.unidades ?? "—"}</td>
+                  <td className="py-2">—</td>
                 </tr>
               );
             })}
