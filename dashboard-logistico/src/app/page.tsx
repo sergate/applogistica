@@ -1495,7 +1495,10 @@ export default function DashboardLayout() {
     mutate: mutateHojasDeRuta,
   } = useTabData<{ filas: HojaDeRutaFila[] }>(activeTab, "EXP-HojaRuta", "/api/hoja-ruta", dataVersion);
 
-  const [hdrFecha, setHdrFecha] = useState(() => new Date().toISOString().slice(0, 10));
+  // La hoja en sí todavía guarda una fecha (para el listado histórico), pero
+  // ya no se pide por pantalla -- se usa la de hoy sola, y buscar
+  // "disponibles" ya no filtra por fecha (trae todo lo pendiente del local).
+  const [hdrFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [hdrLocalCodigo, setHdrLocalCodigo] = useState("");
   const [busquedaLocalHdr, setBusquedaLocalHdr] = useState<{ codigo: string; nombre: string }[]>([]);
   const [hdrDisponiblesInterlocales, setHdrDisponiblesInterlocales] = useState<InterlocalFila[]>([]);
@@ -1510,27 +1513,81 @@ export default function DashboardLayout() {
   const [hdrChofer, setHdrChofer] = useState("");
   const [hdrCreando, setHdrCreando] = useState(false);
   const [hdrCrearError, setHdrCrearError] = useState<string | null>(null);
+  // Modo edición: si tiene un id, "Confirmar" pasa a modificar esa hoja en
+  // vez de crear una nueva.
+  const [hdrEditandoId, setHdrEditandoId] = useState<number | null>(null);
 
-  const buscarDisponiblesHdr = async () => {
-    if (!hdrLocalCodigo || !hdrFecha) return;
+  const buscarDisponiblesHdr = async (hojaIdEdicion?: number) => {
+    if (!hdrLocalCodigo) return;
     setHdrBuscando(true);
     setHdrBuscarError(null);
     try {
-      const res = await fetch(
-        `/api/hoja-ruta/disponibles?localDestino=${encodeURIComponent(hdrLocalCodigo)}&fecha=${encodeURIComponent(hdrFecha)}`
-      );
+      const urlHojaId = hojaIdEdicion ? `&hojaId=${hojaIdEdicion}` : "";
+      const res = await fetch(`/api/hoja-ruta/disponibles?localDestino=${encodeURIComponent(hdrLocalCodigo)}${urlHojaId}`);
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo buscar lo disponible.");
       setHdrDisponiblesInterlocales(data.interlocales || []);
       setHdrDisponiblesDespachos(data.despachos || []);
-      setHdrSeleccionInterlocales(new Set());
-      setHdrSeleccionDespachos(new Set());
+      if (!hojaIdEdicion) {
+        setHdrSeleccionInterlocales(new Set());
+        setHdrSeleccionDespachos(new Set());
+      }
       setHdrYaSeBusco(true);
     } catch (err) {
       setHdrBuscarError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
       setHdrBuscando(false);
     }
+  };
+
+  // Precarga el formulario con los datos de una hoja existente y trae lo
+  // disponible para ese local (incluyendo lo que ya tiene esta hoja, para
+  // poder sacarlo si hace falta).
+  const iniciarEdicionHojaDeRuta = async (h: HojaDeRutaFila) => {
+    setHdrCrearError(null);
+    setHdrEditandoId(h.id);
+    setHdrLocalCodigo(h.local_codigo);
+    setHdrTransporte(h.transporte || "");
+    setHdrPatente(h.patente || "");
+    setHdrChofer(h.chofer || "");
+    setHdrBuscando(true);
+    setHdrBuscarError(null);
+    try {
+      const [resDisp, resDetalle] = await Promise.all([
+        fetch(`/api/hoja-ruta/disponibles?localDestino=${encodeURIComponent(h.local_codigo)}&hojaId=${h.id}`),
+        fetch(`/api/hoja-ruta/${h.id}`),
+      ]);
+      const dataDisp = await resDisp.json();
+      const dataDetalle = await resDetalle.json();
+      if (!resDisp.ok || !dataDisp.success) throw new Error(dataDisp.error || "No se pudo buscar lo disponible.");
+      if (!resDetalle.ok || !dataDetalle.success) throw new Error(dataDetalle.error || "No se pudo cargar la hoja.");
+
+      setHdrDisponiblesInterlocales(dataDisp.interlocales || []);
+      setHdrDisponiblesDespachos(dataDisp.despachos || []);
+      const items: { tipo: string; referencia_id: number }[] = dataDetalle.items || [];
+      setHdrSeleccionInterlocales(new Set(items.filter((i) => i.tipo === "interlocal").map((i) => i.referencia_id)));
+      setHdrSeleccionDespachos(new Set(items.filter((i) => i.tipo === "despacho").map((i) => i.referencia_id)));
+      setHdrYaSeBusco(true);
+    } catch (err) {
+      setHdrBuscarError(err instanceof Error ? err.message : "Error inesperado.");
+      setHdrEditandoId(null);
+    } finally {
+      setHdrBuscando(false);
+    }
+  };
+
+  const cancelarEdicionHojaDeRuta = () => {
+    setHdrEditandoId(null);
+    setHdrLocalCodigo("");
+    setHdrTransporte("");
+    setHdrPatente("");
+    setHdrChofer("");
+    setHdrDisponiblesInterlocales([]);
+    setHdrDisponiblesDespachos([]);
+    setHdrSeleccionInterlocales(new Set());
+    setHdrSeleccionDespachos(new Set());
+    setHdrYaSeBusco(false);
+    setHdrCrearError(null);
   };
 
   const toggleHdrInterlocal = (id: number) => {
@@ -1559,8 +1616,9 @@ export default function DashboardLayout() {
     setHdrCreando(true);
     setHdrCrearError(null);
     try {
-      const res = await fetch("/api/hoja-ruta", {
-        method: "POST",
+      const editando = hdrEditandoId !== null;
+      const res = await fetch(editando ? `/api/hoja-ruta/${hdrEditandoId}` : "/api/hoja-ruta", {
+        method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           fecha: hdrFecha,
@@ -1572,7 +1630,10 @@ export default function DashboardLayout() {
         }),
       });
       const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo crear la Hoja de Ruta.");
+      if (!res.ok || !data.success) throw new Error(data.error || `No se pudo ${editando ? "modificar" : "crear"} la Hoja de Ruta.`);
+      const hojaId = data.hoja.id;
+      setHdrEditandoId(null);
+      setHdrLocalCodigo("");
       setHdrTransporte("");
       setHdrPatente("");
       setHdrChofer("");
@@ -1581,7 +1642,10 @@ export default function DashboardLayout() {
       setHdrYaSeBusco(false);
       setDataVersion((v) => v + 1);
       mutateHojasDeRuta();
-      window.open(`/hoja-ruta/${data.hoja.id}/imprimir`, "_blank");
+      // Al modificar no reabrimos la impresión sola -- puede que solo se
+      // haya corregido un dato sin necesitar un papel nuevo. "Ver /
+      // Reimprimir" desde el histórico queda para cuando sí haga falta.
+      if (!editando) window.open(`/hoja-ruta/${hojaId}/imprimir`, "_blank");
     } catch (err) {
       setHdrCrearError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
@@ -10697,10 +10761,23 @@ export default function DashboardLayout() {
           {activeTab === "EXP-HojaRuta" && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-slate-800 mb-1">Armar Hoja de Ruta</h2>
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                  <h2 className="text-lg font-bold text-slate-800">
+                    {hdrEditandoId ? `Modificar Hoja de Ruta #${hdrEditandoId}` : "Armar Hoja de Ruta"}
+                  </h2>
+                  {hdrEditandoId && (
+                    <button
+                      onClick={cancelarEdicionHojaDeRuta}
+                      className="text-sm text-slate-500 hover:text-slate-700 hover:underline"
+                    >
+                      Cancelar edición
+                    </button>
+                  )}
+                </div>
                 <p className="text-sm text-slate-500 mb-4">
-                  Elegí local y fecha para traer los interlocales pendientes y los despachos del WMS todavía sin
-                  incluir en otra hoja.
+                  {hdrEditandoId
+                    ? "Tildá o destildá lo que quieras agregar o sacar, y guardá los cambios."
+                    : "Elegí el local destino para traer todos los interlocales pendientes y los despachos del WMS todavía sin incluir en otra hoja."}
                 </p>
 
                 <div className="flex items-end gap-3 flex-wrap mb-4">
@@ -10710,11 +10787,12 @@ export default function DashboardLayout() {
                       type="text"
                       list="hdr-local-list"
                       value={hdrLocalCodigo}
+                      disabled={!!hdrEditandoId}
                       onChange={(e) => {
                         setHdrLocalCodigo(e.target.value);
                         buscarClientesDebounced(e.target.value, setBusquedaLocalHdr);
                       }}
-                      className="w-48 px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-48 px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
                     />
                     <datalist id="hdr-local-list">
                       {busquedaLocalHdr.map((c) => (
@@ -10722,26 +10800,19 @@ export default function DashboardLayout() {
                       ))}
                     </datalist>
                   </div>
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Fecha</label>
-                    <input
-                      type="date"
-                      value={hdrFecha}
-                      onChange={(e) => setHdrFecha(e.target.value)}
-                      className="px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                  <button
-                    onClick={buscarDisponiblesHdr}
-                    disabled={hdrBuscando || !hdrLocalCodigo || !hdrFecha}
-                    className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
-                      hdrBuscando || !hdrLocalCodigo || !hdrFecha
-                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                        : "bg-blue-600 text-white hover:bg-blue-700"
-                    }`}
-                  >
-                    {hdrBuscando ? "Buscando..." : "Buscar disponibles"}
-                  </button>
+                  {!hdrEditandoId && (
+                    <button
+                      onClick={() => buscarDisponiblesHdr()}
+                      disabled={hdrBuscando || !hdrLocalCodigo}
+                      className={`px-5 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                        hdrBuscando || !hdrLocalCodigo
+                          ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                          : "bg-blue-600 text-white hover:bg-blue-700"
+                      }`}
+                    >
+                      {hdrBuscando ? "Buscando..." : "Buscar disponibles"}
+                    </button>
+                  )}
                 </div>
 
                 {hdrBuscarError && (
@@ -10754,7 +10825,7 @@ export default function DashboardLayout() {
                       Interlocales pendientes ({hdrDisponiblesInterlocales.length})
                     </h3>
                     {hdrDisponiblesInterlocales.length === 0 ? (
-                      <p className="text-sm text-slate-400 mb-4">No hay interlocales pendientes para este local/fecha.</p>
+                      <p className="text-sm text-slate-400 mb-4">No hay interlocales pendientes para este local.</p>
                     ) : (
                       <div className="overflow-x-auto mb-4">
                         <table className="w-full text-sm text-left whitespace-nowrap">
@@ -10793,7 +10864,7 @@ export default function DashboardLayout() {
                       Despachos WMS disponibles ({hdrDisponiblesDespachos.length})
                     </h3>
                     {hdrDisponiblesDespachos.length === 0 ? (
-                      <p className="text-sm text-slate-400 mb-4">No hay despachos WMS disponibles para este local/fecha.</p>
+                      <p className="text-sm text-slate-400 mb-4">No hay despachos WMS disponibles para este local.</p>
                     ) : (
                       <div className="overflow-x-auto mb-4">
                         <table className="w-full text-sm text-left whitespace-nowrap">
@@ -10875,7 +10946,11 @@ export default function DashboardLayout() {
                         }`}
                       >
                         {hdrCreando
-                          ? "Creando..."
+                          ? hdrEditandoId
+                            ? "Guardando..."
+                            : "Creando..."
+                          : hdrEditandoId
+                          ? `Guardar cambios (${hdrSeleccionInterlocales.size + hdrSeleccionDespachos.size} ítems)`
                           : `Confirmar e imprimir (${hdrSeleccionInterlocales.size + hdrSeleccionDespachos.size} ítems)`}
                       </button>
                     </div>
@@ -10943,13 +11018,21 @@ export default function DashboardLayout() {
                               Ver / Reimprimir
                             </a>
                             {h.estado !== "anulada" && (
-                              <button
-                                onClick={() => anularHojaDeRuta(h.id)}
-                                disabled={hdrAnulando === h.id}
-                                className="text-red-600 hover:underline disabled:opacity-50"
-                              >
-                                {hdrAnulando === h.id ? "Anulando..." : "Anular"}
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => iniciarEdicionHojaDeRuta(h)}
+                                  className="text-blue-600 hover:underline mr-3"
+                                >
+                                  Modificar
+                                </button>
+                                <button
+                                  onClick={() => anularHojaDeRuta(h.id)}
+                                  disabled={hdrAnulando === h.id}
+                                  className="text-red-600 hover:underline disabled:opacity-50"
+                                >
+                                  {hdrAnulando === h.id ? "Anulando..." : "Anular"}
+                                </button>
+                              </>
                             )}
                           </td>
                         </tr>
