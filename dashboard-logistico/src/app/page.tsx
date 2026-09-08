@@ -1041,29 +1041,18 @@ export default function DashboardLayout() {
     remito_impreso_en: string | null;
     remito_impreso_por_nombre: string | null;
     grupo: string | null;
-    nombre_archivo: string | null;
-  }
-
-  // "Despachada" -- confirmado contra guías reales: el WMS marca
-  // estado_wms = "DP_COT_OK" (Código de Operación de Traslado de ARBA
-  // aprobado) recién cuando la guía efectivamente salió del depósito.
-  function esDespachado(fila: DespachoGuiaFila): boolean {
-    return fila.estado_wms === "DP_COT_OK";
   }
 
   function filasDespachoFiltradas(
     filas: DespachoGuiaFila[],
     filtroCliente: string,
     filtroTipo: string,
-    filtroGrupo: string,
-    filtroDespachado: "TODOS" | "DESPACHADA" | "DEPOSITO" = "TODOS"
+    filtroGrupo: string
   ): DespachoGuiaFila[] {
     return filas.filter((f) => {
       if (filtroCliente && !(f.cliente || "").toLowerCase().includes(filtroCliente.toLowerCase())) return false;
       if (filtroTipo !== "TODOS" && (f.tipo || "SIN TIPO") !== filtroTipo) return false;
       if (filtroGrupo !== "TODOS" && (f.grupo || "SIN GRUPO") !== filtroGrupo) return false;
-      if (filtroDespachado === "DESPACHADA" && !esDespachado(f)) return false;
-      if (filtroDespachado === "DEPOSITO" && esDespachado(f)) return false;
       return true;
     });
   }
@@ -1092,15 +1081,13 @@ export default function DashboardLayout() {
   const [filtroClienteImprimir, setFiltroClienteImprimir] = useState("");
   const [filtroTipoImprimir, setFiltroTipoImprimir] = useState("TODOS");
   const [filtroGrupoImprimir, setFiltroGrupoImprimir] = useState("TODOS");
-  const [filtroDespachadoImprimir, setFiltroDespachadoImprimir] = useState<"TODOS" | "DESPACHADA" | "DEPOSITO">("TODOS");
   const tiposDisponiblesImprimir = [...new Set((despachoImprimirData?.filas || []).map((f) => f.tipo || "SIN TIPO"))].sort();
   const gruposDisponiblesImprimir = [...new Set((despachoImprimirData?.filas || []).map((f) => f.grupo || "SIN GRUPO"))].sort();
   const filasFiltradasImprimir = filasDespachoFiltradas(
     despachoImprimirData?.filas || [],
     filtroClienteImprimir,
     filtroTipoImprimir,
-    filtroGrupoImprimir,
-    filtroDespachadoImprimir
+    filtroGrupoImprimir
   );
   const toggleDespachoImprimirTodas = () => {
     setDespachoImprimirSeleccion((prev) =>
@@ -1166,15 +1153,13 @@ export default function DashboardLayout() {
   const [filtroClienteReimprimir, setFiltroClienteReimprimir] = useState("");
   const [filtroTipoReimprimir, setFiltroTipoReimprimir] = useState("TODOS");
   const [filtroGrupoReimprimir, setFiltroGrupoReimprimir] = useState("TODOS");
-  const [filtroDespachadoReimprimir, setFiltroDespachadoReimprimir] = useState<"TODOS" | "DESPACHADA" | "DEPOSITO">("TODOS");
   const tiposDisponiblesReimprimir = [...new Set((despachoReimprimirData?.filas || []).map((f) => f.tipo || "SIN TIPO"))].sort();
   const gruposDisponiblesReimprimir = [...new Set((despachoReimprimirData?.filas || []).map((f) => f.grupo || "SIN GRUPO"))].sort();
   const filasFiltradasReimprimir = filasDespachoFiltradas(
     despachoReimprimirData?.filas || [],
     filtroClienteReimprimir,
     filtroTipoReimprimir,
-    filtroGrupoReimprimir,
-    filtroDespachadoReimprimir
+    filtroGrupoReimprimir
   );
   const toggleDespachoReimprimirTodas = () => {
     setDespachoReimprimirSeleccion((prev) =>
@@ -8028,22 +8013,12 @@ export default function DashboardLayout() {
                     <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
-                <select
-                  value={filtroDespachadoImprimir}
-                  onChange={(e) => setFiltroDespachadoImprimir(e.target.value as "TODOS" | "DESPACHADA" | "DEPOSITO")}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <option value="TODOS">Despachada y en depósito</option>
-                  <option value="DESPACHADA">Solo despachadas</option>
-                  <option value="DEPOSITO">Solo en depósito</option>
-                </select>
-                {(filtroClienteImprimir || filtroTipoImprimir !== "TODOS" || filtroGrupoImprimir !== "TODOS" || filtroDespachadoImprimir !== "TODOS") && (
+                {(filtroClienteImprimir || filtroTipoImprimir !== "TODOS" || filtroGrupoImprimir !== "TODOS") && (
                   <button
                     onClick={() => {
                       setFiltroClienteImprimir("");
                       setFiltroTipoImprimir("TODOS");
                       setFiltroGrupoImprimir("TODOS");
-                      setFiltroDespachadoImprimir("TODOS");
                     }}
                     className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                   >
@@ -8073,7 +8048,6 @@ export default function DashboardLayout() {
                       <th className="py-3 px-4 text-left">Cajas</th>
                       <th className="py-3 px-4 text-left">Unid.</th>
                       <th className="py-3 px-4 text-left">Estado WMS</th>
-                      <th className="py-3 px-4 text-left">Despacho</th>
                       <th className="py-3 px-4 text-left">Guía impresa</th>
                       <th className="py-3 px-4 text-left">Remito impreso</th>
                     </tr>
@@ -8098,15 +8072,6 @@ export default function DashboardLayout() {
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cajas ?? "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.unidades ?? "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.estado_wms || "—"}</td>
-                        <td className="py-3 px-4 text-left">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              esDespachado(fila) ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {esDespachado(fila) ? "Despachada" : "En depósito"}
-                          </span>
-                        </td>
                         <td className="py-3 px-4 text-left">
                           <span
                             className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -8229,22 +8194,12 @@ export default function DashboardLayout() {
                     <option key={g} value={g}>{g}</option>
                   ))}
                 </select>
-                <select
-                  value={filtroDespachadoReimprimir}
-                  onChange={(e) => setFiltroDespachadoReimprimir(e.target.value as "TODOS" | "DESPACHADA" | "DEPOSITO")}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <option value="TODOS">Despachada y en depósito</option>
-                  <option value="DESPACHADA">Solo despachadas</option>
-                  <option value="DEPOSITO">Solo en depósito</option>
-                </select>
-                {(filtroClienteReimprimir || filtroTipoReimprimir !== "TODOS" || filtroGrupoReimprimir !== "TODOS" || filtroDespachadoReimprimir !== "TODOS") && (
+                {(filtroClienteReimprimir || filtroTipoReimprimir !== "TODOS" || filtroGrupoReimprimir !== "TODOS") && (
                   <button
                     onClick={() => {
                       setFiltroClienteReimprimir("");
                       setFiltroTipoReimprimir("TODOS");
                       setFiltroGrupoReimprimir("TODOS");
-                      setFiltroDespachadoReimprimir("TODOS");
                     }}
                     className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                   >
@@ -8270,7 +8225,6 @@ export default function DashboardLayout() {
                       <th className="py-3 px-4 text-left">Grupo</th>
                       <th className="py-3 px-4 text-left">Transporte</th>
                       <th className="py-3 px-4 text-left">Tipo</th>
-                      <th className="py-3 px-4 text-left">Despacho</th>
                       <th className="py-3 px-4 text-left">Guía impresa</th>
                       <th className="py-3 px-4 text-left">Remito impreso</th>
                       <th className="py-3 px-4 text-left">Última impresión</th>
@@ -8292,15 +8246,6 @@ export default function DashboardLayout() {
                         <td className="py-3 px-4 text-left text-slate-600">{fila.grupo || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
-                        <td className="py-3 px-4 text-left">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                              esDespachado(fila) ? "bg-blue-100 text-blue-700" : "bg-amber-100 text-amber-700"
-                            }`}
-                          >
-                            {esDespachado(fila) ? "Despachada" : "En depósito"}
-                          </span>
-                        </td>
                         <td className="py-3 px-4 text-left">
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
                             Sí
