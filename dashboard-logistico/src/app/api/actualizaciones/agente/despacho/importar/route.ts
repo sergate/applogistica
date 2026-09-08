@@ -21,8 +21,7 @@ interface FilaImportada {
   unidades?: number | null;
   zona?: string | null;
   patente?: string | null;
-  arba_request?: string | null;
-  arba_response?: string | null;
+  nombre_archivo?: string | null;
 }
 
 const CHUNK = 500;
@@ -68,8 +67,7 @@ export async function POST(request: NextRequest) {
         unidades: f.unidades ?? null,
         zona: aTexto(f.zona),
         patente: aTexto(f.patente),
-        arba_request: aTexto(f.arba_request),
-        arba_response: aTexto(f.arba_response),
+        nombre_archivo: aTexto(f.nombre_archivo),
         updated_at: ahora,
       }));
 
