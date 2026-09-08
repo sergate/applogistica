@@ -5,7 +5,6 @@ import { useParams } from "next/navigation";
 
 interface InterlocalDetalle {
   numero_movimiento: string;
-  numero_remito: string | null;
   local_origen_codigo: string;
   local_origen_nombre: string | null;
   local_destino_codigo: string;
@@ -18,11 +17,9 @@ interface InterlocalDetalle {
 interface DespachoDetalle {
   guia: string | null;
   numero_guia: string | null;
-  numero_comprobante: string | null;
   cliente: string | null;
   tipo: string | null;
   cajas: number | null;
-  unidades: number | null;
 }
 
 interface ItemFila {
@@ -38,11 +35,6 @@ interface HojaDeRuta {
   fecha: string;
   local_codigo: string;
   local_nombre: string | null;
-  transporte: string | null;
-  patente: string | null;
-  chofer: string | null;
-  estado: string;
-  impresa_en: string | null;
 }
 
 export default function ImprimirHojaDeRutaPage() {
@@ -103,10 +95,6 @@ export default function ImprimirHojaDeRutaPage() {
         <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm mb-6 border-t border-b border-slate-400 py-3">
           <p><span className="font-semibold">Local destino:</span> {hoja.local_codigo} — {hoja.local_nombre || "—"}</p>
           <p><span className="font-semibold">Fecha:</span> {hoja.fecha}</p>
-          <p><span className="font-semibold">Transporte:</span> {hoja.transporte || "—"}</p>
-          <p><span className="font-semibold">Patente:</span> {hoja.patente || "—"}</p>
-          <p><span className="font-semibold">Chofer:</span> {hoja.chofer || "—"}</p>
-          <p><span className="font-semibold">Estado:</span> {hoja.estado}</p>
         </div>
 
         <table className="w-full text-sm border-collapse">
@@ -116,9 +104,7 @@ export default function ImprimirHojaDeRutaPage() {
               <th className="py-2 pr-2">Origen</th>
               <th className="py-2 pr-2">Destino / Cliente</th>
               <th className="py-2 pr-2">Referencia</th>
-              <th className="py-2 pr-2">N° Remito/Comprobante</th>
               <th className="py-2 pr-2 text-right">Bultos/Cajas</th>
-              <th className="py-2 pr-2 text-right">Unidades</th>
               <th className="py-2">Observaciones</th>
             </tr>
           </thead>
@@ -132,9 +118,7 @@ export default function ImprimirHojaDeRutaPage() {
                     <td className="py-2 pr-2">{d ? `${d.local_origen_codigo} — ${d.local_origen_nombre || "—"}` : "—"}</td>
                     <td className="py-2 pr-2">{d ? `${d.local_destino_codigo} — ${d.local_destino_nombre || "—"}` : "—"}</td>
                     <td className="py-2 pr-2">Mov. {d?.numero_movimiento || "—"}</td>
-                    <td className="py-2 pr-2">{d?.numero_remito || "—"}</td>
                     <td className="py-2 pr-2 text-right">{d?.cantidad_bultos ?? 1}</td>
-                    <td className="py-2 pr-2 text-right">—</td>
                     <td className="py-2">{d?.observaciones || "—"}</td>
                   </tr>
                 );
@@ -146,9 +130,7 @@ export default function ImprimirHojaDeRutaPage() {
                   <td className="py-2 pr-2">CD</td>
                   <td className="py-2 pr-2">{d?.cliente || "—"}</td>
                   <td className="py-2 pr-2">{d?.numero_guia || d?.guia || "—"}</td>
-                  <td className="py-2 pr-2">{d?.numero_comprobante || "—"}</td>
                   <td className="py-2 pr-2 text-right">{d?.cajas ?? "—"}</td>
-                  <td className="py-2 pr-2 text-right">{d?.unidades ?? "—"}</td>
                   <td className="py-2">—</td>
                 </tr>
               );
