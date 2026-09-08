@@ -1419,6 +1419,7 @@ export default function DashboardLayout() {
   const [interlocalGuardando, setInterlocalGuardando] = useState(false);
   const [interlocalGuardadoError, setInterlocalGuardadoError] = useState<string | null>(null);
   const [interlocalGuardadoOk, setInterlocalGuardadoOk] = useState(false);
+  const [interlocalEditandoId, setInterlocalEditandoId] = useState<number | null>(null);
   const [busquedaOrigen, setBusquedaOrigen] = useState<{ codigo: string; nombre: string }[]>([]);
   const [busquedaDestino, setBusquedaDestino] = useState<{ codigo: string; nombre: string }[]>([]);
   const interlocalBusquedaTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1449,15 +1450,17 @@ export default function DashboardLayout() {
     setInterlocalGuardando(true);
     setInterlocalGuardadoError(null);
     setInterlocalGuardadoOk(false);
+    const editando = interlocalEditandoId !== null;
     try {
-      const res = await fetch("/api/interlocales", {
-        method: "POST",
+      const res = await fetch(editando ? `/api/interlocales/${interlocalEditandoId}` : "/api/interlocales", {
+        method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(interlocalForm),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo registrar el interlocal.");
       setInterlocalForm(interlocalFormVacio);
+      setInterlocalEditandoId(null);
       setInterlocalGuardadoOk(true);
       mutateInterlocales();
     } catch (err) {
@@ -1465,6 +1468,29 @@ export default function DashboardLayout() {
     } finally {
       setInterlocalGuardando(false);
     }
+  };
+
+  const iniciarEdicionInterlocal = (f: InterlocalFila) => {
+    setInterlocalEditandoId(f.id);
+    setInterlocalForm({
+      localDestinoCodigo: f.local_destino_codigo,
+      fecha: f.fecha,
+      localOrigenCodigo: f.local_origen_codigo,
+      numeroMovimiento: f.numero_movimiento,
+      numeroRemito: f.numero_remito || "",
+      marca: f.marca || "",
+      cantidadBultos: String(f.cantidad_bultos),
+      observaciones: f.observaciones || "",
+    });
+    setInterlocalGuardadoError(null);
+    setInterlocalGuardadoOk(false);
+  };
+
+  const cancelarEdicionInterlocal = () => {
+    setInterlocalEditandoId(null);
+    setInterlocalForm(interlocalFormVacio);
+    setInterlocalGuardadoError(null);
+    setInterlocalGuardadoOk(false);
   };
 
   interface HojaDeRutaFila {
@@ -10487,32 +10513,25 @@ export default function DashboardLayout() {
           {activeTab === "EXP-Interlocales" && (
             <div className="space-y-6">
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-4xl">
-                <h2 className="text-lg font-bold text-slate-800 mb-1">Registrar Interlocal</h2>
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-lg font-bold text-slate-800">
+                    {interlocalEditandoId ? `Modificar Interlocal #${interlocalEditandoId}` : "Registrar Interlocal"}
+                  </h2>
+                  {interlocalEditandoId && (
+                    <button
+                      onClick={cancelarEdicionInterlocal}
+                      className="text-sm text-slate-500 hover:text-slate-700 hover:underline"
+                    >
+                      Cancelar edición
+                    </button>
+                  )}
+                </div>
                 <p className="text-sm text-slate-500 mb-4">
                   Transcribí los datos del rótulo físico &quot;GRUPO ALTATEX / INTERLOCAL&quot; pegado al bulto, en el
                   mismo orden en que aparecen en el papel.
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">Destino (código local) *</label>
-                    <input
-                      type="text"
-                      list="interlocal-destino-list"
-                      value={interlocalForm.localDestinoCodigo}
-                      onChange={(e) => {
-                        actualizarInterlocalForm("localDestinoCodigo", e.target.value);
-                        buscarClientesDebounced(e.target.value, setBusquedaDestino);
-                      }}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    <datalist id="interlocal-destino-list">
-                      {busquedaDestino.map((c) => (
-                        <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
-                      ))}
-                    </datalist>
-                  </div>
-
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Fecha *</label>
                     <input
@@ -10552,6 +10571,25 @@ export default function DashboardLayout() {
                     />
                     <datalist id="interlocal-origen-list">
                       {busquedaOrigen.map((c) => (
+                        <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
+                      ))}
+                    </datalist>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">Destino (código local) *</label>
+                    <input
+                      type="text"
+                      list="interlocal-destino-list"
+                      value={interlocalForm.localDestinoCodigo}
+                      onChange={(e) => {
+                        actualizarInterlocalForm("localDestinoCodigo", e.target.value);
+                        buscarClientesDebounced(e.target.value, setBusquedaDestino);
+                      }}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <datalist id="interlocal-destino-list">
+                      {busquedaDestino.map((c) => (
                         <option key={c.codigo} value={c.codigo}>{c.nombre}</option>
                       ))}
                     </datalist>
@@ -10608,7 +10646,7 @@ export default function DashboardLayout() {
                 )}
                 {interlocalGuardadoOk && (
                   <div className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
-                    Interlocal registrado correctamente.
+                    {interlocalEditandoId ? "Interlocal modificado correctamente." : "Interlocal registrado correctamente."}
                   </div>
                 )}
 
@@ -10628,7 +10666,13 @@ export default function DashboardLayout() {
                         : "bg-blue-600 text-white hover:bg-blue-700"
                     }`}
                   >
-                    {interlocalGuardando ? "Registrando..." : "Registrar Interlocal"}
+                    {interlocalGuardando
+                      ? interlocalEditandoId
+                        ? "Guardando..."
+                        : "Registrando..."
+                      : interlocalEditandoId
+                        ? "Guardar cambios"
+                        : "Registrar Interlocal"}
                   </button>
                 </div>
               </div>
@@ -10644,7 +10688,7 @@ export default function DashboardLayout() {
                 )}
                 {interlocalesLoading && !interlocalesData && (
                   <div className="rounded-lg border border-slate-200 overflow-hidden">
-                    <SkeletonTable rows={6} columns={9} />
+                    <SkeletonTable rows={6} columns={10} />
                   </div>
                 )}
 
@@ -10661,6 +10705,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">Observaciones</th>
                         <th className="py-3 px-4 text-left">Registrado por</th>
+                        <th className="py-3 px-4 text-left">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -10675,11 +10720,19 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
                           <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.registrado_por_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">
+                            <button
+                              onClick={() => iniciarEdicionInterlocal(f)}
+                              className="text-sm text-blue-600 hover:underline"
+                            >
+                              Modificar
+                            </button>
+                          </td>
                         </tr>
                       ))}
                       {(interlocalesData?.filas || []).length === 0 && !interlocalesLoading && (
                         <tr>
-                          <td colSpan={9} className="py-6 px-4 text-center text-slate-400">
+                          <td colSpan={10} className="py-6 px-4 text-center text-slate-400">
                             No hay interlocales pendientes.
                           </td>
                         </tr>
