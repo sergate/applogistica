@@ -10833,6 +10833,7 @@ export default function DashboardLayout() {
                             <tr>
                               <th className="py-2 px-3"></th>
                               <th className="py-2 px-3 text-left">Origen</th>
+                              <th className="py-2 px-3 text-left">Destino</th>
                               <th className="py-2 px-3 text-left">N° Movimiento</th>
                               <th className="py-2 px-3 text-left">N° Remito</th>
                               <th className="py-2 px-3 text-left">Marca</th>
@@ -10850,6 +10851,7 @@ export default function DashboardLayout() {
                                   />
                                 </td>
                                 <td className="py-2 px-3 text-left">{f.local_origen_codigo} — {f.local_origen_nombre || "—"}</td>
+                                <td className="py-2 px-3 text-left">{f.local_destino_codigo} — {f.local_destino_nombre || "—"}</td>
                                 <td className="py-2 px-3 text-left">{f.numero_movimiento}</td>
                                 <td className="py-2 px-3 text-left">{f.numero_remito || "—"}</td>
                                 <td className="py-2 px-3 text-left">{f.marca || "—"}</td>
