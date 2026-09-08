@@ -1380,6 +1380,7 @@ export default function DashboardLayout() {
     id: number;
     numero_movimiento: string;
     numero_remito: string | null;
+    numero_etiqueta: string | null;
     local_origen_codigo: string;
     local_origen_nombre: string | null;
     local_destino_codigo: string;
@@ -1411,6 +1412,7 @@ export default function DashboardLayout() {
     localOrigenCodigo: "",
     numeroMovimiento: "",
     numeroRemito: "",
+    numeroEtiqueta: "",
     marca: "",
     cantidadBultos: "1",
     observaciones: "",
@@ -1478,6 +1480,7 @@ export default function DashboardLayout() {
       localOrigenCodigo: f.local_origen_codigo,
       numeroMovimiento: f.numero_movimiento,
       numeroRemito: f.numero_remito || "",
+      numeroEtiqueta: f.numero_etiqueta || "",
       marca: f.marca || "",
       cantidadBultos: String(f.cantidad_bultos),
       observaciones: f.observaciones || "",
@@ -10616,6 +10619,17 @@ export default function DashboardLayout() {
                   </div>
 
                   <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">N° Etiqueta</label>
+                    <input
+                      type="text"
+                      placeholder="se usa como guía WMS"
+                      value={interlocalForm.numeroEtiqueta}
+                      onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Bultos</label>
                     <input
                       type="number"
@@ -10688,7 +10702,7 @@ export default function DashboardLayout() {
                 )}
                 {interlocalesLoading && !interlocalesData && (
                   <div className="rounded-lg border border-slate-200 overflow-hidden">
-                    <SkeletonTable rows={6} columns={10} />
+                    <SkeletonTable rows={6} columns={11} />
                   </div>
                 )}
 
@@ -10702,6 +10716,7 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">N° Movimiento</th>
                         <th className="py-3 px-4 text-left">N° Remito</th>
+                        <th className="py-3 px-4 text-left">N° Etiqueta</th>
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">Observaciones</th>
                         <th className="py-3 px-4 text-left">Registrado por</th>
@@ -10717,6 +10732,7 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
                           <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.numero_etiqueta || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
                           <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.registrado_por_nombre || "—"}</td>
@@ -10732,7 +10748,7 @@ export default function DashboardLayout() {
                       ))}
                       {(interlocalesData?.filas || []).length === 0 && !interlocalesLoading && (
                         <tr>
-                          <td colSpan={10} className="py-6 px-4 text-center text-slate-400">
+                          <td colSpan={11} className="py-6 px-4 text-center text-slate-400">
                             No hay interlocales pendientes.
                           </td>
                         </tr>

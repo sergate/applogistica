@@ -87,11 +87,14 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "La cantidad de bultos tiene que ser un entero mayor a 0." }, { status: 400 });
     }
 
+    const numeroEtiqueta = typeof body?.numeroEtiqueta === "string" ? body.numeroEtiqueta.trim() || null : null;
+
     const { data, error } = await supabaseAdmin
       .from("interlocales")
       .update({
         numero_movimiento: numeroMovimiento,
         numero_remito: typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null,
+        numero_etiqueta: numeroEtiqueta,
         local_origen_codigo: localOrigenCodigo,
         local_origen_nombre: nombrePorCodigo.get(localOrigenCodigo) || null,
         local_destino_codigo: localDestinoCodigo,
@@ -108,7 +111,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (error) {
       throw new Error(
         error.code === "23505"
-          ? `Ya existe un interlocal registrado con el N° de Movimiento "${numeroMovimiento}".`
+          ? error.message.includes("numero_etiqueta")
+            ? `Ya existe un interlocal registrado con el N° Etiqueta "${numeroEtiqueta}".`
+            : `Ya existe un interlocal registrado con el N° de Movimiento "${numeroMovimiento}".`
           : `Supabase (interlocales): ${error.message}`
       );
     }

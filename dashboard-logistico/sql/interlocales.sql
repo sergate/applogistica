@@ -22,6 +22,10 @@ create table if not exists interlocales (
   numero_movimiento text not null unique,
   numero_remito text,
 
+  -- Número cargado a mano que más adelante se usa en otros circuitos como
+  -- si fuera el número de guía del WMS.
+  numero_etiqueta text unique,
+
   -- LOCAL N° / NOMBRE del rótulo.
   local_origen_codigo text not null,
   local_origen_nombre text,
