@@ -51,8 +51,11 @@ export async function GET(request: NextRequest) {
       .order("fecha_creacion");
     if (errorDespachos) throw new Error(`Supabase (despacho_guias): ${errorDespachos.message}`);
 
+    // Las guías ya despachadas (estado_wms = "DP_COT_OK" -- Código de
+    // Operación de Traslado de ARBA aprobado, confirmado contra guías
+    // reales) no tienen que ofrecerse para armar una Hoja de Ruta nueva.
     const despachos = (despachosDelDia || []).filter(
-      (d) => parseCodigoClienteDespacho(d.cliente) === localDestino
+      (d) => parseCodigoClienteDespacho(d.cliente) === localDestino && d.estado_wms !== "DP_COT_OK"
     );
 
     return NextResponse.json({ success: true, interlocales: interlocales || [], despachos });
