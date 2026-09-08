@@ -49,7 +49,8 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw new Error(`Supabase (despacho_guias): ${error.message}`);
 
-    // Grupo de cada guía (por número de cliente, ver /api/admin/despacho-grupos).
+    // Grupos de cada guía (por número de cliente, ver /api/admin/despacho-grupos).
+    // Un cliente puede estar en varios grupos a la vez (ej. entrega martes Y jueves).
     const codigos = [...new Set((data || []).map((f) => parseCodigoClienteDespacho(f.cliente)).filter(Boolean))];
     const { data: miembros, error: errorMiembros } =
       codigos.length > 0
@@ -60,16 +61,19 @@ export async function GET(request: NextRequest) {
         : { data: [], error: null };
     if (errorMiembros) throw new Error(`Supabase (despacho_grupos_clientes_miembros): ${errorMiembros.message}`);
 
-    const grupoPorCodigo = new Map(
-      (miembros || []).map((m) => {
-        const grupo = Array.isArray(m.despacho_grupos_clientes) ? m.despacho_grupos_clientes[0] : m.despacho_grupos_clientes;
-        return [m.codigo_cliente, (grupo as { nombre: string } | null)?.nombre || null];
-      })
-    );
+    const gruposPorCodigo = new Map<string, string[]>();
+    for (const m of miembros || []) {
+      const grupo = Array.isArray(m.despacho_grupos_clientes) ? m.despacho_grupos_clientes[0] : m.despacho_grupos_clientes;
+      const nombre = (grupo as { nombre: string } | null)?.nombre;
+      if (!nombre) continue;
+      const lista = gruposPorCodigo.get(m.codigo_cliente) || [];
+      lista.push(nombre);
+      gruposPorCodigo.set(m.codigo_cliente, lista);
+    }
 
     let filas = (data || []).map((f) => ({
       ...f,
-      grupo: grupoPorCodigo.get(parseCodigoClienteDespacho(f.cliente) || "") || null,
+      grupos: gruposPorCodigo.get(parseCodigoClienteDespacho(f.cliente) || "") || [],
     }));
 
     // "Guías Impresas" (reimprimir) va por última impresión -- la más

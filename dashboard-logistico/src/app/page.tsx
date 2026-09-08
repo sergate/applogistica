@@ -1040,7 +1040,7 @@ export default function DashboardLayout() {
     remito_impreso: boolean;
     remito_impreso_en: string | null;
     remito_impreso_por_nombre: string | null;
-    grupo: string | null;
+    grupos: string[];
   }
 
   function filasDespachoFiltradas(
@@ -1052,7 +1052,7 @@ export default function DashboardLayout() {
     return filas.filter((f) => {
       if (filtroCliente && !(f.cliente || "").toLowerCase().includes(filtroCliente.toLowerCase())) return false;
       if (filtroTipo !== "TODOS" && (f.tipo || "SIN TIPO") !== filtroTipo) return false;
-      if (filtroGrupo !== "TODOS" && (f.grupo || "SIN GRUPO") !== filtroGrupo) return false;
+      if (filtroGrupo !== "TODOS" && !(f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"]).includes(filtroGrupo)) return false;
       return true;
     });
   }
@@ -1082,7 +1082,9 @@ export default function DashboardLayout() {
   const [filtroTipoImprimir, setFiltroTipoImprimir] = useState("TODOS");
   const [filtroGrupoImprimir, setFiltroGrupoImprimir] = useState("TODOS");
   const tiposDisponiblesImprimir = [...new Set((despachoImprimirData?.filas || []).map((f) => f.tipo || "SIN TIPO"))].sort();
-  const gruposDisponiblesImprimir = [...new Set((despachoImprimirData?.filas || []).map((f) => f.grupo || "SIN GRUPO"))].sort();
+  const gruposDisponiblesImprimir = [
+    ...new Set((despachoImprimirData?.filas || []).flatMap((f) => (f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"]))),
+  ].sort();
   const filasFiltradasImprimir = filasDespachoFiltradas(
     despachoImprimirData?.filas || [],
     filtroClienteImprimir,
@@ -1154,7 +1156,9 @@ export default function DashboardLayout() {
   const [filtroTipoReimprimir, setFiltroTipoReimprimir] = useState("TODOS");
   const [filtroGrupoReimprimir, setFiltroGrupoReimprimir] = useState("TODOS");
   const tiposDisponiblesReimprimir = [...new Set((despachoReimprimirData?.filas || []).map((f) => f.tipo || "SIN TIPO"))].sort();
-  const gruposDisponiblesReimprimir = [...new Set((despachoReimprimirData?.filas || []).map((f) => f.grupo || "SIN GRUPO"))].sort();
+  const gruposDisponiblesReimprimir = [
+    ...new Set((despachoReimprimirData?.filas || []).flatMap((f) => (f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"]))),
+  ].sort();
   const filasFiltradasReimprimir = filasDespachoFiltradas(
     despachoReimprimirData?.filas || [],
     filtroClienteReimprimir,
@@ -4005,7 +4009,7 @@ export default function DashboardLayout() {
     canal: string;
     tipo: string;
     curva: string;
-    grupo: string | null;
+    grupos: string[];
     unidades: number;
   }
 
@@ -4034,7 +4038,7 @@ export default function DashboardLayout() {
   const tiposDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.curva))).sort();
   const gruposDisponiblesPDP = Array.from(
-    new Set((pdPropiosData?.filas ?? []).map((f) => f.grupo || "SIN GRUPO"))
+    new Set((pdPropiosData?.filas ?? []).flatMap((f) => (f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"])))
   ).sort();
 
   const toggleFiltroCurvaPDP = (curva: string) => {
@@ -4058,13 +4062,13 @@ export default function DashboardLayout() {
         (filtroCanalPDP === "TODAS" || f.canal === filtroCanalPDP) &&
         (filtroTipoPDP === "TODAS" || f.tipo === filtroTipoPDP) &&
         (filtroCurvaPDP.length === 0 || filtroCurvaPDP.includes(f.curva)) &&
-        (filtroGrupoPDP === "TODOS" || (f.grupo || "SIN GRUPO") === filtroGrupoPDP) &&
+        (filtroGrupoPDP === "TODOS" || (f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"]).includes(filtroGrupoPDP)) &&
         (!filtroClientePDP.trim() || f.cliente.toLowerCase().includes(filtroClientePDP.trim().toLowerCase()))
     );
 
     const consolidadoClientesPDP = new Map<
       string,
-      { codigoCliente: string; cliente: string; canal: string; grupo: string | null; cajas: number; unidades: number }
+      { codigoCliente: string; cliente: string; canal: string; grupos: string[]; cajas: number; unidades: number }
     >();
     for (const f of filasFiltradasPDP) {
       if (!consolidadoClientesPDP.has(f.codigoCliente)) {
@@ -4072,7 +4076,7 @@ export default function DashboardLayout() {
           codigoCliente: f.codigoCliente,
           cliente: f.cliente,
           canal: f.canal,
-          grupo: f.grupo,
+          grupos: f.grupos,
           cajas: 0,
           unidades: 0,
         });
@@ -4109,7 +4113,7 @@ export default function DashboardLayout() {
     const filasResumen = filasTablaPDP.map((f) => ({
       Canal: f.canal,
       Cliente: f.cliente,
-      Grupo: f.grupo || "",
+      Grupo: f.grupos.join(", "),
       Cajas: f.cajas,
       Unidades: f.unidades,
     }));
@@ -4117,7 +4121,7 @@ export default function DashboardLayout() {
       Número: f.numero,
       Canal: f.canal,
       Cliente: f.cliente,
-      Grupo: f.grupo || "",
+      Grupo: f.grupos.join(", "),
       Tipo: f.tipo,
       Curva: f.curva,
       Unidades: f.unidades,
@@ -7652,7 +7656,7 @@ export default function DashboardLayout() {
                         >
                           <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{row.grupo || "-"}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.grupos.length > 0 ? row.grupos.join(", ") : "-"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.unidades)}</td>
                         </tr>
@@ -8130,7 +8134,7 @@ export default function DashboardLayout() {
                         <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(fila.fecha_creacion)}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>
-                        <td className="py-3 px-4 text-left text-slate-600">{fila.grupo || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.grupos.length > 0 ? fila.grupos.join(", ") : "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cajas ?? "—"}</td>
@@ -8307,7 +8311,7 @@ export default function DashboardLayout() {
                         </td>
                         <td className="py-3 px-4 text-left font-medium text-slate-700">{fila.numero_guia || fila.guia}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cliente || "—"}</td>
-                        <td className="py-3 px-4 text-left text-slate-600">{fila.grupo || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.grupos.length > 0 ? fila.grupos.join(", ") : "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
                         <td className="py-3 px-4 text-left">
@@ -8371,7 +8375,7 @@ export default function DashboardLayout() {
                 <h2 className="text-lg font-bold text-slate-800 mb-1">Grupos de clientes</h2>
                 <p className="text-sm text-slate-500 mb-4">
                   Los grupos aparecen como columna y filtro en Despacho → Para Imprimir / Guías Impresas. Un
-                  cliente pertenece a lo sumo a un grupo -- agregarlo a uno nuevo lo saca del anterior.
+                  cliente puede pertenecer a varios grupos a la vez (ej. entrega martes Y jueves).
                 </p>
                 {despachoGruposError && (
                   <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{despachoGruposError}</div>

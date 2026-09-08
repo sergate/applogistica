@@ -5,9 +5,9 @@ import { requireAdminPermission } from "@/lib/adminAuth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// Agrega un cliente (por código) al grupo. Como codigo_cliente es la primary
-// key de la tabla de miembros, un upsert acá "mueve" al cliente si ya
-// pertenecía a otro grupo -- un cliente nunca queda en más de uno.
+// Agrega un cliente (por código) al grupo. Un cliente puede pertenecer a
+// varios grupos a la vez (ej. entrega los martes Y los jueves) -- el upsert
+// es solo para que agregarlo dos veces al mismo grupo no tire error.
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   if (!supabaseEnvOk) {
     return NextResponse.json({ success: false, error: "Faltan configurar las variables de Supabase." }, { status: 500 });
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const { error } = await supabaseAdmin
       .from("despacho_grupos_clientes_miembros")
-      .upsert({ codigo_cliente: codigoCliente, grupo_id: Number(id) }, { onConflict: "codigo_cliente" });
+      .upsert({ codigo_cliente: codigoCliente, grupo_id: Number(id) }, { onConflict: "grupo_id,codigo_cliente" });
     if (error) throw new Error(`Supabase (despacho_grupos_clientes_miembros): ${error.message}`);
 
     return NextResponse.json({ success: true, miembro: { codigoCliente, nombre: cliente.nombre } });
