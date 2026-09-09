@@ -136,6 +136,20 @@ export default function ImprimirHojaDeRutaPage() {
               );
             })}
           </tbody>
+          <tfoot>
+            <tr className="border-t-2 border-slate-800 font-semibold">
+              <td className="py-2 pr-2" colSpan={4}>
+                Total
+              </td>
+              <td className="py-2 pr-2 text-right">
+                {items.reduce((acc, it) => {
+                  if (it.tipo === "interlocal") return acc + ((it.detalle as InterlocalDetalle | null)?.cantidad_bultos ?? 1);
+                  return acc + ((it.detalle as DespachoDetalle | null)?.cajas ?? 0);
+                }, 0)}
+              </td>
+              <td className="py-2"></td>
+            </tr>
+          </tfoot>
         </table>
 
         <div className="grid grid-cols-2 gap-8 mt-10 pt-6 text-sm">
