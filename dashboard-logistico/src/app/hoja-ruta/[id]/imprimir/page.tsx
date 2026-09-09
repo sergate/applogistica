@@ -76,6 +76,9 @@ export default function ImprimirHojaDeRutaPage() {
 
   return (
     <div className="max-w-4xl mx-auto p-8 print:p-0">
+      {/* Sin esto el navegador imprime su propio encabezado/pie con el
+          título de la pestaña y la URL de la página. */}
+      <style>{"@page { margin: 0; }"}</style>
       <div className="flex items-center justify-between mb-6 print:hidden">
         <h1 className="text-xl font-bold text-slate-800">Hoja de Ruta #{hoja.id}</h1>
         <button
@@ -102,9 +105,9 @@ export default function ImprimirHojaDeRutaPage() {
             <tr className="border-b-2 border-slate-800 text-left">
               <th className="py-2 pr-2">Tipo</th>
               <th className="py-2 pr-2">Origen</th>
-              <th className="py-2 pr-2">Destino / Cliente</th>
+              <th className="py-2 pr-2">Destino</th>
               <th className="py-2 pr-2">Referencia</th>
-              <th className="py-2 pr-2 text-right">Bultos/Cajas</th>
+              <th className="py-2 pr-2 text-right">Bultos</th>
               <th className="py-2">Observaciones</th>
             </tr>
           </thead>
