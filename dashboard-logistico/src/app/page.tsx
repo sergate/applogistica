@@ -1389,6 +1389,7 @@ export default function DashboardLayout() {
     marca: string | null;
     cantidad_bultos: number;
     observaciones: string | null;
+    tipo_envio: string;
     estado: string;
     registrado_por_nombre: string | null;
     registrado_en: string;
@@ -1407,6 +1408,7 @@ export default function DashboardLayout() {
   );
 
   const interlocalFormVacio = {
+    tipoEnvio: "",
     localDestinoCodigo: "",
     fecha: new Date().toISOString().slice(0, 10),
     localOrigenCodigo: "",
@@ -1422,6 +1424,8 @@ export default function DashboardLayout() {
   const [interlocalGuardadoError, setInterlocalGuardadoError] = useState<string | null>(null);
   const [interlocalGuardadoOk, setInterlocalGuardadoOk] = useState(false);
   const [interlocalEditandoId, setInterlocalEditandoId] = useState<number | null>(null);
+  const interlocalTipoEnvioElegido = interlocalForm.tipoEnvio !== "";
+  const interlocalRemitoEditable = interlocalForm.tipoEnvio === "productos";
   const [busquedaOrigen, setBusquedaOrigen] = useState<{ codigo: string; nombre: string }[]>([]);
   const [busquedaDestino, setBusquedaDestino] = useState<{ codigo: string; nombre: string }[]>([]);
   const interlocalBusquedaTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1446,6 +1450,24 @@ export default function DashboardLayout() {
   const actualizarInterlocalForm = (campo: keyof typeof interlocalFormVacio, valor: string) => {
     setInterlocalForm((prev) => ({ ...prev, [campo]: valor }));
     setInterlocalGuardadoOk(false);
+  };
+
+  // "Varios" no se carga a mano -- solo mostramos una vista previa de qué
+  // número le tocaría (no lo reserva, el real se asigna recién al guardar).
+  const cambiarTipoEnvioInterlocal = async (valor: string) => {
+    setInterlocalForm((prev) => ({ ...prev, tipoEnvio: valor, numeroRemito: valor === "productos" ? "" : prev.numeroRemito }));
+    setInterlocalGuardadoOk(false);
+    if (valor !== "varios") return;
+    try {
+      const res = await fetch("/api/interlocales/proximo-numero-varios");
+      const data = await res.json();
+      if (data.success) {
+        setInterlocalForm((prev) => (prev.tipoEnvio === "varios" ? { ...prev, numeroRemito: String(data.proximoNumero) } : prev));
+      }
+    } catch {
+      // Si falla la vista previa no bloqueamos la carga -- el número real
+      // se asigna igual al guardar.
+    }
   };
 
   const registrarInterlocal = async () => {
@@ -1475,6 +1497,7 @@ export default function DashboardLayout() {
   const iniciarEdicionInterlocal = (f: InterlocalFila) => {
     setInterlocalEditandoId(f.id);
     setInterlocalForm({
+      tipoEnvio: f.tipo_envio || "productos",
       localDestinoCodigo: f.local_destino_codigo,
       fecha: f.fecha,
       localOrigenCodigo: f.local_origen_codigo,
@@ -10535,22 +10558,37 @@ export default function DashboardLayout() {
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-500 mb-1">¿Qué se va a enviar? *</label>
+                    <select
+                      value={interlocalForm.tipoEnvio}
+                      onChange={(e) => cambiarTipoEnvioInterlocal(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Seleccioná una opción...</option>
+                      <option value="productos">Productos</option>
+                      <option value="varios">Varios</option>
+                    </select>
+                  </div>
+
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Fecha *</label>
                     <input
                       type="date"
+                      disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.fecha}
                       onChange={(e) => actualizarInterlocalForm("fecha", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Marca (CHK / CQ / AW)</label>
                     <select
+                      disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.marca}
                       onChange={(e) => actualizarInterlocalForm("marca", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <option value="">Sin marca</option>
                       <option value="CHEEKY">CHK - Cheeky</option>
@@ -10565,12 +10603,13 @@ export default function DashboardLayout() {
                     <input
                       type="text"
                       list="interlocal-origen-list"
+                      disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.localOrigenCodigo}
                       onChange={(e) => {
                         actualizarInterlocalForm("localOrigenCodigo", e.target.value);
                         buscarClientesDebounced(e.target.value, setBusquedaOrigen);
                       }}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <datalist id="interlocal-origen-list">
                       {busquedaOrigen.map((c) => (
@@ -10584,12 +10623,13 @@ export default function DashboardLayout() {
                     <input
                       type="text"
                       list="interlocal-destino-list"
+                      disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.localDestinoCodigo}
                       onChange={(e) => {
                         actualizarInterlocalForm("localDestinoCodigo", e.target.value);
                         buscarClientesDebounced(e.target.value, setBusquedaDestino);
                       }}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <datalist id="interlocal-destino-list">
                       {busquedaDestino.map((c) => (
@@ -10602,9 +10642,10 @@ export default function DashboardLayout() {
                     <label className="block text-xs font-medium text-slate-500 mb-1">N° de Movimiento *</label>
                     <input
                       type="text"
+                      disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.numeroMovimiento}
                       onChange={(e) => actualizarInterlocalForm("numeroMovimiento", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -10612,9 +10653,11 @@ export default function DashboardLayout() {
                     <label className="block text-xs font-medium text-slate-500 mb-1">N° de Remito</label>
                     <input
                       type="text"
+                      disabled={!interlocalTipoEnvioElegido || !interlocalRemitoEditable}
+                      placeholder={interlocalForm.tipoEnvio === "varios" ? "Se asigna automáticamente" : undefined}
                       value={interlocalForm.numeroRemito}
                       onChange={(e) => actualizarInterlocalForm("numeroRemito", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -10622,10 +10665,11 @@ export default function DashboardLayout() {
                     <label className="block text-xs font-medium text-slate-500 mb-1">N° Etiqueta</label>
                     <input
                       type="text"
+                      disabled={!interlocalTipoEnvioElegido}
                       placeholder="se usa como guía WMS"
                       value={interlocalForm.numeroEtiqueta}
                       onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -10635,9 +10679,10 @@ export default function DashboardLayout() {
                       type="number"
                       min={1}
                       step={1}
+                      disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.cantidadBultos}
                       onChange={(e) => actualizarInterlocalForm("cantidadBultos", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -10645,10 +10690,11 @@ export default function DashboardLayout() {
                     <label className="block text-xs font-medium text-slate-500 mb-1">Observaciones</label>
                     <input
                       type="text"
+                      disabled={!interlocalTipoEnvioElegido}
                       placeholder="ej. qué va dentro del bulto"
                       value={interlocalForm.observaciones}
                       onChange={(e) => actualizarInterlocalForm("observaciones", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
                 </div>
@@ -10669,6 +10715,7 @@ export default function DashboardLayout() {
                     onClick={registrarInterlocal}
                     disabled={
                       interlocalGuardando ||
+                      !interlocalForm.tipoEnvio ||
                       !interlocalForm.numeroMovimiento ||
                       !interlocalForm.localOrigenCodigo ||
                       !interlocalForm.localDestinoCodigo ||

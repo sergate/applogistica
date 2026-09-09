@@ -112,14 +112,28 @@ export async function POST(request: NextRequest) {
 
     const numeroEtiqueta = typeof body?.numeroEtiqueta === "string" ? body.numeroEtiqueta.trim() || null : null;
 
+    // "Varios" no se carga a mano -- el número lo asigna la función de
+    // Postgres de forma atómica (evita que dos altas simultáneas se lleven
+    // el mismo número).
+    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    let numeroRemito: string | null;
+    if (tipoEnvio === "varios") {
+      const { data: numeroGenerado, error: errorNumero } = await supabaseAdmin.rpc("siguiente_numero_varios_interlocal");
+      if (errorNumero) throw new Error(`Supabase (siguiente_numero_varios_interlocal): ${errorNumero.message}`);
+      numeroRemito = String(numeroGenerado);
+    } else {
+      numeroRemito = typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null;
+    }
+
     const { data: usuario } = await supabaseAdmin.from("usuarios").select("nombre").eq("id", auth.userId).single();
 
     const { data, error } = await supabaseAdmin
       .from("interlocales")
       .insert({
         numero_movimiento: numeroMovimiento,
-        numero_remito: typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null,
+        numero_remito: numeroRemito,
         numero_etiqueta: numeroEtiqueta,
+        tipo_envio: tipoEnvio,
         local_origen_codigo: localOrigenCodigo,
         local_origen_nombre: nombrePorCodigo.get(localOrigenCodigo) || null,
         local_destino_codigo: localDestinoCodigo,

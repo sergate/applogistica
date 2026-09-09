@@ -54,6 +54,10 @@ create table if not exists interlocales (
   cantidad_bultos integer not null default 1,
   observaciones text,
 
+  -- "productos": todo se carga a mano. "varios": el N° de Remito se asigna
+  -- solo (ver interlocales_contador_varios / siguiente_numero_varios_interlocal).
+  tipo_envio text not null default 'productos' check (tipo_envio in ('productos', 'varios')),
+
   estado text not null default 'pendiente'
     check (estado in ('pendiente', 'en_hoja_de_ruta', 'despachado', 'anulado')),
 
@@ -64,6 +68,25 @@ create table if not exists interlocales (
   registrado_en timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+create table if not exists interlocales_contador_varios (
+  id smallint primary key default 1,
+  ultimo_numero integer not null default 0,
+  constraint interlocales_contador_varios_una_fila check (id = 1)
+);
+insert into interlocales_contador_varios (id, ultimo_numero)
+  values (1, 0)
+  on conflict (id) do nothing;
+
+create or replace function siguiente_numero_varios_interlocal()
+returns integer
+language sql
+as $$
+  update interlocales_contador_varios
+    set ultimo_numero = ultimo_numero + 1
+    where id = 1
+    returning ultimo_numero;
+$$;
 
 -- Listado de pendientes por local destino + fecha, que es como la Hoja de
 -- Ruta va a buscar qué hay disponible para cada local.

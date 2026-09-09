@@ -27,7 +27,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "ID de interlocal inválido." }, { status: 400 });
     }
 
-    const { data: actual } = await supabaseAdmin.from("interlocales").select("estado").eq("id", interlocalId).maybeSingle();
+    const { data: actual } = await supabaseAdmin
+      .from("interlocales")
+      .select("estado, tipo_envio, numero_remito")
+      .eq("id", interlocalId)
+      .maybeSingle();
     if (!actual) return NextResponse.json({ success: false, error: "No existe ese interlocal." }, { status: 404 });
     if (actual.estado !== "pendiente") {
       return NextResponse.json(
@@ -89,12 +93,30 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const numeroEtiqueta = typeof body?.numeroEtiqueta === "string" ? body.numeroEtiqueta.trim() || null : null;
 
+    // Igual criterio que en el alta: "varios" nunca se edita a mano. Si
+    // recién ahora pasa a ser "varios" se le asigna un número nuevo; si ya
+    // era "varios" se mantiene el que tenía (no se regenera en cada edición).
+    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    let numeroRemito: string | null;
+    if (tipoEnvio === "varios") {
+      if (actual.tipo_envio === "varios") {
+        numeroRemito = actual.numero_remito;
+      } else {
+        const { data: numeroGenerado, error: errorNumero } = await supabaseAdmin.rpc("siguiente_numero_varios_interlocal");
+        if (errorNumero) throw new Error(`Supabase (siguiente_numero_varios_interlocal): ${errorNumero.message}`);
+        numeroRemito = String(numeroGenerado);
+      }
+    } else {
+      numeroRemito = typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null;
+    }
+
     const { data, error } = await supabaseAdmin
       .from("interlocales")
       .update({
         numero_movimiento: numeroMovimiento,
-        numero_remito: typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null,
+        numero_remito: numeroRemito,
         numero_etiqueta: numeroEtiqueta,
+        tipo_envio: tipoEnvio,
         local_origen_codigo: localOrigenCodigo,
         local_origen_nombre: nombrePorCodigo.get(localOrigenCodigo) || null,
         local_destino_codigo: localDestinoCodigo,
