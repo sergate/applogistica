@@ -1374,6 +1374,7 @@ export default function DashboardLayout() {
   const expedicionSubSections = [
     { key: "EXP-Interlocales", label: "Interlocales" },
     { key: "EXP-HojaRuta", label: "Hoja de Ruta" },
+    { key: "EXP-Historico", label: "Histórico Despachados" },
   ];
 
   interface InterlocalFila {
@@ -1518,6 +1519,44 @@ export default function DashboardLayout() {
     setInterlocalGuardadoError(null);
     setInterlocalGuardadoOk(false);
   };
+
+  const {
+    data: interlocalesHistoricoData,
+    error: interlocalesHistoricoError,
+    isLoading: interlocalesHistoricoLoading,
+  } = useTabData<{ filas: InterlocalFila[] }>(
+    activeTab,
+    "EXP-Historico",
+    "/api/interlocales?estado=despachado",
+    dataVersion
+  );
+  const [filtroTextoHistorico, setFiltroTextoHistorico] = useState("");
+  const [filtroMarcaHistorico, setFiltroMarcaHistorico] = useState("TODAS");
+  const [filtroTipoEnvioHistorico, setFiltroTipoEnvioHistorico] = useState("TODOS");
+  const [filtroFechaDesdeHistorico, setFiltroFechaDesdeHistorico] = useState("");
+  const [filtroFechaHastaHistorico, setFiltroFechaHastaHistorico] = useState("");
+
+  const filasFiltradasHistorico = (interlocalesHistoricoData?.filas || []).filter((f) => {
+    if (filtroMarcaHistorico !== "TODAS" && (f.marca || "SIN MARCA") !== filtroMarcaHistorico) return false;
+    if (filtroTipoEnvioHistorico !== "TODOS" && f.tipo_envio !== filtroTipoEnvioHistorico) return false;
+    if (filtroFechaDesdeHistorico && f.fecha < filtroFechaDesdeHistorico) return false;
+    if (filtroFechaHastaHistorico && f.fecha > filtroFechaHastaHistorico) return false;
+    const texto = filtroTextoHistorico.trim().toLowerCase();
+    if (texto) {
+      const campos = [
+        f.numero_movimiento,
+        f.numero_remito,
+        f.numero_etiqueta,
+        f.local_origen_codigo,
+        f.local_origen_nombre,
+        f.local_destino_codigo,
+        f.local_destino_nombre,
+        f.observaciones,
+      ];
+      if (!campos.some((c) => (c || "").toLowerCase().includes(texto))) return false;
+    }
+    return true;
+  });
 
   interface HojaDeRutaFila {
     id: number;
@@ -5393,6 +5432,7 @@ export default function DashboardLayout() {
              activeTab === "ALM-Configuracion" ? "Ocupación Almacén - Configuración" :
              activeTab === "EXP-Interlocales" ? "Expedición - Interlocales" :
              activeTab === "EXP-HojaRuta" ? "Expedición - Hoja de Ruta" :
+             activeTab === "EXP-Historico" ? "Expedición - Histórico Despachados" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -11103,6 +11143,136 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: EXPEDICIÓN - HISTÓRICO DESPACHADOS ================= */}
+          {activeTab === "EXP-Historico" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Histórico Despachados</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Interlocales cuya Hoja de Ruta ya se imprimió -- confirma que salieron del depósito.
+                </p>
+
+                <div className="flex flex-wrap items-center gap-3 mb-4">
+                  <input
+                    type="text"
+                    value={filtroTextoHistorico}
+                    onChange={(e) => setFiltroTextoHistorico(e.target.value)}
+                    placeholder="Buscar por N° movimiento, remito, etiqueta, origen, destino u observaciones..."
+                    className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-80"
+                  />
+                  <select
+                    value={filtroMarcaHistorico}
+                    onChange={(e) => setFiltroMarcaHistorico(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODAS">Todas las marcas</option>
+                    <option value="CHEEKY">CHK - Cheeky</option>
+                    <option value="COMO QUIERES">CQ - Como Quieres</option>
+                    <option value="AWADA">AW - Awada</option>
+                    <option value="ESTUDIO 5">ET5 - Estudio 5</option>
+                    <option value="SIN MARCA">Sin marca</option>
+                  </select>
+                  <select
+                    value={filtroTipoEnvioHistorico}
+                    onChange={(e) => setFiltroTipoEnvioHistorico(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODOS">Productos y Varios</option>
+                    <option value="productos">Solo Productos</option>
+                    <option value="varios">Solo Varios</option>
+                  </select>
+                  <div className="flex items-center gap-2 text-sm text-slate-500">
+                    <span>Desde</span>
+                    <input
+                      type="date"
+                      value={filtroFechaDesdeHistorico}
+                      onChange={(e) => setFiltroFechaDesdeHistorico(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <span>hasta</span>
+                    <input
+                      type="date"
+                      value={filtroFechaHastaHistorico}
+                      onChange={(e) => setFiltroFechaHastaHistorico(e.target.value)}
+                      className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  {(filtroTextoHistorico ||
+                    filtroMarcaHistorico !== "TODAS" ||
+                    filtroTipoEnvioHistorico !== "TODOS" ||
+                    filtroFechaDesdeHistorico ||
+                    filtroFechaHastaHistorico) && (
+                    <button
+                      onClick={() => {
+                        setFiltroTextoHistorico("");
+                        setFiltroMarcaHistorico("TODAS");
+                        setFiltroTipoEnvioHistorico("TODOS");
+                        setFiltroFechaDesdeHistorico("");
+                        setFiltroFechaHastaHistorico("");
+                      }}
+                      className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
+
+                {interlocalesHistoricoError && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    Error al cargar el histórico: {interlocalesHistoricoError}
+                  </div>
+                )}
+                {interlocalesHistoricoLoading && !interlocalesHistoricoData && (
+                  <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={10} />
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Fecha</th>
+                        <th className="py-3 px-4 text-left">Origen</th>
+                        <th className="py-3 px-4 text-left">Destino</th>
+                        <th className="py-3 px-4 text-left">Marca</th>
+                        <th className="py-3 px-4 text-left">Tipo de envío</th>
+                        <th className="py-3 px-4 text-left">N° Movimiento</th>
+                        <th className="py-3 px-4 text-left">N° Remito</th>
+                        <th className="py-3 px-4 text-left">N° Etiqueta</th>
+                        <th className="py-3 px-4 text-left">Bultos</th>
+                        <th className="py-3 px-4 text-left">Observaciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filasFiltradasHistorico.map((f) => (
+                        <tr key={f.id}>
+                          <td className="py-3 px-4 text-left">{f.fecha}</td>
+                          <td className="py-3 px-4 text-left">{f.local_origen_codigo} — {f.local_origen_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.local_destino_codigo} — {f.local_destino_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.tipo_envio === "varios" ? "Varios" : "Productos"}</td>
+                          <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
+                          <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.numero_etiqueta || "—"}</td>
+                          <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
+                          <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
+                        </tr>
+                      ))}
+                      {filasFiltradasHistorico.length === 0 && !interlocalesHistoricoLoading && (
+                        <tr>
+                          <td colSpan={10} className="py-6 px-4 text-center text-slate-400">
+                            No hay interlocales despachados que coincidan con los filtros.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ================= PESTAÑA: ADMIN - PERFILES ================= */}
           {activeTab === "ADMIN-Perfiles" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -11496,7 +11666,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

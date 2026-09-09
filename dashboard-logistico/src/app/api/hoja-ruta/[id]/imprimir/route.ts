@@ -46,6 +46,16 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       .single();
     if (error) throw new Error(`Supabase (hojas_de_ruta): ${error.message}`);
 
+    // Confirmar la impresión es lo que marca que la mercadería realmente
+    // salió del depósito -- recién ahí los interlocales de esta hoja pasan a
+    // "despachado" (quedan disponibles en el Histórico Despachados).
+    const { error: errorInterlocales } = await supabaseAdmin
+      .from("interlocales")
+      .update({ estado: "despachado" })
+      .eq("hoja_de_ruta_id", hojaId)
+      .eq("estado", "en_hoja_de_ruta");
+    if (errorInterlocales) throw new Error(`Supabase (interlocales): ${errorInterlocales.message}`);
+
     return NextResponse.json({ success: true, hoja: data });
   } catch (err) {
     return NextResponse.json(
