@@ -42,12 +42,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const body = await request.json();
 
-    const numeroMovimiento = typeof body?.numeroMovimiento === "string" ? body.numeroMovimiento.trim() : "";
+    // "Varios" no pide N° de Movimiento -- usa el mismo número que el N° de
+    // Remito.
+    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    let numeroMovimiento = typeof body?.numeroMovimiento === "string" ? body.numeroMovimiento.trim() : "";
     const localOrigenCodigo = typeof body?.localOrigenCodigo === "string" ? body.localOrigenCodigo.trim() : "";
     const localDestinoCodigo = typeof body?.localDestinoCodigo === "string" ? body.localDestinoCodigo.trim() : "";
     const fecha = typeof body?.fecha === "string" ? body.fecha.trim() : "";
 
-    if (!numeroMovimiento) {
+    if (!numeroMovimiento && tipoEnvio !== "varios") {
       return NextResponse.json({ success: false, error: "Falta el N° de Movimiento." }, { status: 400 });
     }
     if (!localOrigenCodigo) {
@@ -94,9 +97,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const numeroEtiqueta = typeof body?.numeroEtiqueta === "string" ? body.numeroEtiqueta.trim() || null : null;
 
     // Igual criterio que en el alta: "varios" nunca se edita a mano. Si
-    // recién ahora pasa a ser "varios" se le asigna un número nuevo; si ya
-    // era "varios" se mantiene el que tenía (no se regenera en cada edición).
-    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    // recién ahora pasa a ser "varios" se le asigna un número nuevo (y se
+    // usa también para N° de Movimiento); si ya era "varios" se mantiene el
+    // que tenía (no se regenera en cada edición).
     let numeroRemito: string | null;
     if (tipoEnvio === "varios") {
       if (actual.tipo_envio === "varios") {
@@ -106,6 +109,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         if (errorNumero) throw new Error(`Supabase (siguiente_numero_varios_interlocal): ${errorNumero.message}`);
         numeroRemito = String(numeroGenerado);
       }
+      numeroMovimiento = numeroRemito;
     } else {
       numeroRemito = typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null;
     }

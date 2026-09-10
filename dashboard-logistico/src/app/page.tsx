@@ -1457,14 +1457,23 @@ export default function DashboardLayout() {
   // "Varios" no se carga a mano -- solo mostramos una vista previa de qué
   // número le tocaría (no lo reserva, el real se asigna recién al guardar).
   const cambiarTipoEnvioInterlocal = async (valor: string) => {
-    setInterlocalForm((prev) => ({ ...prev, tipoEnvio: valor, numeroRemito: valor === "productos" ? "" : prev.numeroRemito }));
+    setInterlocalForm((prev) => ({
+      ...prev,
+      tipoEnvio: valor,
+      numeroRemito: valor === "productos" ? "" : prev.numeroRemito,
+      numeroMovimiento: valor === "productos" ? "" : prev.numeroMovimiento,
+    }));
     setInterlocalGuardadoOk(false);
     if (valor !== "varios") return;
     try {
       const res = await fetch("/api/interlocales/proximo-numero-varios");
       const data = await res.json();
       if (data.success) {
-        setInterlocalForm((prev) => (prev.tipoEnvio === "varios" ? { ...prev, numeroRemito: String(data.proximoNumero) } : prev));
+        setInterlocalForm((prev) =>
+          prev.tipoEnvio === "varios"
+            ? { ...prev, numeroRemito: String(data.proximoNumero), numeroMovimiento: String(data.proximoNumero) }
+            : prev
+        );
       }
     } catch {
       // Si falla la vista previa no bloqueamos la carga -- el número real
@@ -10733,10 +10742,13 @@ export default function DashboardLayout() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">N° de Movimiento *</label>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      N° de Movimiento{interlocalForm.tipoEnvio !== "varios" ? " *" : ""}
+                    </label>
                     <input
                       type="text"
-                      disabled={!interlocalTipoEnvioElegido}
+                      disabled={!interlocalTipoEnvioElegido || !interlocalRemitoEditable}
+                      placeholder={interlocalForm.tipoEnvio === "varios" ? "Se asigna automáticamente" : undefined}
                       value={interlocalForm.numeroMovimiento}
                       onChange={(e) => actualizarInterlocalForm("numeroMovimiento", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"

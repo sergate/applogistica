@@ -58,12 +58,15 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    const numeroMovimiento = typeof body?.numeroMovimiento === "string" ? body.numeroMovimiento.trim() : "";
+    // "Varios" no pide N° de Movimiento -- usa el mismo número que el N° de
+    // Remito (ambos se asignan más abajo, de forma atómica).
+    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    let numeroMovimiento = typeof body?.numeroMovimiento === "string" ? body.numeroMovimiento.trim() : "";
     const localOrigenCodigo = typeof body?.localOrigenCodigo === "string" ? body.localOrigenCodigo.trim() : "";
     const localDestinoCodigo = typeof body?.localDestinoCodigo === "string" ? body.localDestinoCodigo.trim() : "";
     const fecha = typeof body?.fecha === "string" ? body.fecha.trim() : "";
 
-    if (!numeroMovimiento) {
+    if (!numeroMovimiento && tipoEnvio !== "varios") {
       return NextResponse.json({ success: false, error: "Falta el N° de Movimiento." }, { status: 400 });
     }
     if (!localOrigenCodigo) {
@@ -114,13 +117,13 @@ export async function POST(request: NextRequest) {
 
     // "Varios" no se carga a mano -- el número lo asigna la función de
     // Postgres de forma atómica (evita que dos altas simultáneas se lleven
-    // el mismo número).
-    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    // el mismo número), y se usa igual para N° de Remito y N° de Movimiento.
     let numeroRemito: string | null;
     if (tipoEnvio === "varios") {
       const { data: numeroGenerado, error: errorNumero } = await supabaseAdmin.rpc("siguiente_numero_varios_interlocal");
       if (errorNumero) throw new Error(`Supabase (siguiente_numero_varios_interlocal): ${errorNumero.message}`);
       numeroRemito = String(numeroGenerado);
+      numeroMovimiento = numeroRemito;
     } else {
       numeroRemito = typeof body?.numeroRemito === "string" ? body.numeroRemito.trim() || null : null;
     }
