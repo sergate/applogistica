@@ -68,14 +68,20 @@ async function clickBotonExt(page, texto, { exact = true } = {}) {
 }
 
 async function esperarGridCargado(page) {
-  // Espera a que desaparezca la máscara de carga de ExtJS, si aparece.
+  // Espera a que desaparezca la máscara de carga de ExtJS, si aparece. Con
+  // volúmenes de datos grandes (ej. Pre Despacho / Propios) el "Buscar"
+  // puede tardar más de lo que tardaba antes -- si esta espera se corta
+  // antes de tiempo, el botón "Excel" se clickea con la grilla todavía
+  // vacía y descarga un archivo con solo el encabezado, sin filas.
   await page.waitForTimeout(300);
-  await page
-    .locator(".x-mask")
-    .first()
-    .waitFor({ state: "hidden", timeout: 15000 })
-    .catch(() => {});
-  await page.waitForTimeout(500);
+  // Si la máscara nunca aparece (búsqueda rápida) esto resuelve enseguida
+  // -- "hidden" matchea también un elemento que no está en el DOM. Si
+  // aparece y tarda más de 60s en desaparecer, dejamos que tire el timeout
+  // en vez de seguir de largo y descargar una grilla que todavía puede
+  // estar vacía (eso fue lo que pasó con un Propios que salió con solo el
+  // encabezado, sin filas).
+  await page.locator(".x-mask").first().waitFor({ state: "hidden", timeout: 60000 });
+  await page.waitForTimeout(800);
 }
 
 async function descargarConBoton(page, textoBoton, nombreArchivo) {
