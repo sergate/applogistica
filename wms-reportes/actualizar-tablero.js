@@ -262,7 +262,10 @@ async function subirPDPropios(page, reportes) {
 
   await page.locator("input[type=file]").nth(1).setInputFiles(archivo);
   await page.getByRole("button", { name: "Procesar", exact: true }).nth(1).click();
-  const r = await esperarResultadoImport(page);
+  // El import sube en lotes secuenciales (uno por fetch) -- con el volumen
+  // actual de Propios puede pasar de los 180s default, igual que ya le pasaba
+  // a Ocupación Almacén.
+  const r = await esperarResultadoImport(page, 600000);
   console.log(`  -> ${r.exito ? "OK" : "ERROR"}: ${r.textoCompleto.slice(-200)}`);
   if (!r.exito) throw new Error(`Fallo importando Pendiente de Despacho - Propios. Detalle: ${r.textoCompleto.slice(-500)}`);
 }
