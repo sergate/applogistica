@@ -1375,6 +1375,7 @@ export default function DashboardLayout() {
     { key: "EXP-Interlocales", label: "Interlocales" },
     { key: "EXP-HojaRuta", label: "Hoja de Ruta" },
     { key: "EXP-Historico", label: "Histórico Despachados" },
+    { key: "EXP-Etiquetas", label: "Etiquetas" },
   ];
 
   interface InterlocalFila {
@@ -1557,6 +1558,51 @@ export default function DashboardLayout() {
     }
     return true;
   });
+
+  interface EtiquetaInterlocalFila {
+    id: number;
+    numero: number;
+    texto: string;
+    impreso_por_nombre: string | null;
+    impreso_en: string;
+  }
+
+  const {
+    data: etiquetasData,
+    error: etiquetasError,
+    isLoading: etiquetasLoading,
+    mutate: mutateEtiquetas,
+  } = useTabData<{ filas: EtiquetaInterlocalFila[] }>(activeTab, "EXP-Etiquetas", "/api/interlocales/etiquetas", dataVersion);
+
+  const [cantidadEtiquetas, setCantidadEtiquetas] = useState("");
+  const [imprimiendoEtiquetas, setImprimiendoEtiquetas] = useState(false);
+  const [errorImprimirEtiquetas, setErrorImprimirEtiquetas] = useState<string | null>(null);
+  const [ultimoLoteEtiquetas, setUltimoLoteEtiquetas] = useState<string[] | null>(null);
+
+  const imprimirEtiquetasInterlocal = async () => {
+    const cantidad = Number(cantidadEtiquetas);
+    if (!Number.isInteger(cantidad) || cantidad < 1) return;
+
+    setImprimiendoEtiquetas(true);
+    setErrorImprimirEtiquetas(null);
+    setUltimoLoteEtiquetas(null);
+    try {
+      const res = await fetch("/api/interlocales/etiquetas/imprimir", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cantidad }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron imprimir las etiquetas.");
+      setUltimoLoteEtiquetas(data.textos);
+      setCantidadEtiquetas("");
+      mutateEtiquetas();
+    } catch (err) {
+      setErrorImprimirEtiquetas(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setImprimiendoEtiquetas(false);
+    }
+  };
 
   interface HojaDeRutaFila {
     id: number;
@@ -5440,6 +5486,7 @@ export default function DashboardLayout() {
              activeTab === "EXP-Interlocales" ? "Expedición - Interlocales" :
              activeTab === "EXP-HojaRuta" ? "Expedición - Hoja de Ruta" :
              activeTab === "EXP-Historico" ? "Expedición - Histórico Despachados" :
+             activeTab === "EXP-Etiquetas" ? "Expedición - Etiquetas" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -11280,6 +11327,103 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: EXPEDICIÓN - ETIQUETAS ================= */}
+          {activeTab === "EXP-Etiquetas" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Imprimir Etiquetas</h2>
+                <p className="text-sm text-slate-500 mb-4">
+                  Imprime etiquetas en blanco con un código de barras correlativo (
+                  <span className="font-mono">interlocal-00001</span>, etc.) en la Zebra de red. Se pegan en el bulto
+                  y ese número queda de referencia para completar &quot;N° Etiqueta&quot; al cargar el Interlocal.
+                </p>
+
+                <div className="flex items-end gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">¿Cuántas etiquetas imprimir?</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={200}
+                      step={1}
+                      value={cantidadEtiquetas}
+                      onChange={(e) => setCantidadEtiquetas(e.target.value)}
+                      className="w-40 px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                  <button
+                    onClick={imprimirEtiquetasInterlocal}
+                    disabled={imprimiendoEtiquetas || !Number.isInteger(Number(cantidadEtiquetas)) || Number(cantidadEtiquetas) < 1}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                      imprimiendoEtiquetas
+                        ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                        : "bg-blue-600 text-white hover:bg-blue-700"
+                    }`}
+                  >
+                    {imprimiendoEtiquetas ? "Imprimiendo..." : "Imprimir"}
+                  </button>
+                </div>
+
+                {errorImprimirEtiquetas && (
+                  <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    {errorImprimirEtiquetas}
+                  </div>
+                )}
+                {ultimoLoteEtiquetas && ultimoLoteEtiquetas.length > 0 && (
+                  <div className="mt-4 p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-sm text-emerald-700">
+                    Se mandó a imprimir de <span className="font-mono">{ultimoLoteEtiquetas[0]}</span> a{" "}
+                    <span className="font-mono">{ultimoLoteEtiquetas[ultimoLoteEtiquetas.length - 1]}</span> (
+                    {ultimoLoteEtiquetas.length} etiqueta{ultimoLoteEtiquetas.length === 1 ? "" : "s"}).
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Etiquetas impresas</h2>
+                <p className="text-sm text-slate-500 mb-4">Últimas 300, más recientes primero.</p>
+
+                {etiquetasError && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    Error al cargar el historial: {etiquetasError}
+                  </div>
+                )}
+                {etiquetasLoading && !etiquetasData && (
+                  <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={3} />
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Etiqueta</th>
+                        <th className="py-3 px-4 text-left">Impreso por</th>
+                        <th className="py-3 px-4 text-left">Fecha y hora</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(etiquetasData?.filas || []).map((f) => (
+                        <tr key={f.id}>
+                          <td className="py-3 px-4 text-left font-mono">{f.texto}</td>
+                          <td className="py-3 px-4 text-left">{f.impreso_por_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{fmtFecha(f.impreso_en)}</td>
+                        </tr>
+                      ))}
+                      {(etiquetasData?.filas || []).length === 0 && !etiquetasLoading && (
+                        <tr>
+                          <td colSpan={3} className="py-6 px-4 text-center text-slate-400">
+                            Todavía no se imprimió ninguna etiqueta.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* ================= PESTAÑA: ADMIN - PERFILES ================= */}
           {activeTab === "ADMIN-Perfiles" && (
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -11673,7 +11817,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

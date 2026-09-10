@@ -34,6 +34,7 @@ const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
 const reporteDespachos = require("./reporte-despachos.js");
 const { imprimirGuia } = require("./imprimir-despacho.js");
+const { imprimirEtiquetas } = require("./imprimir-etiquetas.js");
 const { conLock } = require("./lock.js");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
@@ -333,6 +334,18 @@ async function correrPedidoDespachoImprimir(config, pedido, paginas, tipo) {
   return []; // no hay archivos locales que borrar en este tipo de pedido
 }
 
+// Manda el lote de etiquetas directo a la Zebra por red -- no toca el
+// navegador para nada, así que atenderPedido() la corre por afuera de
+// conLock/abrirContextos (ver más abajo).
+async function correrPedidoEtiquetas(config, pedido) {
+  const textos = pedido.payload?.textos;
+  if (!Array.isArray(textos) || textos.length === 0) {
+    throw new Error("El pedido no tiene etiquetas para imprimir (payload vacío).");
+  }
+  await avisarProgreso(config.token, pedido.id, 30, `Mandando ${textos.length} etiqueta(s) a la impresora...`);
+  await imprimirEtiquetas(textos);
+}
+
 async function buscarProximoPedido(token) {
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/proximo`, {
     headers: headersAgente(token),
@@ -349,6 +362,22 @@ async function buscarProximoPedido(token) {
 // borra los archivos si salió bien, y cierra todo.
 async function atenderPedido(config, pedido) {
   console.log(`[${new Date().toLocaleTimeString()}] Pedido #${pedido.id} (${pedido.seccion}) -- corriendo...`);
+
+  // Las etiquetas van directo por red a la Zebra -- no usan el navegador
+  // para nada, así que no hace falta pasar por conLock/abrirContextos (eso
+  // es solo para serializar el uso compartido del Chrome de Playwright).
+  if (pedido.seccion === "exp_etiquetas") {
+    try {
+      await correrPedidoEtiquetas(config, pedido);
+      await avisarResultado(config.token, pedido.id, true, "OK");
+      console.log(`  -> #${pedido.id} listo.`);
+    } catch (err) {
+      const mensaje = err instanceof Error ? err.message : "Error inesperado";
+      await avisarResultado(config.token, pedido.id, false, mensaje);
+      console.error(`  -> #${pedido.id} falló: ${mensaje}`);
+    }
+    return;
+  }
 
   // Si el navegador ya está ocupado (el .bat manual corriendo, u otro
   // pedido) esperamos hasta 1 minuto -- lo normal es que la otra corrida

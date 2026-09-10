@@ -2,5 +2,12 @@
   "token": "PEGÁ ACÁ TU TOKEN (Tablero -> Importar Datos -> Agente Local -> Generar mi token)",
   "impresora": "OPCIONAL: nombre exacto de la impresora para despacho (si no está, usa la predeterminada de esta PC)",
   "wmsUsuario": "OPCIONAL: solo si usás el Chromium propio de Playwright (sin contraseñas guardadas) y querés relogin automático",
-  "wmsClave": "OPCIONAL: idem, la contraseña del WMS -- se guarda en texto plano en este archivo, que NO se sube al repo"
+  "wmsClave": "OPCIONAL: idem, la contraseña del WMS -- se guarda en texto plano en este archivo, que NO se sube al repo",
+  "zebra": {
+    "ip": "OPCIONAL (necesario para Expedición -> Etiquetas): IP de la Zebra ZD421 en la red del depósito, ej. 192.168.1.50",
+    "puerto": 9100,
+    "dpi": 203,
+    "anchoCm": 15,
+    "altoCm": 4.5
+  }
 }

@@ -14,6 +14,7 @@ export const SECCIONES_VALIDAS = [
   "despacho_importar",
   "despacho_imprimir",
   "despacho_reimprimir",
+  "exp_etiquetas",
 ] as const;
 export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 
@@ -24,6 +25,7 @@ export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 export const SECCIONES_CON_PAYLOAD_VARIABLE: readonly SeccionActualizacion[] = [
   "despacho_imprimir",
   "despacho_reimprimir",
+  "exp_etiquetas",
 ];
 
 export function esSeccionValida(v: unknown): v is SeccionActualizacion {
@@ -68,6 +70,7 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
   despacho_importar: "DESP-Imprimir",
   despacho_imprimir: "DESP-Imprimir",
   despacho_reimprimir: "DESP-Reimprimir",
+  exp_etiquetas: "EXP-Etiquetas",
 };
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */
