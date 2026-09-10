@@ -5,7 +5,14 @@
 // Playwright/navegador para nada.
 //
 // Configuración (agente-config.json, bloque "zebra"):
-//   { "zebra": { "ip": "192.168.x.x", "puerto": 9100, "dpi": 203, "anchoCm": 15, "altoCm": 4.5 } }
+//   { "zebra": { "ip": "10.249.0.225", "puerto": 9100, "dpi": 203, "anchoCm": 4.5, "largoCm": 15 } }
+//
+// "anchoCm" es el ancho real de la etiqueta, a lo ANCHO del cabezal (^PW) --
+// tiene un máximo físico fijo según el cabezal de la impresora (4 pulgadas
+// = 832 dots a 203dpi ≈ 10,4cm en esta ZD421; confirmado en la hoja de
+// configuración impresa). "largoCm" es el largo de AVANCE de cada etiqueta
+// (^LL), que sí puede ser bastante más largo (hasta 15in/380mm en esta
+// impresora).
 //
 // Prueba manual (con la impresora ya configurada en agente-config.json):
 //   node imprimir-etiquetas.js interlocal-00001 interlocal-00002
@@ -15,6 +22,10 @@ const fs = require("fs");
 const path = require("path");
 
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
+
+// Ancho máximo del cabezal de la ZD421 (4 pulgadas) a 203dpi -- ver
+// "PRINT WIDTH" en la hoja de configuración de la impresora.
+const ANCHO_MAXIMO_DOTS_203DPI = 832;
 
 function leerConfigZebra() {
   if (!fs.existsSync(CONFIG_PATH)) return {};
@@ -29,22 +40,32 @@ function cmADots(cm, dpi) {
 }
 
 // Arma el ZPL de UNA etiqueta: código de barras Code128 con "texto" (el
-// tercer parámetro de ^BCN en "Y" hace que Zebra imprima el texto legible
-// debajo de las barras solo, sin necesidad de un ^FD de texto aparte).
-function construirZplEtiqueta(texto, { dpi, anchoCm, altoCm }) {
+// tercer parámetro de ^BC en "Y" hace que Zebra imprima el texto legible
+// junto a las barras solo, sin necesidad de un ^FD de texto aparte).
+//
+// Con un ancho angosto (ej. 4,5cm) y un largo bastante mayor (ej. 15cm), un
+// código de barras horizontal de un texto largo ("interlocal-00001", 17
+// caracteres) no entraría legible -- se imprime ROTADO 90° (^BCR) para que
+// corra a lo largo de la etiqueta, como una etiqueta tipo cinta/colgante.
+function construirZplEtiqueta(texto, { dpi, anchoCm, largoCm }) {
   const anchoDots = cmADots(anchoCm, dpi);
-  const altoDots = cmADots(altoCm, dpi);
-  const margenX = Math.round(anchoDots * 0.08);
-  const margenY = Math.round(altoDots * 0.15);
-  const altoBarra = Math.round(altoDots * 0.55);
+  const largoDots = cmADots(largoCm, dpi);
+  if (dpi === 203 && anchoDots > ANCHO_MAXIMO_DOTS_203DPI) {
+    throw new Error(
+      `El ancho configurado (${anchoCm}cm = ${anchoDots} dots) supera el máximo del cabezal de la ZD421 ` +
+        `(${ANCHO_MAXIMO_DOTS_203DPI} dots ≈ 10,4cm). Revisá "zebra.anchoCm" en agente-config.json.`
+    );
+  }
+  const margen = Math.round(anchoDots * 0.12);
+  const altoBarra = Math.round(anchoDots * 0.55);
 
   return [
     "^XA",
     `^PW${anchoDots}`,
-    `^LL${altoDots}`,
-    `^FO${margenX},${margenY}`,
-    `^BY3,3,${altoBarra}`,
-    `^BCN,${altoBarra},Y,N,N`,
+    `^LL${largoDots}`,
+    `^FO${margen},${margen}`,
+    `^BY2,3,${altoBarra}`,
+    `^BCR,${altoBarra},Y,N,N`,
     `^FD${texto}^FS`,
     "^XZ",
   ].join("\n");
@@ -101,8 +122,8 @@ async function imprimirEtiquetas(textos) {
   const config = leerConfigZebra();
   const opciones = {
     dpi: config.dpi || 203,
-    anchoCm: config.anchoCm || 15,
-    altoCm: config.altoCm || 4.5,
+    anchoCm: config.anchoCm || 4.5,
+    largoCm: config.largoCm || 15,
   };
   const zpl = construirZplLote(textos, opciones);
   await enviarZplAImpresora(zpl, { ip: config.ip, puerto: config.puerto || 9100 });

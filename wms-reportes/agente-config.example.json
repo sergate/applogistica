@@ -4,10 +4,10 @@
   "wmsUsuario": "OPCIONAL: solo si usás el Chromium propio de Playwright (sin contraseñas guardadas) y querés relogin automático",
   "wmsClave": "OPCIONAL: idem, la contraseña del WMS -- se guarda en texto plano en este archivo, que NO se sube al repo",
   "zebra": {
-    "ip": "OPCIONAL (necesario para Expedición -> Etiquetas): IP de la Zebra ZD421 en la red del depósito, ej. 192.168.1.50",
+    "ip": "10.249.0.225",
     "puerto": 9100,
     "dpi": 203,
-    "anchoCm": 15,
-    "altoCm": 4.5
+    "anchoCm": 4.5,
+    "largoCm": 15
   }
 }
