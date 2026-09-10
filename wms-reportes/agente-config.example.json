@@ -7,7 +7,7 @@
     "ip": "10.249.0.225",
     "puerto": 9100,
     "dpi": 203,
-    "anchoCm": 4.5,
+    "anchoCm": 10,
     "largoCm": 15
   }
 }

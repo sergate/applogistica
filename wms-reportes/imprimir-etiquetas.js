@@ -5,17 +5,20 @@
 // Playwright/navegador para nada.
 //
 // Configuración (agente-config.json, bloque "zebra"):
-//   { "zebra": { "ip": "10.249.0.225", "puerto": 9100, "dpi": 203, "anchoCm": 4.5, "largoCm": 15 } }
+//   { "zebra": { "ip": "10.249.0.225", "puerto": 9100, "dpi": 203, "anchoCm": 10, "largoCm": 15 } }
 //
 // "anchoCm" es el ancho real de la etiqueta, a lo ANCHO del cabezal (^PW) --
 // tiene un máximo físico fijo según el cabezal de la impresora (4 pulgadas
 // = 832 dots a 203dpi ≈ 10,4cm en esta ZD421; confirmado en la hoja de
 // configuración impresa). "largoCm" es el largo de AVANCE de cada etiqueta
-// (^LL), que sí puede ser bastante más largo (hasta 15in/380mm en esta
-// impresora).
+// física (^LL), que sí puede ser bastante más largo (hasta 15in/380mm).
+//
+// Cada etiqueta física (15cm de largo x 10cm de ancho) lleva DOS códigos
+// -- uno en cada mitad de 7,5cm -- para aprovechar mejor el material: cada
+// pedido de "imprimir N etiquetas" arma ceil(N/2) etiquetas físicas.
 //
 // Prueba manual (con la impresora ya configurada en agente-config.json):
-//   node imprimir-etiquetas.js interlocal-00001 interlocal-00002
+//   node imprimir-etiquetas.js interlocal-00001 interlocal-00002 interlocal-00003
 
 const net = require("net");
 const fs = require("fs");
@@ -39,15 +42,12 @@ function cmADots(cm, dpi) {
   return Math.round((cm / 2.54) * dpi);
 }
 
-// Arma el ZPL de UNA etiqueta: código de barras Code128 con "texto" (el
-// tercer parámetro de ^BC en "Y" hace que Zebra imprima el texto legible
-// junto a las barras solo, sin necesidad de un ^FD de texto aparte).
-//
-// Con un ancho angosto (ej. 4,5cm) y un largo bastante mayor (ej. 15cm), un
-// código de barras horizontal de un texto largo ("interlocal-00001", 17
-// caracteres) no entraría legible -- se imprime ROTADO 90° (^BCR) para que
-// corra a lo largo de la etiqueta, como una etiqueta tipo cinta/colgante.
-function construirZplEtiqueta(texto, { dpi, anchoCm, largoCm }) {
+// Arma el ZPL de UNA etiqueta física con hasta DOS códigos (uno por mitad,
+// apilados a lo largo de la etiqueta). Con 10cm de ancho ya entra sobrado
+// un código de barras horizontal normal (sin rotar) -- el texto legible se
+// dibuja aparte con una fuente grande (^A0), en vez de depender del tamaño
+// fijo de la línea de interpretación del propio ^BC.
+function construirZplParDeEtiquetas([texto1, texto2], { dpi, anchoCm, largoCm }) {
   const anchoDots = cmADots(anchoCm, dpi);
   const largoDots = cmADots(largoCm, dpi);
   if (dpi === 203 && anchoDots > ANCHO_MAXIMO_DOTS_203DPI) {
@@ -56,23 +56,41 @@ function construirZplEtiqueta(texto, { dpi, anchoCm, largoCm }) {
         `(${ANCHO_MAXIMO_DOTS_203DPI} dots ≈ 10,4cm). Revisá "zebra.anchoCm" en agente-config.json.`
     );
   }
-  const margen = Math.round(anchoDots * 0.12);
-  const altoBarra = Math.round(anchoDots * 0.55);
 
-  return [
-    "^XA",
-    `^PW${anchoDots}`,
-    `^LL${largoDots}`,
-    `^FO${margen},${margen}`,
-    `^BY2,3,${altoBarra}`,
-    `^BCR,${altoBarra},Y,N,N`,
-    `^FD${texto}^FS`,
-    "^XZ",
-  ].join("\n");
+  const margenX = Math.round(anchoDots * 0.1);
+  const altoBarra = Math.round(anchoDots * 0.35);
+  const zonaAlto = Math.round(largoDots / 2);
+  const separacionTexto = Math.round(zonaAlto * 0.06);
+  const margenVertical = Math.round((zonaAlto - altoBarra - separacionTexto - 90) / 2);
+
+  const campos = [];
+  [texto1, texto2].forEach((texto, i) => {
+    if (!texto) return;
+    const offsetY = i * zonaAlto;
+    const barraY = offsetY + margenVertical;
+    const textoY = barraY + altoBarra + separacionTexto;
+    campos.push(
+      `^FO${margenX},${barraY}`,
+      `^BY3,3,${altoBarra}`,
+      "^BCN,,N,N,N",
+      `^FD${texto}^FS`,
+      `^FO${margenX},${textoY}`,
+      "^A0N,90,75",
+      `^FD${texto}^FS`
+    );
+  });
+
+  return ["^XA", `^PW${anchoDots}`, `^LL${largoDots}`, ...campos, "^XZ"].join("\n");
 }
 
+// Agrupa los textos de a 2 (una etiqueta física por par) y arma el ZPL
+// completo del lote en una sola conexión.
 function construirZplLote(textos, opciones) {
-  return textos.map((texto) => construirZplEtiqueta(texto, opciones)).join("\n");
+  const etiquetas = [];
+  for (let i = 0; i < textos.length; i += 2) {
+    etiquetas.push(construirZplParDeEtiquetas([textos[i], textos[i + 1]], opciones));
+  }
+  return etiquetas.join("\n");
 }
 
 // Manda el ZPL directo por TCP a la impresora, en una sola conexión para
@@ -122,14 +140,14 @@ async function imprimirEtiquetas(textos) {
   const config = leerConfigZebra();
   const opciones = {
     dpi: config.dpi || 203,
-    anchoCm: config.anchoCm || 4.5,
+    anchoCm: config.anchoCm || 10,
     largoCm: config.largoCm || 15,
   };
   const zpl = construirZplLote(textos, opciones);
   await enviarZplAImpresora(zpl, { ip: config.ip, puerto: config.puerto || 9100 });
 }
 
-module.exports = { construirZplEtiqueta, construirZplLote, enviarZplAImpresora, imprimirEtiquetas };
+module.exports = { construirZplParDeEtiquetas, construirZplLote, enviarZplAImpresora, imprimirEtiquetas };
 
 if (require.main === module) {
   const textos = process.argv.slice(2);
