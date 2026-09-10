@@ -3900,6 +3900,11 @@ export default function DashboardLayout() {
     uni: "unidades", // "Uni" (archivo de Propios)
   };
 
+  // Columnas del reporte del WMS que no se insertan -- no existen como
+  // columna en la tabla y no aportan valor para la app (ej. "Separación
+  // ID", agregada al reporte pero sin uso acá).
+  const CAMPOS_A_IGNORAR_PD = new Set(["separacion_id"]);
+
   // "Fecha"/"Fecha envio gaci"/"F.remito" vienen como texto "d/m/yyyy, H:mm:ss".
   function fechaHoraExcelAISO(valor: unknown): string | null {
     if (typeof valor !== "string") return null;
@@ -3928,6 +3933,7 @@ export default function DashboardLayout() {
         const renombrado: Record<string, unknown> = {};
         for (const key of Object.keys(r)) {
           const nombreFinal = RENOMBRE_COLUMNAS_PD[key] || key;
+          if (CAMPOS_A_IGNORAR_PD.has(nombreFinal)) continue;
           renombrado[nombreFinal] = CAMPOS_FECHA_PD.has(nombreFinal) ? fechaHoraExcelAISO(r[key]) : r[key];
         }
         return renombrado;
@@ -4018,6 +4024,7 @@ export default function DashboardLayout() {
         const renombrado: Record<string, unknown> = {};
         for (const key of Object.keys(r)) {
           const nombreFinal = RENOMBRE_COLUMNAS_PD[key] || key;
+          if (CAMPOS_A_IGNORAR_PD.has(nombreFinal)) continue;
           if (nombreFinal === "numero") {
             renombrado.numero = extraerNumeroDeSpan(r[key]);
           } else if (nombreFinal === "fecha") {
