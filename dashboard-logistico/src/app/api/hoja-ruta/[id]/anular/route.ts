@@ -31,6 +31,26 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "Esta hoja de ruta ya está anulada." }, { status: 400 });
     }
 
+    // Misma regla que al modificar: si alguna guía ya está en DP_COT_OK en
+    // el WMS, no se puede anular la hoja (ver nota en PATCH /[id]).
+    const { data: guiaBloqueante, error: errorGuiaBloqueante } = await supabaseAdmin
+      .from("despacho_guias")
+      .select("numero_guia, guia")
+      .eq("hoja_de_ruta_id", hojaId)
+      .eq("estado_wms", "DP_COT_OK")
+      .limit(1)
+      .maybeSingle();
+    if (errorGuiaBloqueante) throw new Error(`Supabase (despacho_guias): ${errorGuiaBloqueante.message}`);
+    if (guiaBloqueante) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `No se puede anular: la guía ${guiaBloqueante.numero_guia || guiaBloqueante.guia} ya está en estado DP_COT_OK en el WMS.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const { data: usuario } = await supabaseAdmin.from("usuarios").select("nombre").eq("id", auth.userId).single();
 
     const { error: errInter } = await supabaseAdmin

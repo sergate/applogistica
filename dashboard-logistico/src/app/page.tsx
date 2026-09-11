@@ -1719,6 +1719,7 @@ export default function DashboardLayout() {
     estado: string;
     creado_por_nombre: string | null;
     creado_en: string;
+    bloqueada_dp_cot_ok: boolean;
   }
 
   const {
@@ -11397,7 +11398,15 @@ export default function DashboardLayout() {
                             >
                               Ver / Reimprimir
                             </a>
-                            {h.estado !== "anulada" && (
+                            {h.estado !== "anulada" && h.bloqueada_dp_cot_ok && (
+                              <span
+                                className="text-slate-400"
+                                title="Alguna guía de esta hoja ya está en estado DP_COT_OK en el WMS -- no se puede modificar ni anular."
+                              >
+                                Bloqueada (DP_COT_OK)
+                              </span>
+                            )}
+                            {h.estado !== "anulada" && !h.bloqueada_dp_cot_ok && (
                               <>
                                 <button
                                   onClick={() => iniciarEdicionHojaDeRuta(h)}

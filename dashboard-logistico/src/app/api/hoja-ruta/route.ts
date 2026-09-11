@@ -34,7 +34,27 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw new Error(`Supabase (hojas_de_ruta): ${error.message}`);
 
-    return NextResponse.json({ success: true, filas: data || [] });
+    // Hojas que tienen adentro alguna guía ya en DP_COT_OK en el WMS -- no
+    // se pueden modificar ni anular (ver PATCH/anular de [id]), así que el
+    // Tablero deshabilita esos botones directamente en vez de dejar que el
+    // usuario se encuentre con el error recién al confirmar.
+    const idsActivas = (data || []).filter((h) => h.estado !== "anulada").map((h) => h.id);
+    const idsBloqueadas = new Set<number>();
+    if (idsActivas.length > 0) {
+      const { data: bloqueantes, error: errorBloqueantes } = await supabaseAdmin
+        .from("despacho_guias")
+        .select("hoja_de_ruta_id")
+        .in("hoja_de_ruta_id", idsActivas)
+        .eq("estado_wms", "DP_COT_OK");
+      if (errorBloqueantes) throw new Error(`Supabase (despacho_guias): ${errorBloqueantes.message}`);
+      for (const b of bloqueantes || []) {
+        if (b.hoja_de_ruta_id) idsBloqueadas.add(b.hoja_de_ruta_id);
+      }
+    }
+
+    const filas = (data || []).map((h) => ({ ...h, bloqueada_dp_cot_ok: idsBloqueadas.has(h.id) }));
+
+    return NextResponse.json({ success: true, filas });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

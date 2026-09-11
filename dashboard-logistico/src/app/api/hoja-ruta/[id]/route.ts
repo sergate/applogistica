@@ -115,6 +115,28 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "No se puede modificar una hoja de ruta anulada." }, { status: 400 });
     }
 
+    // Si alguna guía de la hoja ya está en DP_COT_OK en el WMS (cotización
+    // confirmada), no se puede tocar la hoja -- ni sacar/agregar ítems ni
+    // cambiar transporte/patente/chofer -- porque ya está en curso del lado
+    // del WMS.
+    const { data: guiaBloqueante, error: errorGuiaBloqueante } = await supabaseAdmin
+      .from("despacho_guias")
+      .select("numero_guia, guia")
+      .eq("hoja_de_ruta_id", hojaId)
+      .eq("estado_wms", "DP_COT_OK")
+      .limit(1)
+      .maybeSingle();
+    if (errorGuiaBloqueante) throw new Error(`Supabase (despacho_guias): ${errorGuiaBloqueante.message}`);
+    if (guiaBloqueante) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `No se puede modificar: la guía ${guiaBloqueante.numero_guia || guiaBloqueante.guia} ya está en estado DP_COT_OK en el WMS.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const { data: itemsActuales, error: errorItemsActuales } = await supabaseAdmin
       .from("hoja_de_ruta_items")
       .select("tipo, referencia_id")
