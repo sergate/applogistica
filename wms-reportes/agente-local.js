@@ -207,15 +207,38 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
   // Detalle de bultos (contenedor/caja) por guía + packing list (caja/SKU)
   // para las guías tipo PROPIO -- una o dos consultas JSON por guía, cada
   // una en su propio try/catch para que una falla puntual no aborte el
-  // resto.
-  const bultos = [];
-  const packingList = [];
+  // resto. Se sube en lotes de GUIAS_POR_LOTE guías (no todo junto al
+  // final) -- con rangos de varias semanas el body de una sola subida podía
+  // superar el límite del servidor (HTTP 413).
+  const GUIAS_POR_LOTE = 25;
+  let bultos = [];
+  let packingList = [];
+  let bultosSubidos = 0;
+  let packingSubido = 0;
+
+  const subirLote = async () => {
+    if (bultos.length === 0 && packingList.length === 0) return;
+    const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
+      method: "POST",
+      headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ bultos, packingList }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Error subiendo el detalle de bultos al Tablero (HTTP ${res.status}).`);
+    }
+    bultosSubidos += bultos.length;
+    packingSubido += packingList.length;
+    bultos = [];
+    packingList = [];
+  };
+
   for (let i = 0; i < filas.length; i++) {
     const cab = filas[i];
     await avisarProgreso(
       config.token,
       pedido.id,
-      40 + Math.round((i / Math.max(filas.length, 1)) * 40),
+      40 + Math.round((i / Math.max(filas.length, 1)) * 50),
       `Detalle de bultos: guía ${i + 1}/${filas.length}...`
     );
     try {
@@ -242,23 +265,16 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
         console.error(`  (no pude traer el packing list de la guía ${cab.guia}: ${err.message})`);
       }
     }
+
+    if ((i + 1) % GUIAS_POR_LOTE === 0) {
+      await avisarProgreso(config.token, pedido.id, 90, `Subiendo lote de guías al Tablero (${i + 1}/${filas.length})...`);
+      await subirLote();
+    }
   }
 
-  await avisarProgreso(
-    config.token,
-    pedido.id,
-    90,
-    `Subiendo detalle de ${bultos.length} bultos y ${packingList.length} filas de packing list al Tablero...`
-  );
-  const resBultos = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
-    method: "POST",
-    headers: headersAgente(config.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ bultos, packingList }),
-  });
-  const dataBultos = await resBultos.json().catch(() => null);
-  if (!resBultos.ok || !dataBultos?.success) {
-    throw new Error(dataBultos?.error || `Error subiendo el detalle de bultos al Tablero (HTTP ${resBultos.status}).`);
-  }
+  await avisarProgreso(config.token, pedido.id, 95, "Subiendo el último lote al Tablero...");
+  await subirLote();
+  console.log(`  -> Subidos ${bultosSubidos} bultos y ${packingSubido} filas de packing list.`);
 
   return []; // no hay archivos locales que borrar en este tipo de pedido
 }
