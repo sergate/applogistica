@@ -1471,6 +1471,27 @@ export default function DashboardLayout() {
     registrado_en: string;
   }
 
+  const [filtroTextoInterlocalesPendientes, setFiltroTextoInterlocalesPendientes] = useState("");
+  const filasFiltradasInterlocalesPendientes = (data: InterlocalFila[]) => {
+    const texto = filtroTextoInterlocalesPendientes.trim().toLowerCase();
+    if (!texto) return data;
+    return data.filter((f) => {
+      const campos = [
+        f.local_origen_codigo,
+        f.local_origen_nombre,
+        f.local_destino_codigo,
+        f.local_destino_nombre,
+        f.marca,
+        f.numero_movimiento,
+        f.numero_remito,
+        f.numero_etiqueta,
+        f.observaciones,
+        f.registrado_por_nombre,
+      ];
+      return campos.some((c) => (c || "").toLowerCase().includes(texto));
+    });
+  };
+
   const {
     data: interlocalesData,
     error: interlocalesError,
@@ -1706,6 +1727,14 @@ export default function DashboardLayout() {
     isLoading: hojasDeRutaLoading,
     mutate: mutateHojasDeRuta,
   } = useTabData<{ filas: HojaDeRutaFila[] }>(activeTab, "EXP-HojaRuta", "/api/hoja-ruta", dataVersion);
+
+  const [filtroTextoHojasDeRuta, setFiltroTextoHojasDeRuta] = useState("");
+  const hojasDeRutaFiltradas = (hojasDeRutaData?.filas || []).filter((h) => {
+    const texto = filtroTextoHojasDeRuta.trim().toLowerCase();
+    if (!texto) return true;
+    const campos = [h.local_codigo, h.local_nombre, h.transporte, h.patente, h.chofer, h.creado_por_nombre, h.estado];
+    return campos.some((c) => (c || "").toLowerCase().includes(texto));
+  });
 
   // La hoja en sí todavía guarda una fecha (para el listado histórico), pero
   // ya no se pide por pantalla -- se usa la de hoy sola, y buscar
@@ -11019,6 +11048,16 @@ export default function DashboardLayout() {
                 <h2 className="text-lg font-bold text-slate-800 mb-1">Interlocales pendientes</h2>
                 <p className="text-sm text-slate-500 mb-4">Todavía no se incluyeron en ninguna Hoja de Ruta.</p>
 
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    value={filtroTextoInterlocalesPendientes}
+                    onChange={(e) => setFiltroTextoInterlocalesPendientes(e.target.value)}
+                    placeholder="Buscar por origen, destino, marca, N° movimiento, remito, etiqueta u observaciones..."
+                    className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-full max-w-md"
+                  />
+                </div>
+
                 {interlocalesError && (
                   <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
                     Error al cargar los interlocales: {interlocalesError}
@@ -11048,7 +11087,7 @@ export default function DashboardLayout() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(interlocalesData?.filas || []).map((f) => (
+                      {filasFiltradasInterlocalesPendientes(interlocalesData?.filas || []).map((f) => (
                         <tr key={f.id}>
                           <td className="py-3 px-4 text-left">{f.fecha}</td>
                           <td className="py-3 px-4 text-left">{f.local_origen_codigo} — {f.local_origen_nombre || "—"}</td>
@@ -11070,10 +11109,12 @@ export default function DashboardLayout() {
                           </td>
                         </tr>
                       ))}
-                      {(interlocalesData?.filas || []).length === 0 && !interlocalesLoading && (
+                      {filasFiltradasInterlocalesPendientes(interlocalesData?.filas || []).length === 0 && !interlocalesLoading && (
                         <tr>
                           <td colSpan={11} className="py-6 px-4 text-center text-slate-400">
-                            No hay interlocales pendientes.
+                            {(interlocalesData?.filas || []).length === 0
+                              ? "No hay interlocales pendientes."
+                              : "Ningún interlocal coincide con la búsqueda."}
                           </td>
                         </tr>
                       )}
@@ -11290,6 +11331,16 @@ export default function DashboardLayout() {
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
                 <h2 className="text-lg font-bold text-slate-800 mb-1">Histórico de Hojas de Ruta</h2>
 
+                <div className="mb-4">
+                  <input
+                    type="text"
+                    value={filtroTextoHojasDeRuta}
+                    onChange={(e) => setFiltroTextoHojasDeRuta(e.target.value)}
+                    placeholder="Buscar por local, transporte, patente, chofer o estado..."
+                    className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-full max-w-md"
+                  />
+                </div>
+
                 {hojasDeRutaError && (
                   <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
                     Error al cargar el histórico: {hojasDeRutaError}
@@ -11316,7 +11367,7 @@ export default function DashboardLayout() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(hojasDeRutaData?.filas || []).map((h) => (
+                      {hojasDeRutaFiltradas.map((h) => (
                         <tr key={h.id}>
                           <td className="py-3 px-4 text-left">{h.fecha}</td>
                           <td className="py-3 px-4 text-left">{h.local_codigo} — {h.local_nombre || "—"}</td>
@@ -11366,10 +11417,12 @@ export default function DashboardLayout() {
                           </td>
                         </tr>
                       ))}
-                      {(hojasDeRutaData?.filas || []).length === 0 && !hojasDeRutaLoading && (
+                      {hojasDeRutaFiltradas.length === 0 && !hojasDeRutaLoading && (
                         <tr>
                           <td colSpan={8} className="py-6 px-4 text-center text-slate-400">
-                            Todavía no se creó ninguna Hoja de Ruta.
+                            {(hojasDeRutaData?.filas || []).length === 0
+                              ? "Todavía no se creó ninguna Hoja de Ruta."
+                              : "Ninguna hoja de ruta coincide con la búsqueda."}
                           </td>
                         </tr>
                       )}
