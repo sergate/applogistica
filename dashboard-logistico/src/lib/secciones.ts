@@ -77,6 +77,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "DESP-Imprimir", label: "Para Imprimir" },
       { key: "DESP-Reimprimir", label: "Guías Impresas" },
       { key: "DESP-Grupos", label: "Grupos de Clientes (Admin)" },
+      { key: "DESP-SkuInsumos", label: "SKU de Insumos (Admin)" },
     ],
   },
   {
@@ -94,7 +95,6 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     { key: "ALM-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos)" },
       { key: "ALM-Resumen", label: "Resumen" },
       { key: "ALM-Configuracion", label: "Configuración" },
-      { key: "ALM-InsumosGrupos", label: "Grupos de Insumos (Admin)" },
       { key: "ALM-ImportarLayout", label: "Importar Layout (en Importar Datos)" },
     ],
   },

@@ -204,10 +204,12 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
     throw new Error(data?.error || `Error subiendo guías al Tablero (HTTP ${res.status}).`);
   }
 
-  // Detalle de bultos (contenedor/caja) por guía, para poder desglosar
-  // insumos vs producto -- una consulta JSON por guía, cada una en su
-  // propio try/catch para que una falla puntual no aborte el resto.
+  // Detalle de bultos (contenedor/caja) por guía + packing list (caja/SKU)
+  // para las guías tipo PROPIO -- una o dos consultas JSON por guía, cada
+  // una en su propio try/catch para que una falla puntual no aborte el
+  // resto.
   const bultos = [];
+  const packingList = [];
   for (let i = 0; i < filas.length; i++) {
     const cab = filas[i];
     await avisarProgreso(
@@ -229,13 +231,29 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
     } catch (err) {
       console.error(`  (no pude traer el detalle de la guía ${cab.guia}: ${err.message})`);
     }
+
+    if ((cab.tipo || "").trim().toUpperCase() === "PROPIO") {
+      try {
+        const filasPacking = await reporteDespachos.obtenerPackingList(paginaWms, cab.despacho_cab_id);
+        for (const fp of filasPacking) {
+          packingList.push({ despacho_cab_id: cab.despacho_cab_id, caja: fp.caja, sku: fp.sku, cantidad: fp.cantidad });
+        }
+      } catch (err) {
+        console.error(`  (no pude traer el packing list de la guía ${cab.guia}: ${err.message})`);
+      }
+    }
   }
 
-  await avisarProgreso(config.token, pedido.id, 90, `Subiendo detalle de ${bultos.length} bultos al Tablero...`);
+  await avisarProgreso(
+    config.token,
+    pedido.id,
+    90,
+    `Subiendo detalle de ${bultos.length} bultos y ${packingList.length} filas de packing list al Tablero...`
+  );
   const resBultos = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
     method: "POST",
     headers: headersAgente(config.token, { "Content-Type": "application/json" }),
-    body: JSON.stringify({ bultos }),
+    body: JSON.stringify({ bultos, packingList }),
   });
   const dataBultos = await resBultos.json().catch(() => null);
   if (!resBultos.ok || !dataBultos?.success) {

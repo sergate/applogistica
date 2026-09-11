@@ -244,30 +244,14 @@ export interface FilaOcupacionAlmacen {
   unidades: number;
 }
 
-// Un contenedor con TODAS sus filas en un Grupo de insumo (ver
-// insumos_grupos_maestro) -- se resuelve en el servidor, acá solo se manda
-// la lista de grupos distintos que tuvo cada contenedor en el archivo.
-export interface FilaContenedorGrupos {
-  contenedor: string;
-  grupos: string[];
-}
-
-export interface ResultadoOcupacionAlmacenStreaming {
-  filas: FilaOcupacionAlmacen[];
-  contenedoresGrupos: FilaContenedorGrupos[];
-}
-
 /**
  * Lee el archivo de ocupación de almacén (puede pesar >100MB / cientos de
  * miles de filas) en modo streaming con Papa Parse (`worker:true` + `step`),
  * sin nunca tener el archivo completo ni el array de filas originales en
  * memoria. Va armando directamente una "tabla dinámica" de combinaciones
  * únicas (ubicacion, contenedor) con stock>0, sumando "unidades" si la misma
- * combinación aparece más de una vez en el archivo. En la misma pasada
- * también junta, por contenedor, el conjunto de valores distintos de
- * "Grupo" que tuvo -- se usa para clasificar contenedores 100% insumo
- * (ver insumos_grupos_maestro) sin tener que releer el archivo de nuevo.
- * `onProgreso` (0-100) se llama según los bytes ya leídos del archivo.
+ * combinación aparece más de una vez en el archivo. `onProgreso` (0-100) se
+ * llama según los bytes ya leídos del archivo.
  *
  * Se parsea con `header:false` (filas como array, no objeto) y se resuelve
  * el índice de cada columna a mano en la primera fila -- Papa Parse no puede
@@ -278,13 +262,11 @@ export interface ResultadoOcupacionAlmacenStreaming {
 export async function parseOcupacionAlmacenStreaming(
   file: File,
   onProgreso?: (pct: number) => void
-): Promise<ResultadoOcupacionAlmacenStreaming> {
+): Promise<FilaOcupacionAlmacen[]> {
   const tabla = new Map<string, number>();
-  const gruposPorContenedor = new Map<string, Set<string>>();
   let idxUbicacion = -1;
   let idxContenedor = -1;
   let idxStock = -1;
-  let idxGrupo = -1;
   let primeraFila = true;
 
   return new Promise((resolve, reject) => {
@@ -300,7 +282,6 @@ export async function parseOcupacionAlmacenStreaming(
           idxUbicacion = row.findIndex((h) => normalizeHeader(h) === "ubicacion");
           idxContenedor = row.findIndex((h) => normalizeHeader(h) === "contenedor");
           idxStock = row.findIndex((h) => normalizeHeader(h) === "stock");
-          idxGrupo = row.findIndex((h) => normalizeHeader(h) === "grupo");
           return;
         }
 
@@ -313,18 +294,6 @@ export async function parseOcupacionAlmacenStreaming(
         if (ubicacion && contenedor && Number.isFinite(unidades) && unidades > 0) {
           const clave = ubicacion + CLAVE_SEP + contenedor;
           tabla.set(clave, (tabla.get(clave) ?? 0) + unidades);
-        }
-
-        if (idxGrupo !== -1 && contenedor) {
-          const grupo = (row[idxGrupo] || "").trim().toUpperCase();
-          if (grupo) {
-            let set = gruposPorContenedor.get(contenedor);
-            if (!set) {
-              set = new Set();
-              gruposPorContenedor.set(contenedor, set);
-            }
-            set.add(grupo);
-          }
         }
 
         if (onProgreso && file.size > 0 && typeof results.meta.cursor === "number") {
@@ -341,11 +310,7 @@ export async function parseOcupacionAlmacenStreaming(
           const sepIdx = clave.indexOf(CLAVE_SEP);
           filas.push({ ubicacion: clave.slice(0, sepIdx), contenedor: clave.slice(sepIdx + 1), unidades });
         }
-        const contenedoresGrupos: FilaContenedorGrupos[] = [];
-        for (const [contenedor, grupos] of gruposPorContenedor) {
-          contenedoresGrupos.push({ contenedor, grupos: Array.from(grupos) });
-        }
-        resolve({ filas, contenedoresGrupos });
+        resolve(filas);
       },
       error: (err: Error) => reject(err),
     });

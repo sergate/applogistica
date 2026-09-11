@@ -48,6 +48,40 @@ async function detalleDespacho(page, despachoId) {
   }, url);
 }
 
+// Packing list de una guía (caja + SKU + cantidad) -- mismo endpoint que
+// usa el botón "Packing List" de la pantalla Despacho, pero pedido directo
+// por fetch (devuelve el CSV como texto, sin pasar por un evento de
+// descarga de archivo). Formato real confirmado:
+//   Guia; Cliente cc; Caja; Remito; Sku; Descripcion; Cant; SkuCant;
+async function obtenerPackingList(page, despachoId) {
+  const url = `${URL_BASE}despacho/packing_list`;
+  const texto = await page.evaluate(
+    async ({ url, despachoId }) => {
+      const r = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `cabId=${despachoId}`,
+      });
+      if (!r.ok) throw new Error(`packing_list: HTTP ${r.status}`);
+      return r.text();
+    },
+    { url, despachoId }
+  );
+
+  const lineas = texto.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lineas.length <= 1) return []; // solo el encabezado (o vacío): guía sin packing list
+
+  return lineas
+    .slice(1)
+    .map((linea) => {
+      const cols = linea.split(";").map((c) => c.trim());
+      const [, , caja, , sku, , cant] = cols;
+      return { caja, sku, cantidad: cant ? Number(cant) : null };
+    })
+    .filter((f) => f.caja && f.sku);
+}
+
 function csvEscape(valor) {
   const s = valor === null || valor === undefined ? "" : String(valor);
   return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
@@ -132,7 +166,7 @@ async function main() {
   });
 }
 
-module.exports = { listarDespachos, detalleDespacho, URL_BASE, hoyISO };
+module.exports = { listarDespachos, detalleDespacho, obtenerPackingList, URL_BASE, hoyISO };
 
 if (require.main === module) {
   main().catch((err) => {

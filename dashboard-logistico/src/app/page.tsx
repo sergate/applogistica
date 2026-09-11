@@ -1018,6 +1018,7 @@ export default function DashboardLayout() {
     { key: "DESP-Imprimir", label: "Para Imprimir" },
     { key: "DESP-Reimprimir", label: "Guías Impresas" },
     { key: "DESP-Grupos", label: "Grupos de Clientes (Admin)" },
+    { key: "DESP-SkuInsumos", label: "SKU de Insumos (Admin)" },
   ];
 
   interface DespachoGuiaFila {
@@ -1358,6 +1359,77 @@ export default function DashboardLayout() {
     }
   };
 
+  // =========================================================================
+  // ESTADO: DESPACHO - SKU DE INSUMOS (maestro admin de SKU catalogados insumo)
+  // =========================================================================
+  interface InsumoSku {
+    sku: string;
+    descripcion: string | null;
+    creado_en: string;
+    creado_por_nombre: string | null;
+  }
+  const [insumosSkus, setInsumosSkus] = useState<InsumoSku[] | null>(null);
+  const [insumosSkusError, setInsumosSkusError] = useState<string | null>(null);
+  const [insumosSkusCargando, setInsumosSkusCargando] = useState(false);
+  const [nuevoSkuInsumo, setNuevoSkuInsumo] = useState("");
+  const [nuevaDescripcionSkuInsumo, setNuevaDescripcionSkuInsumo] = useState("");
+  const [agregandoSkuInsumo, setAgregandoSkuInsumo] = useState(false);
+
+  const cargarInsumosSkus = async () => {
+    setInsumosSkusCargando(true);
+    setInsumosSkusError(null);
+    try {
+      const res = await fetch("/api/despacho/insumos-skus", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los SKU.");
+      setInsumosSkus(data.items);
+    } catch (err) {
+      setInsumosSkusError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setInsumosSkusCargando(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "DESP-SkuInsumos" && insumosSkus === null) cargarInsumosSkus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  const agregarSkuInsumo = async () => {
+    const sku = nuevoSkuInsumo.trim();
+    if (!sku) return;
+    setAgregandoSkuInsumo(true);
+    setInsumosSkusError(null);
+    try {
+      const res = await fetch("/api/despacho/insumos-skus", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sku, descripcion: nuevaDescripcionSkuInsumo.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo agregar el SKU.");
+      setNuevoSkuInsumo("");
+      setNuevaDescripcionSkuInsumo("");
+      await cargarInsumosSkus();
+    } catch (err) {
+      setInsumosSkusError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setAgregandoSkuInsumo(false);
+    }
+  };
+
+  const quitarSkuInsumo = async (sku: string) => {
+    setInsumosSkusError(null);
+    try {
+      const res = await fetch(`/api/despacho/insumos-skus?sku=${encodeURIComponent(sku)}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo quitar el SKU.");
+      await cargarInsumosSkus();
+    } catch (err) {
+      setInsumosSkusError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
   // "INB-EditarArribo" NO va acá -- es un permiso de capacidad (habilita
   // editar Arribo CD / marcar arribado dentro de Resumen), no una pestaña.
   const inboundSubSections = [
@@ -1371,7 +1443,6 @@ export default function DashboardLayout() {
     { key: "ALM-Importar", label: "Importar Datos" },
     { key: "ALM-Resumen", label: "Resumen" },
     { key: "ALM-Configuracion", label: "Configuración" },
-    { key: "ALM-InsumosGrupos", label: "Grupos de Insumos (Admin)" },
   ];
 
   const expedicionSubSections = [
@@ -4932,10 +5003,7 @@ export default function DashboardLayout() {
       // Todo el trabajo pesado (leer y pivotear ~740.000 filas) pasa acá,
       // en el navegador y en modo streaming -- el archivo original nunca
       // sale de la máquina, solo el resultado ya limpio y deduplicado.
-      const { filas, contenedoresGrupos } = await parseOcupacionAlmacenStreaming(
-        archivoOcupacionAlmacen,
-        setProgresoOcupacionAlmacen
-      );
+      const filas = await parseOcupacionAlmacenStreaming(archivoOcupacionAlmacen, setProgresoOcupacionAlmacen);
 
       if (filas.length === 0) {
         throw new Error("No se encontraron posiciones ocupadas (Stock > 0) en el archivo.");
@@ -4967,27 +5035,6 @@ export default function DashboardLayout() {
         filasInsertadasTotal += data.filasInsertadas ?? batch.length;
         procesados += batch.length;
         setProgresoOcupacionAlmacen(Math.min(100, Math.round((procesados / total) * 100)));
-      }
-
-      // Clasificación de contenedores 100% insumo, en un segundo lote de
-      // subida sobre los datos ya juntados en la misma pasada del archivo
-      // (no hace falta releerlo). Si esto falla no aborta el import de
-      // ocupación, que ya se completó arriba -- solo se informa en consola.
-      for (let i = 0; i < contenedoresGrupos.length; i += ALM_OCUPACION_CHUNK_SIZE) {
-        const batch = contenedoresGrupos.slice(i, i + ALM_OCUPACION_CHUNK_SIZE);
-        try {
-          const res = await fetch("/api/almacen/existencia-insumos/import", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ batch, esPrimerLote: i === 0 }),
-          });
-          const data = await res.json();
-          if (!res.ok || !data.success) {
-            console.error("Error clasificando contenedores insumo:", data.error);
-          }
-        } catch (err) {
-          console.error("Error clasificando contenedores insumo:", err);
-        }
       }
 
       setResultadoOcupacionAlmacen({ filasInsertadas: filasInsertadasTotal });
@@ -5115,64 +5162,6 @@ export default function DashboardLayout() {
     indicadoresPorGrupoAlmacen.get(it.grupo)!.push(it);
   }
 
-  // =========================================================================
-  // ESTADO: OCUPACIÓN ALMACÉN - GRUPOS DE INSUMOS (qué Grupo cuenta como insumo)
-  // =========================================================================
-  interface InsumoGrupo {
-    grupo: string;
-    es_insumo: boolean;
-  }
-  const [insumosGrupos, setInsumosGrupos] = useState<InsumoGrupo[]>([]);
-  const [insumosGruposLoading, setInsumosGruposLoading] = useState(false);
-  const [insumosGruposError, setInsumosGruposError] = useState<string | null>(null);
-  const [guardandoInsumosGrupos, setGuardandoInsumosGrupos] = useState(false);
-  const [guardadoInsumosGruposOk, setGuardadoInsumosGruposOk] = useState(false);
-
-  const cargarInsumosGrupos = async () => {
-    setInsumosGruposLoading(true);
-    setInsumosGruposError(null);
-    try {
-      const res = await fetch("/api/almacen/insumos-grupos", { cache: "no-store" });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los grupos.");
-      setInsumosGrupos(data.items);
-    } catch (err) {
-      setInsumosGruposError(err instanceof Error ? err.message : "Error inesperado.");
-    } finally {
-      setInsumosGruposLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (activeTab !== "ALM-InsumosGrupos") return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    cargarInsumosGrupos();
-  }, [activeTab, dataVersion]);
-
-  const toggleInsumoGrupo = (grupo: string) => {
-    setInsumosGrupos((prev) => prev.map((it) => (it.grupo === grupo ? { ...it, es_insumo: !it.es_insumo } : it)));
-    setGuardadoInsumosGruposOk(false);
-  };
-
-  const guardarInsumosGrupos = async () => {
-    setGuardandoInsumosGrupos(true);
-    setInsumosGruposError(null);
-    setGuardadoInsumosGruposOk(false);
-    try {
-      const res = await fetch("/api/almacen/insumos-grupos", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: insumosGrupos }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar la configuración.");
-      setGuardadoInsumosGruposOk(true);
-    } catch (err) {
-      setInsumosGruposError(err instanceof Error ? err.message : "Error inesperado.");
-    } finally {
-      setGuardandoInsumosGrupos(false);
-    }
-  };
 
   const renderAlmacenTabla = (
     subrows: AlmacenResumenFila[],
@@ -5573,12 +5562,12 @@ export default function DashboardLayout() {
              activeTab === "DESP-Imprimir" ? "Despacho - Para Imprimir" :
              activeTab === "DESP-Reimprimir" ? "Despacho - Guías Impresas" :
              activeTab === "DESP-Grupos" ? "Despacho - Grupos de Clientes" :
+             activeTab === "DESP-SkuInsumos" ? "Despacho - SKU de Insumos" :
              activeTab === "INB-Importar" ? "Inbound - Importar Datos" :
              activeTab === "INB-Resumen" ? "Inbound - Resumen" :
              activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
              activeTab === "ALM-Resumen" ? "Ocupación Almacén - Resumen" :
              activeTab === "ALM-Configuracion" ? "Ocupación Almacén - Configuración" :
-             activeTab === "ALM-InsumosGrupos" ? "Ocupación Almacén - Grupos de Insumos" :
              activeTab === "EXP-Interlocales" ? "Expedición - Interlocales" :
              activeTab === "EXP-HojaRuta" ? "Expedición - Hoja de Ruta" :
              activeTab === "EXP-Historico" ? "Expedición - Histórico Despachados" :
@@ -8822,6 +8811,93 @@ export default function DashboardLayout() {
             </div>
           )}
 
+          {/* ================= PESTAÑA: DESPACHO - SKU DE INSUMOS (ADMIN) ================= */}
+          {activeTab === "DESP-SkuInsumos" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-2xl">
+              <h2 className="text-lg font-bold text-slate-800 mb-1">SKU de Insumos</h2>
+              <p className="text-sm text-slate-500 mb-4">
+                SKU catalogados como insumo (no producto). Se usan para clasificar, en el packing list de cada guía
+                Propio, qué cajas son 100% insumo -- si una caja tiene aunque sea un SKU que no está acá, se cuenta
+                como producto.
+              </p>
+
+              <div className="flex items-end gap-3 flex-wrap mb-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">SKU</label>
+                  <input
+                    type="text"
+                    value={nuevoSkuInsumo}
+                    onChange={(e) => setNuevoSkuInsumo(e.target.value)}
+                    placeholder="Ej: V25LM001%018"
+                    className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-52"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-500 mb-1">Descripción (opcional)</label>
+                  <input
+                    type="text"
+                    value={nuevaDescripcionSkuInsumo}
+                    onChange={(e) => setNuevaDescripcionSkuInsumo(e.target.value)}
+                    placeholder="Ej: BOLSA CHK FRIS GDE INST"
+                    className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-64"
+                  />
+                </div>
+                <button
+                  onClick={agregarSkuInsumo}
+                  disabled={agregandoSkuInsumo || !nuevoSkuInsumo.trim()}
+                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                    agregandoSkuInsumo || !nuevoSkuInsumo.trim()
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {agregandoSkuInsumo ? "Agregando..." : "Agregar"}
+                </button>
+              </div>
+
+              {insumosSkusError && (
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {insumosSkusError}
+                </div>
+              )}
+              {insumosSkusCargando && insumosSkus === null && <p className="text-sm text-slate-400">Cargando...</p>}
+
+              {insumosSkus && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead>
+                      <tr className="text-slate-500 font-medium border-b border-slate-200">
+                        <th className="py-2 px-3 text-left">SKU</th>
+                        <th className="py-2 px-3 text-left">Descripción</th>
+                        <th className="py-2 px-3 text-left"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {insumosSkus.map((it) => (
+                        <tr key={it.sku}>
+                          <td className="py-2 px-3 text-left font-medium text-slate-700">{it.sku}</td>
+                          <td className="py-2 px-3 text-left text-slate-600">{it.descripcion || "—"}</td>
+                          <td className="py-2 px-3 text-left">
+                            <button
+                              onClick={() => quitarSkuInsumo(it.sku)}
+                              className="text-xs font-medium text-red-600 hover:underline"
+                            >
+                              Quitar
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {insumosSkus.length === 0 && (
+                    <p className="text-sm text-slate-400 text-center py-8">Todavía no agregaste ningún SKU.</p>
+                  )}
+                  <p className="text-xs text-slate-400 mt-3">{insumosSkus.length} SKU cargados.</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* ================= PESTAÑA: INBOUND - IMPORTAR DATOS ================= */}
           {activeTab === "INB-Importar" && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-3xl">
@@ -10736,58 +10812,6 @@ export default function DashboardLayout() {
                   {guardandoIndicadoresAlmacen ? "Guardando..." : "Guardar"}
                 </button>
                 {guardadoIndicadoresAlmacenOk && (
-                  <span className="text-sm text-emerald-600 font-medium">Guardado correctamente.</span>
-                )}
-              </div>
-            </div>
-          )}
-
-          {activeTab === "ALM-InsumosGrupos" && (
-            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl">
-              <h2 className="text-xl font-bold text-slate-800 mb-1">Grupos de Insumos</h2>
-              <p className="text-sm text-slate-500 mb-6">
-                Marcá qué valores de &quot;Grupo&quot; del archivo de Existencia corresponden a insumos (no producto).
-                Un contenedor se clasifica como insumo cuando TODO su contenido cae en un grupo tildado acá -- se usa
-                para desglosar, guía por guía, cuántos bultos son insumos vs producto en Despacho. Los cambios rigen
-                recién en la próxima importación de Existencia (Ocupación Almacén - Importar Datos).
-              </p>
-
-              {insumosGruposError && (
-                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
-                  {insumosGruposError}
-                </div>
-              )}
-              {insumosGruposLoading && insumosGrupos.length === 0 && (
-                <p className="text-sm text-slate-400">Cargando...</p>
-              )}
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {insumosGrupos.map((it) => (
-                  <label key={it.grupo} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={it.es_insumo}
-                      onChange={() => toggleInsumoGrupo(it.grupo)}
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    {it.grupo}
-                  </label>
-                ))}
-              </div>
-
-              <div className="flex items-center gap-3 mt-6">
-                <button
-                  onClick={guardarInsumosGrupos}
-                  disabled={guardandoInsumosGrupos || insumosGrupos.length === 0}
-                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-                    guardandoInsumosGrupos || insumosGrupos.length === 0
-                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
-                      : "bg-blue-600 text-white hover:bg-blue-700"
-                  }`}
-                >
-                  {guardandoInsumosGrupos ? "Guardando..." : "Guardar"}
-                </button>
-                {guardadoInsumosGruposOk && (
                   <span className="text-sm text-emerald-600 font-medium">Guardado correctamente.</span>
                 )}
               </div>
