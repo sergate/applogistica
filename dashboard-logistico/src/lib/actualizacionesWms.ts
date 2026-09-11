@@ -23,6 +23,7 @@ export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 // reusar un pedido pendiente/corriendo existente como hace con el resto
 // (sería idéntico a ignorar la selección nueva del usuario).
 export const SECCIONES_CON_PAYLOAD_VARIABLE: readonly SeccionActualizacion[] = [
+  "despacho_importar",
   "despacho_imprimir",
   "despacho_reimprimir",
   "exp_etiquetas",

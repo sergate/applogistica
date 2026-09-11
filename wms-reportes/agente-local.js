@@ -183,13 +183,15 @@ async function correrPedido(config, pedido, paginas) {
 async function correrPedidoDespachoImportar(config, pedido, paginas) {
   const { paginaWms } = paginas;
 
-  await avisarProgreso(config.token, pedido.id, 10, "Consultando guías de hoy en el WMS...");
+  await avisarProgreso(config.token, pedido.id, 10, "Consultando guías en el WMS...");
   await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
   await paginaWms.waitForTimeout(1000);
   await descargador.chequearSesion(paginaWms);
 
   const hoy = reporteDespachos.hoyISO();
-  const filas = await reporteDespachos.listarDespachos(paginaWms, hoy, hoy);
+  const fechaDesde = pedido.payload?.fechaDesde || hoy;
+  const fechaHasta = pedido.payload?.fechaHasta || hoy;
+  const filas = await reporteDespachos.listarDespachos(paginaWms, fechaDesde, fechaHasta);
 
   await avisarProgreso(config.token, pedido.id, 40, `Subiendo ${filas.length} guías al Tablero...`);
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/importar`, {
