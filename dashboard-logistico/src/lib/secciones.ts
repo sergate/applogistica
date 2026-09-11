@@ -94,6 +94,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     { key: "ALM-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos)" },
       { key: "ALM-Resumen", label: "Resumen" },
       { key: "ALM-Configuracion", label: "Configuración" },
+      { key: "ALM-InsumosGrupos", label: "Grupos de Insumos (Admin)" },
       { key: "ALM-ImportarLayout", label: "Importar Layout (en Importar Datos)" },
     ],
   },

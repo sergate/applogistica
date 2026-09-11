@@ -1040,6 +1040,8 @@ export default function DashboardLayout() {
     remito_impreso: boolean;
     remito_impreso_en: string | null;
     remito_impreso_por_nombre: string | null;
+    bultos_insumos: number | null;
+    bultos_producto: number | null;
     grupos: string[];
   }
 
@@ -1369,6 +1371,7 @@ export default function DashboardLayout() {
     { key: "ALM-Importar", label: "Importar Datos" },
     { key: "ALM-Resumen", label: "Resumen" },
     { key: "ALM-Configuracion", label: "Configuración" },
+    { key: "ALM-InsumosGrupos", label: "Grupos de Insumos (Admin)" },
   ];
 
   const expedicionSubSections = [
@@ -5112,6 +5115,65 @@ export default function DashboardLayout() {
     indicadoresPorGrupoAlmacen.get(it.grupo)!.push(it);
   }
 
+  // =========================================================================
+  // ESTADO: OCUPACIÓN ALMACÉN - GRUPOS DE INSUMOS (qué Grupo cuenta como insumo)
+  // =========================================================================
+  interface InsumoGrupo {
+    grupo: string;
+    es_insumo: boolean;
+  }
+  const [insumosGrupos, setInsumosGrupos] = useState<InsumoGrupo[]>([]);
+  const [insumosGruposLoading, setInsumosGruposLoading] = useState(false);
+  const [insumosGruposError, setInsumosGruposError] = useState<string | null>(null);
+  const [guardandoInsumosGrupos, setGuardandoInsumosGrupos] = useState(false);
+  const [guardadoInsumosGruposOk, setGuardadoInsumosGruposOk] = useState(false);
+
+  const cargarInsumosGrupos = async () => {
+    setInsumosGruposLoading(true);
+    setInsumosGruposError(null);
+    try {
+      const res = await fetch("/api/almacen/insumos-grupos", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los grupos.");
+      setInsumosGrupos(data.items);
+    } catch (err) {
+      setInsumosGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setInsumosGruposLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab !== "ALM-InsumosGrupos") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    cargarInsumosGrupos();
+  }, [activeTab, dataVersion]);
+
+  const toggleInsumoGrupo = (grupo: string) => {
+    setInsumosGrupos((prev) => prev.map((it) => (it.grupo === grupo ? { ...it, es_insumo: !it.es_insumo } : it)));
+    setGuardadoInsumosGruposOk(false);
+  };
+
+  const guardarInsumosGrupos = async () => {
+    setGuardandoInsumosGrupos(true);
+    setInsumosGruposError(null);
+    setGuardadoInsumosGruposOk(false);
+    try {
+      const res = await fetch("/api/almacen/insumos-grupos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: insumosGrupos }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar la configuración.");
+      setGuardadoInsumosGruposOk(true);
+    } catch (err) {
+      setInsumosGruposError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setGuardandoInsumosGrupos(false);
+    }
+  };
+
   const renderAlmacenTabla = (
     subrows: AlmacenResumenFila[],
     subtotal: Omit<AlmacenResumenFila, "subzona">,
@@ -5516,6 +5578,7 @@ export default function DashboardLayout() {
              activeTab === "ALM-Importar" ? "Ocupación Almacén - Importar Datos" :
              activeTab === "ALM-Resumen" ? "Ocupación Almacén - Resumen" :
              activeTab === "ALM-Configuracion" ? "Ocupación Almacén - Configuración" :
+             activeTab === "ALM-InsumosGrupos" ? "Ocupación Almacén - Grupos de Insumos" :
              activeTab === "EXP-Interlocales" ? "Expedición - Interlocales" :
              activeTab === "EXP-HojaRuta" ? "Expedición - Hoja de Ruta" :
              activeTab === "EXP-Historico" ? "Expedición - Histórico Despachados" :
@@ -8216,7 +8279,7 @@ export default function DashboardLayout() {
               )}
               {despachoImprimirLoading && !despachoImprimirData && (
                 <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
-                  <SkeletonTable rows={6} columns={11} />
+                  <SkeletonTable rows={6} columns={13} />
                 </div>
               )}
 
@@ -8282,6 +8345,8 @@ export default function DashboardLayout() {
                       <th className="py-3 px-4 text-left">Tipo</th>
                       <th className="py-3 px-4 text-left">Cajas</th>
                       <th className="py-3 px-4 text-left">Unid.</th>
+                      <th className="py-3 px-4 text-left">Bultos insumos</th>
+                      <th className="py-3 px-4 text-left">Bultos producto</th>
                       <th className="py-3 px-4 text-left">Estado WMS</th>
                       <th className="py-3 px-4 text-left">Guía impresa</th>
                       <th className="py-3 px-4 text-left">Remito impreso</th>
@@ -8306,6 +8371,8 @@ export default function DashboardLayout() {
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.cajas ?? "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.unidades ?? "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.bultos_insumos ?? "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.bultos_producto ?? "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.estado_wms || "—"}</td>
                         <td className="py-3 px-4 text-left">
                           <span
@@ -8397,7 +8464,7 @@ export default function DashboardLayout() {
               )}
               {despachoReimprimirLoading && !despachoReimprimirData && (
                 <div className="mt-4 mb-4 rounded-lg border border-slate-200 overflow-hidden">
-                  <SkeletonTable rows={6} columns={9} />
+                  <SkeletonTable rows={6} columns={11} />
                 </div>
               )}
 
@@ -8460,6 +8527,8 @@ export default function DashboardLayout() {
                       <th className="py-3 px-4 text-left">Grupo</th>
                       <th className="py-3 px-4 text-left">Transporte</th>
                       <th className="py-3 px-4 text-left">Tipo</th>
+                      <th className="py-3 px-4 text-left">Bultos insumos</th>
+                      <th className="py-3 px-4 text-left">Bultos producto</th>
                       <th className="py-3 px-4 text-left">Guía impresa</th>
                       <th className="py-3 px-4 text-left">Remito impreso</th>
                       <th className="py-3 px-4 text-left">Última impresión</th>
@@ -8481,6 +8550,8 @@ export default function DashboardLayout() {
                         <td className="py-3 px-4 text-left text-slate-600">{fila.grupos.length > 0 ? fila.grupos.join(", ") : "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.transporte || "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fila.tipo || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.bultos_insumos ?? "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fila.bultos_producto ?? "—"}</td>
                         <td className="py-3 px-4 text-left">
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
                             Sí
@@ -10656,6 +10727,58 @@ export default function DashboardLayout() {
                   {guardandoIndicadoresAlmacen ? "Guardando..." : "Guardar"}
                 </button>
                 {guardadoIndicadoresAlmacenOk && (
+                  <span className="text-sm text-emerald-600 font-medium">Guardado correctamente.</span>
+                )}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "ALM-InsumosGrupos" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl">
+              <h2 className="text-xl font-bold text-slate-800 mb-1">Grupos de Insumos</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Marcá qué valores de &quot;Grupo&quot; del archivo de Existencia corresponden a insumos (no producto).
+                Un contenedor se clasifica como insumo cuando TODO su contenido cae en un grupo tildado acá -- se usa
+                para desglosar, guía por guía, cuántos bultos son insumos vs producto en Despacho. Los cambios rigen
+                recién en la próxima importación de Existencia (Ocupación Almacén - Importar Datos).
+              </p>
+
+              {insumosGruposError && (
+                <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                  {insumosGruposError}
+                </div>
+              )}
+              {insumosGruposLoading && insumosGrupos.length === 0 && (
+                <p className="text-sm text-slate-400">Cargando...</p>
+              )}
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {insumosGrupos.map((it) => (
+                  <label key={it.grupo} className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={it.es_insumo}
+                      onChange={() => toggleInsumoGrupo(it.grupo)}
+                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    {it.grupo}
+                  </label>
+                ))}
+              </div>
+
+              <div className="flex items-center gap-3 mt-6">
+                <button
+                  onClick={guardarInsumosGrupos}
+                  disabled={guardandoInsumosGrupos || insumosGrupos.length === 0}
+                  className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                    guardandoInsumosGrupos || insumosGrupos.length === 0
+                      ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+                      : "bg-blue-600 text-white hover:bg-blue-700"
+                  }`}
+                >
+                  {guardandoInsumosGrupos ? "Guardando..." : "Guardar"}
+                </button>
+                {guardadoInsumosGruposOk && (
                   <span className="text-sm text-emerald-600 font-medium">Guardado correctamente.</span>
                 )}
               </div>

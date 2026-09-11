@@ -191,7 +191,7 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
   const hoy = reporteDespachos.hoyISO();
   const filas = await reporteDespachos.listarDespachos(paginaWms, hoy, hoy);
 
-  await avisarProgreso(config.token, pedido.id, 70, `Subiendo ${filas.length} guías al Tablero...`);
+  await avisarProgreso(config.token, pedido.id, 40, `Subiendo ${filas.length} guías al Tablero...`);
   const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/importar`, {
     method: "POST",
     headers: headersAgente(config.token, { "Content-Type": "application/json" }),
@@ -200,6 +200,44 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
   const data = await res.json().catch(() => null);
   if (!res.ok || !data?.success) {
     throw new Error(data?.error || `Error subiendo guías al Tablero (HTTP ${res.status}).`);
+  }
+
+  // Detalle de bultos (contenedor/caja) por guía, para poder desglosar
+  // insumos vs producto -- una consulta JSON por guía, cada una en su
+  // propio try/catch para que una falla puntual no aborte el resto.
+  const bultos = [];
+  for (let i = 0; i < filas.length; i++) {
+    const cab = filas[i];
+    await avisarProgreso(
+      config.token,
+      pedido.id,
+      40 + Math.round((i / Math.max(filas.length, 1)) * 40),
+      `Detalle de bultos: guía ${i + 1}/${filas.length}...`
+    );
+    try {
+      const detalles = await reporteDespachos.detalleDespacho(paginaWms, cab.despacho_cab_id);
+      for (const det of detalles) {
+        bultos.push({
+          despacho_cab_id: cab.despacho_cab_id,
+          caja: det.caja,
+          remito: det.remito,
+          cantidad: det.cantidad,
+        });
+      }
+    } catch (err) {
+      console.error(`  (no pude traer el detalle de la guía ${cab.guia}: ${err.message})`);
+    }
+  }
+
+  await avisarProgreso(config.token, pedido.id, 90, `Subiendo detalle de ${bultos.length} bultos al Tablero...`);
+  const resBultos = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
+    method: "POST",
+    headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ bultos }),
+  });
+  const dataBultos = await resBultos.json().catch(() => null);
+  if (!resBultos.ok || !dataBultos?.success) {
+    throw new Error(dataBultos?.error || `Error subiendo el detalle de bultos al Tablero (HTTP ${resBultos.status}).`);
   }
 
   return []; // no hay archivos locales que borrar en este tipo de pedido
