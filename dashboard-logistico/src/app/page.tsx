@@ -8232,9 +8232,9 @@ export default function DashboardLayout() {
                   <ActualizarAgenteBoton seccion="despacho_importar" onExito={() => setDataVersion((v) => v + 1)} />
                   <ActualizarAgenteBoton
                     seccion="despacho_importar"
-                    label="Actualizar guías de esta semana (WMS)"
+                    label="Actualizar guías desde el 31/08 (WMS)"
                     payload={{
-                      fechaDesde: new Date(Date.now() - 6 * 86400000).toISOString().slice(0, 10),
+                      fechaDesde: "2026-08-31",
                       fechaHasta: new Date().toISOString().slice(0, 10),
                     }}
                     onExito={() => setDataVersion((v) => v + 1)}
