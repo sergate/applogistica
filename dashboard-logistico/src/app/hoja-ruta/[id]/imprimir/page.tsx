@@ -120,16 +120,16 @@ export default function ImprimirHojaDeRutaPage() {
           <p><span className="font-semibold">Fecha:</span> {hoja.fecha}</p>
         </div>
 
-        <table className="w-full text-sm border-collapse">
+        <table className="w-full text-sm border-collapse border border-slate-800">
           <thead>
-            <tr className="border-b-2 border-slate-800 text-left">
-              <th className="py-2 pr-2">Tipo</th>
-              <th className="py-2 pr-2">Origen</th>
-              <th className="py-2 pr-2">Destino</th>
-              <th className="py-2 pr-2">Referencia</th>
-              <th className="py-2 pr-2 text-right whitespace-nowrap">Bultos Producto</th>
-              <th className="py-2 pr-2 text-right whitespace-nowrap">Bultos Insumos</th>
-              <th className="py-2">Observaciones</th>
+            <tr className="text-left">
+              <th className="py-2 px-2 border border-slate-800">Tipo</th>
+              <th className="py-2 px-2 border border-slate-800">Origen</th>
+              <th className="py-2 px-2 border border-slate-800">Destino</th>
+              <th className="py-2 px-2 border border-slate-800">Referencia</th>
+              <th className="py-2 px-2 border border-slate-800 text-center whitespace-nowrap">Producto</th>
+              <th className="py-2 px-2 border border-slate-800 text-center whitespace-nowrap">Insumos</th>
+              <th className="py-2 px-2 border border-slate-800 text-center">Observaciones</th>
             </tr>
           </thead>
           <tbody>
@@ -137,49 +137,49 @@ export default function ImprimirHojaDeRutaPage() {
               if (it.tipo === "interlocal") {
                 const d = it.detalle as InterlocalDetalle | null;
                 return (
-                  <tr key={it.id} className="border-b border-slate-300">
-                    <td className="py-2 pr-2">Interlocal</td>
-                    <td className="py-2 pr-2">{d ? `${d.local_origen_codigo} — ${d.local_origen_nombre || "—"}` : "—"}</td>
-                    <td className="py-2 pr-2">{d ? `${d.local_destino_codigo} — ${d.local_destino_nombre || "—"}` : "—"}</td>
-                    <td className="py-2 pr-2">Mov. {d?.numero_movimiento || "—"}</td>
-                    <td className="py-2 pr-2 text-right">{d?.cantidad_bultos ?? 1}</td>
-                    <td className="py-2 pr-2 text-right">—</td>
-                    <td className="py-2">{d?.observaciones || "—"}</td>
+                  <tr key={it.id}>
+                    <td className="py-2 px-2 border border-slate-800">Interlocal</td>
+                    <td className="py-2 px-2 border border-slate-800">{d ? `${d.local_origen_codigo} — ${d.local_origen_nombre || "—"}` : "—"}</td>
+                    <td className="py-2 px-2 border border-slate-800">{d ? `${d.local_destino_codigo} — ${d.local_destino_nombre || "—"}` : "—"}</td>
+                    <td className="py-2 px-2 border border-slate-800">Mov. {d?.numero_movimiento || "—"}</td>
+                    <td className="py-2 px-2 border border-slate-800 text-center">{d?.cantidad_bultos ?? 1}</td>
+                    <td className="py-2 px-2 border border-slate-800 text-center">—</td>
+                    <td className="py-2 px-2 border border-slate-800 text-center">{d?.observaciones || "—"}</td>
                   </tr>
                 );
               }
               const d = it.detalle as DespachoDetalle | null;
               const { insumos, producto } = bultosDespacho(d);
               return (
-                <tr key={it.id} className="border-b border-slate-300">
-                  <td className="py-2 pr-2">Despacho</td>
-                  <td className="py-2 pr-2">CD</td>
-                  <td className="py-2 pr-2">{d?.cliente || "—"}</td>
-                  <td className="py-2 pr-2">{d?.numero_guia || d?.guia || "—"}</td>
-                  <td className="py-2 pr-2 text-right">{producto}</td>
-                  <td className="py-2 pr-2 text-right">{insumos || "—"}</td>
-                  <td className="py-2">—</td>
+                <tr key={it.id}>
+                  <td className="py-2 px-2 border border-slate-800">Despacho</td>
+                  <td className="py-2 px-2 border border-slate-800">CD</td>
+                  <td className="py-2 px-2 border border-slate-800">{d?.cliente || "—"}</td>
+                  <td className="py-2 px-2 border border-slate-800">{d?.numero_guia || d?.guia || "—"}</td>
+                  <td className="py-2 px-2 border border-slate-800 text-center">{producto}</td>
+                  <td className="py-2 px-2 border border-slate-800 text-center">{insumos || "—"}</td>
+                  <td className="py-2 px-2 border border-slate-800 text-center">—</td>
                 </tr>
               );
             })}
           </tbody>
           <tfoot>
-            <tr className="border-t-2 border-slate-800 font-semibold">
-              <td className="py-2 pr-2" colSpan={4}>
+            <tr className="font-semibold">
+              <td className="py-2 px-2 border border-slate-800" colSpan={4}>
                 Subtotal
               </td>
-              <td className="py-2 pr-2 text-right">{subtotalProducto}</td>
-              <td className="py-2 pr-2 text-right">{subtotalInsumos}</td>
-              <td className="py-2"></td>
+              <td className="py-2 px-2 border border-slate-800 text-center">{subtotalProducto}</td>
+              <td className="py-2 px-2 border border-slate-800 text-center">{subtotalInsumos}</td>
+              <td className="py-2 px-2 border border-slate-800"></td>
             </tr>
-            <tr className="border-t border-slate-400 font-bold">
-              <td className="py-2 pr-2" colSpan={4}>
+            <tr className="font-bold">
+              <td className="py-2 px-2 border border-slate-800" colSpan={4}>
                 Total bultos
               </td>
-              <td className="py-2 pr-2 text-right" colSpan={2}>
+              <td className="py-2 px-2 border border-slate-800 text-center" colSpan={2}>
                 {subtotalProducto + subtotalInsumos}
               </td>
-              <td className="py-2"></td>
+              <td className="py-2 px-2 border border-slate-800"></td>
             </tr>
           </tfoot>
         </table>
