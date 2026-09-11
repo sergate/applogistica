@@ -85,6 +85,15 @@ export default function ImprimirHojaDeRutaPage() {
   if (error) return <div className="p-8 text-red-600 text-sm">{error}</div>;
   if (!hoja) return null;
 
+  const subtotalProducto = items.reduce((acc, it) => {
+    if (it.tipo === "interlocal") return acc + ((it.detalle as InterlocalDetalle | null)?.cantidad_bultos ?? 1);
+    return acc + bultosDespacho(it.detalle as DespachoDetalle | null).producto;
+  }, 0);
+  const subtotalInsumos = items.reduce((acc, it) => {
+    if (it.tipo === "interlocal") return acc;
+    return acc + bultosDespacho(it.detalle as DespachoDetalle | null).insumos;
+  }, 0);
+
   return (
     <div className="max-w-4xl mx-auto p-8 print:p-0">
       {/* Sin esto el navegador imprime su propio encabezado/pie con el
@@ -118,8 +127,8 @@ export default function ImprimirHojaDeRutaPage() {
               <th className="py-2 pr-2">Origen</th>
               <th className="py-2 pr-2">Destino</th>
               <th className="py-2 pr-2">Referencia</th>
-              <th className="py-2 pr-2 text-right">Bultos Producto</th>
-              <th className="py-2 pr-2 text-right">Bultos Insumos</th>
+              <th className="py-2 pr-2 text-right whitespace-nowrap">Bultos Producto</th>
+              <th className="py-2 pr-2 text-right whitespace-nowrap">Bultos Insumos</th>
               <th className="py-2">Observaciones</th>
             </tr>
           </thead>
@@ -157,19 +166,18 @@ export default function ImprimirHojaDeRutaPage() {
           <tfoot>
             <tr className="border-t-2 border-slate-800 font-semibold">
               <td className="py-2 pr-2" colSpan={4}>
-                Total
+                Subtotal
               </td>
-              <td className="py-2 pr-2 text-right">
-                {items.reduce((acc, it) => {
-                  if (it.tipo === "interlocal") return acc + ((it.detalle as InterlocalDetalle | null)?.cantidad_bultos ?? 1);
-                  return acc + bultosDespacho(it.detalle as DespachoDetalle | null).producto;
-                }, 0)}
+              <td className="py-2 pr-2 text-right">{subtotalProducto}</td>
+              <td className="py-2 pr-2 text-right">{subtotalInsumos}</td>
+              <td className="py-2"></td>
+            </tr>
+            <tr className="border-t border-slate-400 font-bold">
+              <td className="py-2 pr-2" colSpan={4}>
+                Total bultos
               </td>
-              <td className="py-2 pr-2 text-right">
-                {items.reduce((acc, it) => {
-                  if (it.tipo === "interlocal") return acc;
-                  return acc + bultosDespacho(it.detalle as DespachoDetalle | null).insumos;
-                }, 0)}
+              <td className="py-2 pr-2 text-right" colSpan={2}>
+                {subtotalProducto + subtotalInsumos}
               </td>
               <td className="py-2"></td>
             </tr>
