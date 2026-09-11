@@ -4929,7 +4929,10 @@ export default function DashboardLayout() {
       // Todo el trabajo pesado (leer y pivotear ~740.000 filas) pasa acá,
       // en el navegador y en modo streaming -- el archivo original nunca
       // sale de la máquina, solo el resultado ya limpio y deduplicado.
-      const filas = await parseOcupacionAlmacenStreaming(archivoOcupacionAlmacen, setProgresoOcupacionAlmacen);
+      const { filas, contenedoresGrupos } = await parseOcupacionAlmacenStreaming(
+        archivoOcupacionAlmacen,
+        setProgresoOcupacionAlmacen
+      );
 
       if (filas.length === 0) {
         throw new Error("No se encontraron posiciones ocupadas (Stock > 0) en el archivo.");
@@ -4961,6 +4964,27 @@ export default function DashboardLayout() {
         filasInsertadasTotal += data.filasInsertadas ?? batch.length;
         procesados += batch.length;
         setProgresoOcupacionAlmacen(Math.min(100, Math.round((procesados / total) * 100)));
+      }
+
+      // Clasificación de contenedores 100% insumo, en un segundo lote de
+      // subida sobre los datos ya juntados en la misma pasada del archivo
+      // (no hace falta releerlo). Si esto falla no aborta el import de
+      // ocupación, que ya se completó arriba -- solo se informa en consola.
+      for (let i = 0; i < contenedoresGrupos.length; i += ALM_OCUPACION_CHUNK_SIZE) {
+        const batch = contenedoresGrupos.slice(i, i + ALM_OCUPACION_CHUNK_SIZE);
+        try {
+          const res = await fetch("/api/almacen/existencia-insumos/import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ batch, esPrimerLote: i === 0 }),
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) {
+            console.error("Error clasificando contenedores insumo:", data.error);
+          }
+        } catch (err) {
+          console.error("Error clasificando contenedores insumo:", err);
+        }
       }
 
       setResultadoOcupacionAlmacen({ filasInsertadas: filasInsertadasTotal });
