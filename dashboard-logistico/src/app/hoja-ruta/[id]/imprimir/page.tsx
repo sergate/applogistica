@@ -20,6 +20,17 @@ interface DespachoDetalle {
   cliente: string | null;
   tipo: string | null;
   cajas: number | null;
+  bultos_insumos: number | null;
+  bultos_producto: number | null;
+}
+
+// Bultos insumo/producto de una guía de despacho para la impresión: si no
+// se calculó (guías que no son Propio, o Propio sin packing list) se
+// cuentan los bultos enteros como producto en vez de dejarlos sin sumar.
+function bultosDespacho(d: DespachoDetalle | null) {
+  if (!d) return { insumos: 0, producto: 0 };
+  if (d.bultos_insumos == null) return { insumos: 0, producto: d.cajas ?? 0 };
+  return { insumos: d.bultos_insumos, producto: d.bultos_producto ?? 0 };
 }
 
 interface ItemFila {
@@ -107,7 +118,8 @@ export default function ImprimirHojaDeRutaPage() {
               <th className="py-2 pr-2">Origen</th>
               <th className="py-2 pr-2">Destino</th>
               <th className="py-2 pr-2">Referencia</th>
-              <th className="py-2 pr-2 text-right">Bultos</th>
+              <th className="py-2 pr-2 text-right">Bultos Producto</th>
+              <th className="py-2 pr-2 text-right">Bultos Insumos</th>
               <th className="py-2">Observaciones</th>
             </tr>
           </thead>
@@ -122,18 +134,21 @@ export default function ImprimirHojaDeRutaPage() {
                     <td className="py-2 pr-2">{d ? `${d.local_destino_codigo} — ${d.local_destino_nombre || "—"}` : "—"}</td>
                     <td className="py-2 pr-2">Mov. {d?.numero_movimiento || "—"}</td>
                     <td className="py-2 pr-2 text-right">{d?.cantidad_bultos ?? 1}</td>
+                    <td className="py-2 pr-2 text-right">—</td>
                     <td className="py-2">{d?.observaciones || "—"}</td>
                   </tr>
                 );
               }
               const d = it.detalle as DespachoDetalle | null;
+              const { insumos, producto } = bultosDespacho(d);
               return (
                 <tr key={it.id} className="border-b border-slate-300">
                   <td className="py-2 pr-2">Despacho</td>
                   <td className="py-2 pr-2">CD</td>
                   <td className="py-2 pr-2">{d?.cliente || "—"}</td>
                   <td className="py-2 pr-2">{d?.numero_guia || d?.guia || "—"}</td>
-                  <td className="py-2 pr-2 text-right">{d?.cajas ?? "—"}</td>
+                  <td className="py-2 pr-2 text-right">{producto}</td>
+                  <td className="py-2 pr-2 text-right">{insumos || "—"}</td>
                   <td className="py-2">—</td>
                 </tr>
               );
@@ -147,7 +162,13 @@ export default function ImprimirHojaDeRutaPage() {
               <td className="py-2 pr-2 text-right">
                 {items.reduce((acc, it) => {
                   if (it.tipo === "interlocal") return acc + ((it.detalle as InterlocalDetalle | null)?.cantidad_bultos ?? 1);
-                  return acc + ((it.detalle as DespachoDetalle | null)?.cajas ?? 0);
+                  return acc + bultosDespacho(it.detalle as DespachoDetalle | null).producto;
+                }, 0)}
+              </td>
+              <td className="py-2 pr-2 text-right">
+                {items.reduce((acc, it) => {
+                  if (it.tipo === "interlocal") return acc;
+                  return acc + bultosDespacho(it.detalle as DespachoDetalle | null).insumos;
                 }, 0)}
               </td>
               <td className="py-2"></td>
