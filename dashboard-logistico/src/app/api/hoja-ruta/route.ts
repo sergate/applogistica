@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { esGuiaOutletFabricaBloqueante } from "@/lib/despachoBloqueo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,21 +35,26 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw new Error(`Supabase (hojas_de_ruta): ${error.message}`);
 
-    // Hojas que tienen adentro alguna guía ya en DP_COT_OK en el WMS -- no
-    // se pueden modificar ni anular (ver PATCH/anular de [id]), así que el
-    // Tablero deshabilita esos botones directamente en vez de dejar que el
-    // usuario se encuentre con el error recién al confirmar.
+    // Hojas que tienen adentro alguna guía ya en DP_COT_OK en el WMS, o de
+    // Outlet Fábrica saliendo en <= 1 día hábil (ver despachoBloqueo.ts) --
+    // no se pueden modificar ni anular (ver PATCH/anular de [id]), así que
+    // el Tablero deshabilita esos botones directamente en vez de dejar que
+    // el usuario se encuentre con el error recién al confirmar.
+    const fechaPorId = new Map((data || []).map((h) => [h.id, h.fecha as string]));
     const idsActivas = (data || []).filter((h) => h.estado !== "anulada").map((h) => h.id);
     const idsBloqueadas = new Set<number>();
     if (idsActivas.length > 0) {
-      const { data: bloqueantes, error: errorBloqueantes } = await supabaseAdmin
+      const { data: guiasHojas, error: errorGuiasHojas } = await supabaseAdmin
         .from("despacho_guias")
-        .select("hoja_de_ruta_id")
-        .in("hoja_de_ruta_id", idsActivas)
-        .eq("estado_wms", "DP_COT_OK");
-      if (errorBloqueantes) throw new Error(`Supabase (despacho_guias): ${errorBloqueantes.message}`);
-      for (const b of bloqueantes || []) {
-        if (b.hoja_de_ruta_id) idsBloqueadas.add(b.hoja_de_ruta_id);
+        .select("hoja_de_ruta_id, cliente, estado_wms")
+        .in("hoja_de_ruta_id", idsActivas);
+      if (errorGuiasHojas) throw new Error(`Supabase (despacho_guias): ${errorGuiasHojas.message}`);
+      for (const g of guiasHojas || []) {
+        if (!g.hoja_de_ruta_id || idsBloqueadas.has(g.hoja_de_ruta_id)) continue;
+        const fechaHoja = fechaPorId.get(g.hoja_de_ruta_id);
+        if (g.estado_wms === "DP_COT_OK" || (fechaHoja && esGuiaOutletFabricaBloqueante(g.cliente, fechaHoja))) {
+          idsBloqueadas.add(g.hoja_de_ruta_id);
+        }
       }
     }
 

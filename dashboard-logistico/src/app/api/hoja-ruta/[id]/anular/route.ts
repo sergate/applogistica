@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { esGuiaOutletFabricaBloqueante } from "@/lib/despachoBloqueo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,27 +26,28 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "ID de hoja de ruta inválido." }, { status: 400 });
     }
 
-    const { data: hoja } = await supabaseAdmin.from("hojas_de_ruta").select("estado").eq("id", hojaId).maybeSingle();
+    const { data: hoja } = await supabaseAdmin.from("hojas_de_ruta").select("estado, fecha").eq("id", hojaId).maybeSingle();
     if (!hoja) return NextResponse.json({ success: false, error: "No existe esa hoja de ruta." }, { status: 404 });
     if (hoja.estado === "anulada") {
       return NextResponse.json({ success: false, error: "Esta hoja de ruta ya está anulada." }, { status: 400 });
     }
 
     // Misma regla que al modificar: si alguna guía ya está en DP_COT_OK en
-    // el WMS, no se puede anular la hoja (ver nota en PATCH /[id]).
-    const { data: guiaBloqueante, error: errorGuiaBloqueante } = await supabaseAdmin
+    // el WMS, o es de Outlet Fábrica y la hoja sale en <= 1 día hábil, no se
+    // puede anular la hoja (ver nota en PATCH /[id]).
+    const { data: guiasHoja, error: errorGuiasHoja } = await supabaseAdmin
       .from("despacho_guias")
-      .select("numero_guia, guia")
-      .eq("hoja_de_ruta_id", hojaId)
-      .eq("estado_wms", "DP_COT_OK")
-      .limit(1)
-      .maybeSingle();
-    if (errorGuiaBloqueante) throw new Error(`Supabase (despacho_guias): ${errorGuiaBloqueante.message}`);
+      .select("numero_guia, guia, cliente, estado_wms")
+      .eq("hoja_de_ruta_id", hojaId);
+    if (errorGuiasHoja) throw new Error(`Supabase (despacho_guias): ${errorGuiasHoja.message}`);
+    const guiaBloqueante = (guiasHoja || []).find(
+      (g) => g.estado_wms === "DP_COT_OK" || esGuiaOutletFabricaBloqueante(g.cliente, hoja.fecha)
+    );
     if (guiaBloqueante) {
       return NextResponse.json(
         {
           success: false,
-          error: `No se puede anular: la guía ${guiaBloqueante.numero_guia || guiaBloqueante.guia} ya está en estado DP_COT_OK en el WMS.`,
+          error: `No se puede anular: la guía ${guiaBloqueante.numero_guia || guiaBloqueante.guia} ya está bloqueada (DP_COT_OK o Outlet Fábrica a 1 día hábil).`,
         },
         { status: 400 }
       );
