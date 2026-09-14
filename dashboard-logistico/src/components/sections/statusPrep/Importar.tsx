@@ -60,22 +60,30 @@ export default function Importar() {
       const totalRegistros = archivosConRegistros.reduce((acc, a) => acc + a.records.length, 0) || 1;
       let registrosProcesados = 0;
 
-      for (const { key, records, errorParseo } of archivosConRegistros) {
+      for (const { key, records: registrosOriginales, errorParseo } of archivosConRegistros) {
         if (errorParseo) {
           resultados.push({ archivo: key, filasLeidas: 0, filasInsertadas: 0, error: errorParseo });
           continue;
         }
         try {
-          if (records.length === 0) {
+          if (registrosOriginales.length === 0) {
             resultados.push({ archivo: key, filasLeidas: 0, filasInsertadas: 0, error: "El archivo no tiene filas de datos." });
             continue;
           }
+
+          // Clientes "Borrado" en el WMS no van al Tablero -- se descartan
+          // antes de subir (el upsert por código no borra solo los que ya
+          // estaban, por eso además hay que limpiar la tabla a mano una vez).
+          const records =
+            key === "clientes"
+              ? registrosOriginales.filter((r) => String(r.estado ?? "").trim().toLowerCase() !== "borrado")
+              : registrosOriginales;
 
           const { filasInsertadas } = await enviarArchivoEnLotes(key, records, (cantidad) => {
             registrosProcesados += cantidad;
             setProgresoImport(Math.min(100, Math.round((registrosProcesados / totalRegistros) * 100)));
           });
-          resultados.push({ archivo: key, filasLeidas: records.length, filasInsertadas, error: null });
+          resultados.push({ archivo: key, filasLeidas: registrosOriginales.length, filasInsertadas, error: null });
         } catch (err) {
           resultados.push({
             archivo: key,
