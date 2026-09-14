@@ -1167,6 +1167,28 @@ export default function DashboardLayout() {
     mutate: mutateHojasDeRuta,
   } = useTabData<{ filas: HojaDeRutaFila[] }>(activeTab, "EXP-HojaRuta", "/api/hoja-ruta", dataVersion);
 
+  interface EscaneoFaltante {
+    codigo: string;
+    tipo: string | null;
+  }
+  interface EscaneoFila {
+    id: number;
+    hoja_de_ruta_id: number;
+    usuario_nombre: string | null;
+    iniciado_en: string;
+    finalizado_en: string | null;
+    bultos_esperados: number | null;
+    bultos_escaneados: number | null;
+    resultado: string | null;
+    hoja: { id: number; fecha: string; local_codigo: string; local_nombre: string | null } | null;
+    faltantes: EscaneoFaltante[];
+  }
+  const {
+    data: escaneosData,
+    error: escaneosError,
+    isLoading: escaneosLoading,
+  } = useTabData<{ filas: EscaneoFila[] }>(activeTab, "EXP-Escaner", "/api/hoja-ruta/escaneos", dataVersion);
+
   const [filtroTextoHojasDeRuta, setFiltroTextoHojasDeRuta] = useState("");
   const hojasDeRutaFiltradas = (hojasDeRutaData?.filas || []).filter((h) => {
     const texto = filtroTextoHojasDeRuta.trim().toLowerCase();
@@ -8864,22 +8886,103 @@ export default function DashboardLayout() {
 
           {/* ================= PESTAÑA: EXPEDICIÓN - ESCÁNER (HANDHELD) ================= */}
           {activeTab === "EXP-Escaner" && (
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
-              <h2 className="text-lg font-bold text-slate-800 mb-1">Control de Bultos (Escáner)</h2>
-              <p className="text-sm text-slate-500 mb-6">
-                Abrí esta herramienta desde el handheld (o cualquier celular con lector de código de barras) para
-                controlar, hoja de ruta por hoja de ruta, que todos los bultos que salen coincidan con lo cargado.
-                Escaneás el código de la Hoja de Ruta impresa y después cada bulto (caja de despacho o etiqueta de
-                interlocal) uno por uno.
-              </p>
-              <a
-                href="/hoja-ruta/escaner"
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
-              >
-                Abrir escáner ↗
-              </a>
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Control de Bultos (Escáner)</h2>
+                <p className="text-sm text-slate-500 mb-6">
+                  Abrí esta herramienta desde el handheld (o cualquier celular con lector de código de barras) para
+                  controlar, hoja de ruta por hoja de ruta, que todos los bultos que salen coincidan con lo cargado.
+                  Escaneás el código de la Hoja de Ruta impresa y después cada bulto (caja de despacho o etiqueta de
+                  interlocal) uno por uno.
+                </p>
+                <a
+                  href="/hoja-ruta/escaner"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Abrir escáner ↗
+                </a>
+              </div>
+
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h2 className="text-lg font-bold text-slate-800 mb-1">Histórico de Escaneos</h2>
+                <p className="text-sm text-slate-500 mb-4">Últimas 200 sesiones de escaneo, más recientes primero.</p>
+
+                {escaneosError && (
+                  <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+                    Error al cargar el histórico: {escaneosError}
+                  </div>
+                )}
+                {escaneosLoading && !escaneosData && (
+                  <div className="rounded-lg border border-slate-200 overflow-hidden">
+                    <SkeletonTable rows={6} columns={7} />
+                  </div>
+                )}
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left whitespace-nowrap">
+                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 text-left">Hoja</th>
+                        <th className="py-3 px-4 text-left">Local</th>
+                        <th className="py-3 px-4 text-left">Usuario</th>
+                        <th className="py-3 px-4 text-left">Inicio</th>
+                        <th className="py-3 px-4 text-left">Fin</th>
+                        <th className="py-3 px-4 text-left">Bultos</th>
+                        <th className="py-3 px-4 text-left">Resultado</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(escaneosData?.filas || []).map((e) => (
+                        <tr key={e.id}>
+                          <td className="py-3 px-4 text-left">
+                            <a href={`/hoja-ruta/${e.hoja_de_ruta_id}/imprimir`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                              #{e.hoja_de_ruta_id}
+                            </a>
+                          </td>
+                          <td className="py-3 px-4 text-left">
+                            {e.hoja ? `${e.hoja.local_codigo} — ${e.hoja.local_nombre || "—"}` : "—"}
+                          </td>
+                          <td className="py-3 px-4 text-left">{e.usuario_nombre || "—"}</td>
+                          <td className="py-3 px-4 text-left">{fmtFecha(e.iniciado_en)}</td>
+                          <td className="py-3 px-4 text-left">{e.finalizado_en ? fmtFecha(e.finalizado_en) : "En curso..."}</td>
+                          <td className="py-3 px-4 text-left">
+                            {e.bultos_escaneados ?? "—"} / {e.bultos_esperados ?? "—"}
+                          </td>
+                          <td className="py-3 px-4 text-left">
+                            {!e.resultado ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+                                En curso
+                              </span>
+                            ) : e.resultado === "completo" ? (
+                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                Completo
+                              </span>
+                            ) : (
+                              <div>
+                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                  Incompleto
+                                </span>
+                                <p className="text-xs text-slate-500 mt-1 whitespace-normal">
+                                  Faltan: {e.faltantes.map((f) => f.codigo).join(", ")}
+                                </p>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                      {(escaneosData?.filas || []).length === 0 && !escaneosLoading && (
+                        <tr>
+                          <td colSpan={7} className="py-6 px-4 text-center text-slate-400">
+                            Todavía no se registró ningún escaneo.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           )}
 
