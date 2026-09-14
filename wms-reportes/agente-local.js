@@ -43,6 +43,17 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
 const INTERVALO_POLLING_MS = 2500; // solo se usa en --loop
 
+// Cada cuánto se refresca solo (sin que nadie apriete el botón) el
+// estado_wms de las guías -- lo necesita el bloqueo de Modificar/Anular
+// Hoja de Ruta por DP_COT_OK (ver src/lib/despachoBloqueo.ts del Tablero),
+// que si no se queda con el último estado importado manualmente. Solo se
+// dispara cuando el Agente está ocioso (sin pedido pendiente), y solo trae
+// cabeceras (estado_wms incluido) -- NO vuelve a bajar bultos/packing list
+// de cada guía (eso es pesado y no hace falta para este chequeo).
+const INTERVALO_REFRESCO_ESTADOS_MS = 20 * 60 * 1000;
+const VENTANA_DIAS_ATRAS_REFRESCO_ESTADOS = 14;
+const VENTANA_DIAS_ADELANTE_REFRESCO_ESTADOS = 3;
+
 // Deploys de preview de Vercel (ej. el de la rama "test") pueden tener
 // activada la protección SSO, que redirige cualquier request sin sesión de
 // Vercel a una pantalla de login -- rompe las llamadas del agente aunque el
@@ -115,6 +126,49 @@ async function abrirContextos({ headless }) {
 async function cerrarContextos({ contextoWms, contextoTablero }) {
   await contextoWms.close().catch(() => {});
   await contextoTablero.close().catch(() => {});
+}
+
+// Refresco automático y liviano del estado_wms de las guías -- se dispara
+// solo desde modoLoop() cada INTERVALO_REFRESCO_ESTADOS_MS, sin que nadie
+// apriete el botón. Reusa la misma ruta que ya usa el pedido manual
+// "despacho_importar" (upsert por despacho_cab_id: solo pisa las columnas
+// de cabecera, entre ellas estado_wms, sin tocar nada más de la guía).
+async function refrescarEstadosDespachoAutomatico(config) {
+  await conLock(
+    async () => {
+      const contextos = await abrirContextos({ headless: true });
+      try {
+        const { paginaWms } = contextos;
+        await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+        await paginaWms.waitForTimeout(1000);
+        await descargador.chequearSesion(paginaWms);
+
+        const fechaDesde = new Date(Date.now() - VENTANA_DIAS_ATRAS_REFRESCO_ESTADOS * 86400000)
+          .toISOString()
+          .slice(0, 10);
+        const fechaHasta = new Date(Date.now() + VENTANA_DIAS_ADELANTE_REFRESCO_ESTADOS * 86400000)
+          .toISOString()
+          .slice(0, 10);
+        const filas = await reporteDespachos.listarDespachos(paginaWms, fechaDesde, fechaHasta);
+
+        const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/importar`, {
+          method: "POST",
+          headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+          body: JSON.stringify({ filas }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data?.success) {
+          throw new Error(data?.error || `HTTP ${res.status}`);
+        }
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Refresco automático de estados WMS: ${filas.length} guías (${fechaDesde} a ${fechaHasta}).`
+        );
+      } finally {
+        await cerrarContextos(contextos);
+      }
+    },
+    { maxEsperaMs: 5_000, silencioso: true }
+  );
 }
 
 async function modoLogin() {
@@ -525,10 +579,22 @@ async function modoUnaVez() {
 async function modoLoop() {
   const config = leerConfig();
   console.log("Agente Local corriendo (modo loop). Ctrl+C para detener.\n");
+  // Arranca corriendo uno apenas se levanta el Agente, después cada
+  // INTERVALO_REFRESCO_ESTADOS_MS -- ver refrescarEstadosDespachoAutomatico.
+  let proximoRefrescoEstados = Date.now();
   for (;;) {
     try {
       const pedido = await buscarProximoPedido(config.token);
-      if (pedido) await atenderPedido(config, pedido);
+      if (pedido) {
+        await atenderPedido(config, pedido);
+      } else if (Date.now() >= proximoRefrescoEstados) {
+        proximoRefrescoEstados = Date.now() + INTERVALO_REFRESCO_ESTADOS_MS;
+        try {
+          await refrescarEstadosDespachoAutomatico(config);
+        } catch (err) {
+          console.error("Error en el refresco automático de estados WMS:", err instanceof Error ? err.message : err);
+        }
+      }
     } catch (err) {
       console.error("Error consultando pedidos pendientes:", err instanceof Error ? err.message : err);
     }
