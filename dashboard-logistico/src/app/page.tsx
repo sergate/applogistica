@@ -15,13 +15,9 @@ import {
   fmtPct,
   fmtFecha,
   fmtSoloFecha,
-  dotForMarca,
-  dotForMarcaName,
   semanasDelAnio,
-  semanasConDatosDe,
   type SemanaDelMes,
 } from "@/components/dashboard/formatters";
-import { enviarArchivoEnLotes, type ImportFileResult } from "@/lib/importMaestros";
 import EcomResumen from "@/components/sections/ecom/EcomResumen";
 import EcomImportar from "@/components/sections/ecom/EcomImportar";
 import EcomPorFecha from "@/components/sections/ecom/EcomPorFecha";
