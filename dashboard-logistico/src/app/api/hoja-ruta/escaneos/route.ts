@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { bultosEsperadosPorHoja } from "@/lib/hojaDeRutaBultos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 // Listado de sesiones de escaneo (control de bultos por handheld), con los
-// datos de la hoja y -- si quedó incompleta -- los bultos que faltaron.
+// datos de la hoja y el detalle bulto por bulto (esperado vs escaneado) de
+// cada sesión -- alimenta tanto el desplegable como el export a Excel.
 export async function GET() {
   if (!supabaseEnvOk) {
     return NextResponse.json({ success: false, error: "Faltan configurar las variables de Supabase." }, { status: 500 });
@@ -33,25 +35,33 @@ export async function GET() {
         : { data: [] };
     const hojaPorId = new Map((hojas || []).map((h) => [h.id, h]));
 
+    const esperadosPorHoja = await bultosEsperadosPorHoja(hojaIds);
+
     const escaneoIds = (escaneos || []).map((e) => e.id);
-    const { data: faltantes } =
+    const { data: eventosOk } =
       escaneoIds.length > 0
         ? await supabaseAdmin
-            .from("hoja_de_ruta_bultos_faltantes")
-            .select("escaneo_id, codigo, tipo")
+            .from("hoja_de_ruta_escaneo_eventos")
+            .select("escaneo_id, codigo, escaneado_en")
             .in("escaneo_id", escaneoIds)
+            .eq("resultado", "ok_nuevo")
         : { data: [] };
-    const faltantesPorEscaneo = new Map<number, { codigo: string; tipo: string | null }[]>();
-    for (const f of faltantes || []) {
-      if (!faltantesPorEscaneo.has(f.escaneo_id)) faltantesPorEscaneo.set(f.escaneo_id, []);
-      faltantesPorEscaneo.get(f.escaneo_id)!.push({ codigo: f.codigo, tipo: f.tipo });
+    const escaneadoEnPorEscaneo = new Map<number, Map<string, string>>();
+    for (const ev of eventosOk || []) {
+      if (!escaneadoEnPorEscaneo.has(ev.escaneo_id)) escaneadoEnPorEscaneo.set(ev.escaneo_id, new Map());
+      escaneadoEnPorEscaneo.get(ev.escaneo_id)!.set(ev.codigo, ev.escaneado_en);
     }
 
-    const filas = (escaneos || []).map((e) => ({
-      ...e,
-      hoja: hojaPorId.get(e.hoja_de_ruta_id) || null,
-      faltantes: faltantesPorEscaneo.get(e.id) || [],
-    }));
+    const filas = (escaneos || []).map((e) => {
+      const esperados = esperadosPorHoja.get(e.hoja_de_ruta_id) || [];
+      const escaneadoMap = escaneadoEnPorEscaneo.get(e.id) || new Map<string, string>();
+      const detalle = esperados.map((b) => ({
+        ...b,
+        escaneado: escaneadoMap.has(b.codigo),
+        escaneado_en: escaneadoMap.get(b.codigo) || null,
+      }));
+      return { ...e, hoja: hojaPorId.get(e.hoja_de_ruta_id) || null, detalle };
+    });
 
     return NextResponse.json({ success: true, filas });
   } catch (err) {

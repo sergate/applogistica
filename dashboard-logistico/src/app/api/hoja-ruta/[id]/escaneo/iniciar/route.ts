@@ -1,17 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { bultosEsperadosPorHoja } from "@/lib/hojaDeRutaBultos";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-// Bulto esperado que el handheld tiene que poder matchear contra un
-// código escaneado.
-interface BultoEsperado {
-  codigo: string;
-  tipo: "despacho" | "interlocal";
-  referencia: string;
-}
 
 // Arranca (o retoma) una sesión de escaneo para una Hoja de Ruta: crea la
 // fila en hoja_de_ruta_escaneos y devuelve la hoja + la lista de bultos
@@ -45,56 +38,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "Esta hoja de ruta está anulada." }, { status: 400 });
     }
 
-    const { data: items, error: errorItems } = await supabaseAdmin
-      .from("hoja_de_ruta_items")
-      .select("tipo, referencia_id")
-      .eq("hoja_de_ruta_id", hojaId);
-    if (errorItems) throw new Error(`Supabase (hoja_de_ruta_items): ${errorItems.message}`);
-
-    const despachoIds = (items || []).filter((i) => i.tipo === "despacho").map((i) => i.referencia_id);
-    const interlocalIds = (items || []).filter((i) => i.tipo === "interlocal").map((i) => i.referencia_id);
-
-    const bultosEsperados: BultoEsperado[] = [];
-
-    if (despachoIds.length > 0) {
-      const { data: bultos, error: errorBultos } = await supabaseAdmin
-        .from("despacho_guias_bultos")
-        .select("caja, despacho_cab_id")
-        .in("despacho_cab_id", despachoIds);
-      if (errorBultos) throw new Error(`Supabase (despacho_guias_bultos): ${errorBultos.message}`);
-
-      const { data: guias } = await supabaseAdmin
-        .from("despacho_guias")
-        .select("despacho_cab_id, numero_guia, guia")
-        .in("despacho_cab_id", despachoIds);
-      const guiaPorId = new Map((guias || []).map((g) => [g.despacho_cab_id, g.numero_guia || g.guia || String(g.despacho_cab_id)]));
-
-      for (const b of bultos || []) {
-        if (!b.caja) continue;
-        bultosEsperados.push({
-          codigo: b.caja,
-          tipo: "despacho",
-          referencia: `Guía ${guiaPorId.get(b.despacho_cab_id) || b.despacho_cab_id}`,
-        });
-      }
-    }
-
-    if (interlocalIds.length > 0) {
-      const { data: interlocales, error: errorInterlocales } = await supabaseAdmin
-        .from("interlocales")
-        .select("numero_etiqueta, numero_movimiento")
-        .in("id", interlocalIds);
-      if (errorInterlocales) throw new Error(`Supabase (interlocales): ${errorInterlocales.message}`);
-
-      for (const i of interlocales || []) {
-        if (!i.numero_etiqueta) continue; // sin etiqueta cargada: no se puede verificar por handheld
-        bultosEsperados.push({
-          codigo: i.numero_etiqueta,
-          tipo: "interlocal",
-          referencia: `Mov. ${i.numero_movimiento}`,
-        });
-      }
-    }
+    const bultosEsperados = (await bultosEsperadosPorHoja([hojaId])).get(hojaId) || [];
 
     // Códigos duplicados entre bultos (no debería pasar, pero por las dudas
     // no rompemos el conteo esperado).

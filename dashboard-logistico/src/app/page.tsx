@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { parseCsvFile, parseExcelFile, parseExcelFileConFechas, parseOcupacionAlmacenStreaming } from "@/lib/fileParsers";
 import { createClient as createBrowserAuthClient } from "@/lib/supabase/client";
@@ -1168,9 +1168,12 @@ export default function DashboardLayout() {
     mutate: mutateHojasDeRuta,
   } = useTabData<{ filas: HojaDeRutaFila[] }>(activeTab, "EXP-HojaRuta", "/api/hoja-ruta", dataVersion);
 
-  interface EscaneoFaltante {
+  interface EscaneoBultoDetalle {
     codigo: string;
-    tipo: string | null;
+    tipo: "despacho" | "interlocal";
+    referencia: string;
+    escaneado: boolean;
+    escaneado_en: string | null;
   }
   interface EscaneoFila {
     id: number;
@@ -1182,7 +1185,7 @@ export default function DashboardLayout() {
     bultos_escaneados: number | null;
     resultado: string | null;
     hoja: { id: number; fecha: string; local_codigo: string; local_nombre: string | null } | null;
-    faltantes: EscaneoFaltante[];
+    detalle: EscaneoBultoDetalle[];
   }
   const {
     data: escaneosData,
@@ -1190,21 +1193,70 @@ export default function DashboardLayout() {
     isLoading: escaneosLoading,
   } = useTabData<{ filas: EscaneoFila[] }>(activeTab, "EXP-EscaneoHistorico", "/api/hoja-ruta/escaneos", dataVersion);
 
+  const [filtroTextoEscaneos, setFiltroTextoEscaneos] = useState("");
+  const [filtroFechaDesdeEscaneos, setFiltroFechaDesdeEscaneos] = useState("");
+  const [filtroFechaHastaEscaneos, setFiltroFechaHastaEscaneos] = useState("");
+  const [filtroResultadoEscaneos, setFiltroResultadoEscaneos] = useState("TODOS");
+  const [escaneoExpandidoId, setEscaneoExpandidoId] = useState<number | null>(null);
+
+  const escaneosFiltrados = (escaneosData?.filas || []).filter((e) => {
+    if (filtroResultadoEscaneos !== "TODOS") {
+      const estado = e.resultado || "en_curso";
+      if (estado !== filtroResultadoEscaneos) return false;
+    }
+    const fechaHoja = e.hoja?.fecha || "";
+    if (filtroFechaDesdeEscaneos && fechaHoja && fechaHoja < filtroFechaDesdeEscaneos) return false;
+    if (filtroFechaHastaEscaneos && fechaHoja && fechaHoja > filtroFechaHastaEscaneos) return false;
+    const texto = filtroTextoEscaneos.trim().toLowerCase();
+    if (texto) {
+      const campos = [
+        String(e.hoja_de_ruta_id),
+        e.hoja?.local_codigo,
+        e.hoja?.local_nombre,
+        e.usuario_nombre,
+      ];
+      if (!campos.some((c) => (c || "").toLowerCase().includes(texto))) return false;
+    }
+    return true;
+  });
+
+  // Fecha y hora en columnas separadas -- un único string de fecha+hora en
+  // Excel obliga a formatear la celda a mano para que se lea bien.
+  const fechaParteExcel = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("es-AR") : "");
+  const horaParteExcel = (iso: string | null) =>
+    iso ? new Date(iso).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" }) : "";
+
   const exportarEscaneosExcel = async () => {
     const XLSX = await import("xlsx");
-    const filas = (escaneosData?.filas || []).map((e) => ({
+    const resumen = escaneosFiltrados.map((e) => ({
       hoja: e.hoja_de_ruta_id,
       local: e.hoja ? `${e.hoja.local_codigo} - ${e.hoja.local_nombre || ""}` : "",
+      fecha_hoja: e.hoja?.fecha ? fmtSoloFecha(e.hoja.fecha) : "",
       usuario: e.usuario_nombre || "",
-      inicio: e.iniciado_en,
-      fin: e.finalizado_en || "",
+      fecha_inicio: fechaParteExcel(e.iniciado_en),
+      hora_inicio: horaParteExcel(e.iniciado_en),
+      fecha_fin: fechaParteExcel(e.finalizado_en),
+      hora_fin: horaParteExcel(e.finalizado_en),
       bultos_escaneados: e.bultos_escaneados ?? "",
       bultos_esperados: e.bultos_esperados ?? "",
       resultado: e.resultado || "en curso",
-      faltantes: e.faltantes.map((f) => f.codigo).join(", "),
     }));
+    const detalle = escaneosFiltrados.flatMap((e) =>
+      e.detalle.map((b) => ({
+        hoja: e.hoja_de_ruta_id,
+        local: e.hoja ? `${e.hoja.local_codigo} - ${e.hoja.local_nombre || ""}` : "",
+        fecha_hoja: e.hoja?.fecha ? fmtSoloFecha(e.hoja.fecha) : "",
+        codigo: b.codigo,
+        tipo: b.tipo,
+        referencia: b.referencia,
+        escaneado: b.escaneado ? "Sí" : "No",
+        fecha_escaneo: fechaParteExcel(b.escaneado_en),
+        hora_escaneo: horaParteExcel(b.escaneado_en),
+      }))
+    );
     const libro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filas), "Escaneos");
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(resumen), "Resumen");
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(detalle), "Detalle");
     XLSX.writeFile(libro, `historico_escaneos_${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
 
@@ -8933,13 +8985,64 @@ export default function DashboardLayout() {
                   <h2 className="text-lg font-bold text-slate-800">Histórico de Escaneos</h2>
                   <button
                     onClick={exportarEscaneosExcel}
-                    disabled={(escaneosData?.filas || []).length === 0}
+                    disabled={escaneosFiltrados.length === 0}
                     className="px-4 py-1.5 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Exportar a Excel
                   </button>
                 </div>
                 <p className="text-sm text-slate-500 mb-4">Últimas 200 sesiones de escaneo, más recientes primero.</p>
+
+                <div className="flex items-center gap-3 mb-4 flex-wrap">
+                  <input
+                    type="text"
+                    value={filtroTextoEscaneos}
+                    onChange={(e) => setFiltroTextoEscaneos(e.target.value)}
+                    placeholder="Buscar por N° de hoja, local o usuario..."
+                    className="px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 w-64"
+                  />
+                  <label className="flex items-center gap-2 text-xs text-slate-500">
+                    Desde
+                    <input
+                      type="date"
+                      value={filtroFechaDesdeEscaneos}
+                      onChange={(e) => setFiltroFechaDesdeEscaneos(e.target.value)}
+                      className="px-2 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-slate-500">
+                    Hasta
+                    <input
+                      type="date"
+                      value={filtroFechaHastaEscaneos}
+                      onChange={(e) => setFiltroFechaHastaEscaneos(e.target.value)}
+                      className="px-2 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                  <select
+                    value={filtroResultadoEscaneos}
+                    onChange={(e) => setFiltroResultadoEscaneos(e.target.value)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  >
+                    <option value="TODOS">Todos los resultados</option>
+                    <option value="completo">Completo</option>
+                    <option value="incompleto">Incompleto</option>
+                    <option value="en_curso">En curso</option>
+                  </select>
+                  {(filtroTextoEscaneos || filtroFechaDesdeEscaneos || filtroFechaHastaEscaneos || filtroResultadoEscaneos !== "TODOS") && (
+                    <button
+                      onClick={() => {
+                        setFiltroTextoEscaneos("");
+                        setFiltroFechaDesdeEscaneos("");
+                        setFiltroFechaHastaEscaneos("");
+                        setFiltroResultadoEscaneos("TODOS");
+                      }}
+                      className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                    >
+                      Limpiar filtros
+                    </button>
+                  )}
+                </div>
 
                 {escaneosError && (
                   <div className="mb-4 p-4 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
@@ -8948,7 +9051,7 @@ export default function DashboardLayout() {
                 )}
                 {escaneosLoading && !escaneosData && (
                   <div className="rounded-lg border border-slate-200 overflow-hidden">
-                    <SkeletonTable rows={6} columns={7} />
+                    <SkeletonTable rows={6} columns={8} />
                   </div>
                 )}
 
@@ -8956,6 +9059,7 @@ export default function DashboardLayout() {
                   <table className="w-full text-sm text-left whitespace-nowrap">
                     <thead className="text-slate-500 font-medium border-b border-slate-200">
                       <tr>
+                        <th className="py-3 px-4 text-left"></th>
                         <th className="py-3 px-4 text-left">Hoja</th>
                         <th className="py-3 px-4 text-left">Local</th>
                         <th className="py-3 px-4 text-left">Usuario</th>
@@ -8966,48 +9070,108 @@ export default function DashboardLayout() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {(escaneosData?.filas || []).map((e) => (
-                        <tr key={e.id}>
-                          <td className="py-3 px-4 text-left">
-                            <a href={`/hoja-ruta/${e.hoja_de_ruta_id}/imprimir`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                              #{e.hoja_de_ruta_id}
-                            </a>
-                          </td>
-                          <td className="py-3 px-4 text-left">
-                            {e.hoja ? `${e.hoja.local_codigo} — ${e.hoja.local_nombre || "—"}` : "—"}
-                          </td>
-                          <td className="py-3 px-4 text-left">{e.usuario_nombre || "—"}</td>
-                          <td className="py-3 px-4 text-left">{fmtFecha(e.iniciado_en)}</td>
-                          <td className="py-3 px-4 text-left">{e.finalizado_en ? fmtFecha(e.finalizado_en) : "En curso..."}</td>
-                          <td className="py-3 px-4 text-left">
-                            {e.bultos_escaneados ?? "—"} / {e.bultos_esperados ?? "—"}
-                          </td>
-                          <td className="py-3 px-4 text-left">
-                            {!e.resultado ? (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
-                                En curso
-                              </span>
-                            ) : e.resultado === "completo" ? (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
-                                Completo
-                              </span>
-                            ) : (
-                              <div>
-                                <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
-                                  Incompleto
-                                </span>
-                                <p className="text-xs text-slate-500 mt-1 whitespace-normal">
-                                  Faltan: {e.faltantes.map((f) => f.codigo).join(", ")}
-                                </p>
-                              </div>
+                      {escaneosFiltrados.map((e) => {
+                        const faltantes = e.detalle.filter((b) => !b.escaneado);
+                        const expandido = escaneoExpandidoId === e.id;
+                        return (
+                          <Fragment key={e.id}>
+                            <tr>
+                              <td className="py-3 px-4 text-left">
+                                <button
+                                  onClick={() => setEscaneoExpandidoId(expandido ? null : e.id)}
+                                  className="text-slate-400 hover:text-slate-700"
+                                  title="Ver detalle"
+                                >
+                                  {expandido ? "▾" : "▸"}
+                                </button>
+                              </td>
+                              <td className="py-3 px-4 text-left">
+                                <a href={`/hoja-ruta/${e.hoja_de_ruta_id}/imprimir`} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
+                                  #{e.hoja_de_ruta_id}
+                                </a>
+                              </td>
+                              <td className="py-3 px-4 text-left">
+                                {e.hoja ? `${e.hoja.local_codigo} — ${e.hoja.local_nombre || "—"}` : "—"}
+                              </td>
+                              <td className="py-3 px-4 text-left">{e.usuario_nombre || "—"}</td>
+                              <td className="py-3 px-4 text-left">{fmtFecha(e.iniciado_en)}</td>
+                              <td className="py-3 px-4 text-left">{e.finalizado_en ? fmtFecha(e.finalizado_en) : "En curso..."}</td>
+                              <td className="py-3 px-4 text-left">
+                                {e.bultos_escaneados ?? "—"} / {e.bultos_esperados ?? "—"}
+                              </td>
+                              <td className="py-3 px-4 text-left">
+                                {!e.resultado ? (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-500">
+                                    En curso
+                                  </span>
+                                ) : e.resultado === "completo" ? (
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                    Completo
+                                  </span>
+                                ) : (
+                                  <div>
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                                      Incompleto
+                                    </span>
+                                    <p className="text-xs text-slate-500 mt-1 whitespace-normal">
+                                      Faltan: {faltantes.map((f) => f.codigo).join(", ")}
+                                    </p>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                            {expandido && (
+                              <tr key={`${e.id}-detalle`}>
+                                <td colSpan={8} className="bg-slate-50 px-4 py-3">
+                                  <table className="w-full text-xs text-left">
+                                    <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                      <tr>
+                                        <th className="py-2 px-3 text-left">Código</th>
+                                        <th className="py-2 px-3 text-left">Tipo</th>
+                                        <th className="py-2 px-3 text-left">Referencia</th>
+                                        <th className="py-2 px-3 text-left">Escaneado</th>
+                                        <th className="py-2 px-3 text-left">Hora</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-200">
+                                      {e.detalle.map((b) => (
+                                        <tr key={b.codigo}>
+                                          <td className="py-2 px-3 text-left font-mono">{b.codigo}</td>
+                                          <td className="py-2 px-3 text-left">{b.tipo === "despacho" ? "Despacho" : "Interlocal"}</td>
+                                          <td className="py-2 px-3 text-left">{b.referencia}</td>
+                                          <td className="py-2 px-3 text-left">
+                                            <span
+                                              className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                                b.escaneado ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
+                                              }`}
+                                            >
+                                              {b.escaneado ? "Sí" : "No"}
+                                            </span>
+                                          </td>
+                                          <td className="py-2 px-3 text-left">{b.escaneado_en ? fmtFecha(b.escaneado_en) : "—"}</td>
+                                        </tr>
+                                      ))}
+                                      {e.detalle.length === 0 && (
+                                        <tr>
+                                          <td colSpan={5} className="py-4 px-3 text-center text-slate-400">
+                                            Esta hoja no tiene bultos verificables (sin cajas ni etiquetas cargadas).
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </td>
+                              </tr>
                             )}
-                          </td>
-                        </tr>
-                      ))}
-                      {(escaneosData?.filas || []).length === 0 && !escaneosLoading && (
+                          </Fragment>
+                        );
+                      })}
+                      {escaneosFiltrados.length === 0 && !escaneosLoading && (
                         <tr>
-                          <td colSpan={7} className="py-6 px-4 text-center text-slate-400">
-                            Todavía no se registró ningún escaneo.
+                          <td colSpan={8} className="py-6 px-4 text-center text-slate-400">
+                            {(escaneosData?.filas || []).length === 0
+                              ? "Todavía no se registró ningún escaneo."
+                              : "Ningún escaneo coincide con los filtros."}
                           </td>
                         </tr>
                       )}
