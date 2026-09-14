@@ -888,6 +888,7 @@ export default function DashboardLayout() {
     { key: "EXP-Historico", label: "Histórico Despachados" },
     { key: "EXP-Etiquetas", label: "Etiquetas" },
     { key: "EXP-Escaner", label: "Control de Bultos (Escáner)" },
+    { key: "EXP-EscaneoHistorico", label: "Histórico de Escaneos" },
   ];
 
   interface InterlocalFila {
@@ -1187,7 +1188,25 @@ export default function DashboardLayout() {
     data: escaneosData,
     error: escaneosError,
     isLoading: escaneosLoading,
-  } = useTabData<{ filas: EscaneoFila[] }>(activeTab, "EXP-Escaner", "/api/hoja-ruta/escaneos", dataVersion);
+  } = useTabData<{ filas: EscaneoFila[] }>(activeTab, "EXP-EscaneoHistorico", "/api/hoja-ruta/escaneos", dataVersion);
+
+  const exportarEscaneosExcel = async () => {
+    const XLSX = await import("xlsx");
+    const filas = (escaneosData?.filas || []).map((e) => ({
+      hoja: e.hoja_de_ruta_id,
+      local: e.hoja ? `${e.hoja.local_codigo} - ${e.hoja.local_nombre || ""}` : "",
+      usuario: e.usuario_nombre || "",
+      inicio: e.iniciado_en,
+      fin: e.finalizado_en || "",
+      bultos_escaneados: e.bultos_escaneados ?? "",
+      bultos_esperados: e.bultos_esperados ?? "",
+      resultado: e.resultado || "en curso",
+      faltantes: e.faltantes.map((f) => f.codigo).join(", "),
+    }));
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filas), "Escaneos");
+    XLSX.writeFile(libro, `historico_escaneos_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const [filtroTextoHojasDeRuta, setFiltroTextoHojasDeRuta] = useState("");
   const hojasDeRutaFiltradas = (hojasDeRutaData?.filas || []).filter((h) => {
@@ -4375,6 +4394,7 @@ export default function DashboardLayout() {
              activeTab === "EXP-Historico" ? "Expedición - Histórico Despachados" :
              activeTab === "EXP-Etiquetas" ? "Expedición - Etiquetas" :
              activeTab === "EXP-Escaner" ? "Expedición - Control de Bultos (Escáner)" :
+             activeTab === "EXP-EscaneoHistorico" ? "Expedición - Histórico de Escaneos" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -8886,27 +8906,39 @@ export default function DashboardLayout() {
 
           {/* ================= PESTAÑA: EXPEDICIÓN - ESCÁNER (HANDHELD) ================= */}
           {activeTab === "EXP-Escaner" && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
-                <h2 className="text-lg font-bold text-slate-800 mb-1">Control de Bultos (Escáner)</h2>
-                <p className="text-sm text-slate-500 mb-6">
-                  Abrí esta herramienta desde el handheld (o cualquier celular con lector de código de barras) para
-                  controlar, hoja de ruta por hoja de ruta, que todos los bultos que salen coincidan con lo cargado.
-                  Escaneás el código de la Hoja de Ruta impresa y después cada bulto (caja de despacho o etiqueta de
-                  interlocal) uno por uno.
-                </p>
-                <a
-                  href="/hoja-ruta/escaner"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  Abrir escáner ↗
-                </a>
-              </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
+              <h2 className="text-lg font-bold text-slate-800 mb-1">Control de Bultos (Escáner)</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Abrí esta herramienta desde el handheld (o cualquier celular con lector de código de barras) para
+                controlar, hoja de ruta por hoja de ruta, que todos los bultos que salen coincidan con lo cargado.
+                Escaneás el código de la Hoja de Ruta impresa y después cada bulto (caja de despacho o etiqueta de
+                interlocal) uno por uno.
+              </p>
+              <a
+                href="/hoja-ruta/escaner"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Abrir escáner ↗
+              </a>
+            </div>
+          )}
 
+          {/* ================= PESTAÑA: EXPEDICIÓN - HISTÓRICO DE ESCANEOS ================= */}
+          {activeTab === "EXP-EscaneoHistorico" && (
+            <div className="space-y-6">
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-slate-800 mb-1">Histórico de Escaneos</h2>
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                  <h2 className="text-lg font-bold text-slate-800">Histórico de Escaneos</h2>
+                  <button
+                    onClick={exportarEscaneosExcel}
+                    disabled={(escaneosData?.filas || []).length === 0}
+                    className="px-4 py-1.5 rounded-lg text-sm font-medium bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Exportar a Excel
+                  </button>
+                </div>
                 <p className="text-sm text-slate-500 mb-4">Últimas 200 sesiones de escaneo, más recientes primero.</p>
 
                 {escaneosError && (
@@ -9379,7 +9411,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>
