@@ -4,7 +4,7 @@ import { NextResponse, type NextRequest } from "next/server";
 // Corre en cada request: refresca la sesión de Supabase (si hace falta) y
 // redirige a /login a cualquiera que no esté autenticado, excepto en la
 // propia página de login y en los assets estáticos.
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   // Herramienta standalone sin login: procesa todo en el navegador, no toca
   // Supabase ni datos de la empresa, así que se excluye antes de siquiera
   // instanciar el cliente de Supabase (evita fallar si faltan las env vars).
