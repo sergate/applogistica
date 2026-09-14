@@ -195,6 +195,11 @@ export default function ImprimirHojaDeRutaPage() {
               </td>
               <td className="py-2 px-2 border border-slate-800"></td>
             </tr>
+            <tr>
+              <td className="py-2 px-2 border border-slate-800" colSpan={7}>
+                Devolución Local: a retirar <span className="inline-block w-20 border-b border-slate-800">&nbsp;</span> bultos
+              </td>
+            </tr>
           </tfoot>
         </table>
 
