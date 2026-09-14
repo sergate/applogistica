@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getCached } from "@/lib/queryCache";
+import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
 const ALMACEN_TTL_MS = 20_000;
 
@@ -43,28 +44,9 @@ export const CATALOGO_ZONAS_ALMACEN: { grupo: string; subzona: string }[] = Arra
 
 /** Trae TODO el layout del almacén (paginado, Supabase pagina de a 1000). */
 export async function fetchAlmacenLayout(): Promise<AlmacenLayoutRow[]> {
-  return getCached("almacen_layout:all", ALMACEN_TTL_MS, async () => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
-    const all: AlmacenLayoutRow[] = [];
-
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from("almacen_layout")
-        .select("nave, ubicacion, zona")
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) throw new Error(`Supabase (almacen_layout): ${error.message}`);
-      if (!data || data.length === 0) break;
-
-      all.push(...(data as AlmacenLayoutRow[]));
-
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-
-    return all;
-  });
+  return getCached("almacen_layout:all", ALMACEN_TTL_MS, () =>
+    fetchAllPaginated<AlmacenLayoutRow>("almacen_layout", "nave, ubicacion, zona")
+  );
 }
 
 export interface AlmacenOcupacionInfo {
@@ -81,31 +63,17 @@ export interface AlmacenOcupacionInfo {
  */
 export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
   return getCached("almacen_ocupacion:all", ALMACEN_TTL_MS, async () => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
+    const rows = await fetchAllPaginated<{ ubicacion: string; actualizado_at: string | null }>(
+      "almacen_ocupacion",
+      "ubicacion, actualizado_at"
+    );
+
     const contenedoresPorUbicacion = new Map<string, number>();
     let updatedAt: string | null = null;
-
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from("almacen_ocupacion")
-        .select("ubicacion, actualizado_at")
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) throw new Error(`Supabase (almacen_ocupacion): ${error.message}`);
-      if (!data || data.length === 0) break;
-
-      for (const row of data) {
-        const ubicacion = row.ubicacion as string;
-        contenedoresPorUbicacion.set(ubicacion, (contenedoresPorUbicacion.get(ubicacion) ?? 0) + 1);
-        const actualizadoAt = row.actualizado_at as string | null;
-        if (actualizadoAt && (!updatedAt || actualizadoAt > updatedAt)) updatedAt = actualizadoAt;
-      }
-
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
+    for (const row of rows) {
+      contenedoresPorUbicacion.set(row.ubicacion, (contenedoresPorUbicacion.get(row.ubicacion) ?? 0) + 1);
+      if (row.actualizado_at && (!updatedAt || row.actualizado_at > updatedAt)) updatedAt = row.actualizado_at;
     }
-
     return { contenedoresPorUbicacion, updatedAt };
   });
 }
@@ -119,30 +87,17 @@ export async function fetchAlmacenOcupacion(): Promise<AlmacenOcupacionInfo> {
  */
 export async function fetchPosicionesPorContenedor(): Promise<Map<string, string>> {
   return getCached("almacen_ocupacion:posiciones", ALMACEN_TTL_MS, async () => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
+    const rows = await fetchAllPaginated<{ contenedor: string; ubicacion: string }>(
+      "almacen_ocupacion",
+      "contenedor, ubicacion"
+    );
+
     const posicionesPorContenedor = new Map<string, string>();
-
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from("almacen_ocupacion")
-        .select("contenedor, ubicacion")
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) throw new Error(`Supabase (almacen_ocupacion): ${error.message}`);
-      if (!data || data.length === 0) break;
-
-      for (const row of data) {
-        const contenedor = row.contenedor as string;
-        if (!posicionesPorContenedor.has(contenedor)) {
-          posicionesPorContenedor.set(contenedor, row.ubicacion as string);
-        }
+    for (const row of rows) {
+      if (!posicionesPorContenedor.has(row.contenedor)) {
+        posicionesPorContenedor.set(row.contenedor, row.ubicacion);
       }
-
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
     }
-
     return posicionesPorContenedor;
   });
 }

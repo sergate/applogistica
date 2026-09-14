@@ -1,5 +1,5 @@
-import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getCached } from "@/lib/queryCache";
+import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
 const ECOM_TTL_MS = 20_000;
 
@@ -96,32 +96,11 @@ export function ultimaActualizacionEcom(rows: PedidoEcomRow[]): string | null {
   return max;
 }
 
-// Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
 export async function fetchAllPedidosEcom(): Promise<PedidoEcomRow[]> {
-  return getCached("pedidos_ecom:all", ECOM_TTL_MS, async () => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
-    const all: PedidoEcomRow[] = [];
-
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from("pedidos_ecom")
-        .select(
-          "pedido, nombre_pedido, seller, estado_pedido, cancelado, ooll_asignado, sector, piso, uni, uni_plan, uni_pick, uni_sep, uni_pend, uni_nc, fecha_creacion, created_at"
-        )
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) {
-        throw new Error(`Supabase (pedidos_ecom): ${error.message}`);
-      }
-      if (!data || data.length === 0) break;
-
-      all.push(...(data as PedidoEcomRow[]));
-
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-
-    return all;
-  });
+  return getCached("pedidos_ecom:all", ECOM_TTL_MS, () =>
+    fetchAllPaginated<PedidoEcomRow>(
+      "pedidos_ecom",
+      "pedido, nombre_pedido, seller, estado_pedido, cancelado, ooll_asignado, sector, piso, uni, uni_plan, uni_pick, uni_sep, uni_pend, uni_nc, fecha_creacion, created_at"
+    )
+  );
 }

@@ -1,5 +1,5 @@
-import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getCached } from "@/lib/queryCache";
+import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
 const REMANENTES_TTL_MS = 20_000;
 
@@ -45,30 +45,11 @@ export function parseNumeroRemanente(numero: string): { marca: string; temporada
   return { marca, temporada, esRemanente };
 }
 
-// Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
 export async function fetchAllRemanentes(): Promise<RemanenteRow[]> {
-  return getCached("remanentes:all", REMANENTES_TTL_MS, async () => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
-    const all: RemanenteRow[] = [];
-
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from("remanentes")
-        .select("numero, grupo, pedidas, distribuidas, pendientes, stock_total, sku, created_at")
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) {
-        throw new Error(`Supabase (remanentes): ${error.message}`);
-      }
-      if (!data || data.length === 0) break;
-
-      all.push(...(data as RemanenteRow[]));
-
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-
-    return all;
-  });
+  return getCached("remanentes:all", REMANENTES_TTL_MS, () =>
+    fetchAllPaginated<RemanenteRow>(
+      "remanentes",
+      "numero, grupo, pedidas, distribuidas, pendientes, stock_total, sku, created_at"
+    )
+  );
 }

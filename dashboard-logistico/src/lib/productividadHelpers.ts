@@ -1,5 +1,5 @@
-import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getCached } from "@/lib/queryCache";
+import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
 const PRODUCTIVIDAD_TTL_MS = 20_000;
 
@@ -23,30 +23,8 @@ export function mapearTipoProceso(tipo: string): string | null {
   return t;
 }
 
-// Supabase pagina de a 1000 filas por default -> traemos todo en tandas.
 export async function fetchAllProductividad(): Promise<ProductividadRow[]> {
-  return getCached("productividad:all", PRODUCTIVIDAD_TTL_MS, async () => {
-    const PAGE_SIZE = 1000;
-    let from = 0;
-    const all: ProductividadRow[] = [];
-
-    while (true) {
-      const { data, error } = await supabaseAdmin
-        .from("productividad")
-        .select("fecha, tipo_proceso, cantidad, usuario, created_at")
-        .range(from, from + PAGE_SIZE - 1);
-
-      if (error) {
-        throw new Error(`Supabase (productividad): ${error.message}`);
-      }
-      if (!data || data.length === 0) break;
-
-      all.push(...(data as ProductividadRow[]));
-
-      if (data.length < PAGE_SIZE) break;
-      from += PAGE_SIZE;
-    }
-
-    return all;
-  });
+  return getCached("productividad:all", PRODUCTIVIDAD_TTL_MS, () =>
+    fetchAllPaginated<ProductividadRow>("productividad", "fecha, tipo_proceso, cantidad, usuario, created_at")
+  );
 }
