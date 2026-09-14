@@ -71,16 +71,20 @@ export default function Importar() {
             continue;
           }
 
-          // Clientes "Borrado" en el WMS no van al Tablero -- se descartan
-          // antes de subir. La tabla "clientes" no tiene columna "estado"
+          // Clientes con "Borrado" = Sí no van al Tablero -- se descartan
+          // antes de subir. La tabla "clientes" no tiene columna "borrado"
           // (nunca se guardó), así que además de filtrar las filas hay que
           // sacarles esa propiedad antes de mandarlas -- si no, el upsert
-          // rompe con "column estado does not exist".
+          // rompe con "column borrado does not exist".
+          const esSiBorrado = (r: Record<string, unknown>) =>
+            String(r.borrado ?? "")
+              .normalize("NFD")
+              .replace(/[̀-ͯ]/g, "")
+              .trim()
+              .toLowerCase() === "si";
           const records =
             key === "clientes"
-              ? registrosOriginales
-                  .filter((r) => String(r.estado ?? "").trim().toLowerCase() !== "borrado")
-                  .map(({ estado: _estado, ...resto }) => resto)
+              ? registrosOriginales.filter((r) => !esSiBorrado(r)).map(({ borrado: _borrado, ...resto }) => resto)
               : registrosOriginales;
 
           const { filasInsertadas } = await enviarArchivoEnLotes(key, records, (cantidad) => {
