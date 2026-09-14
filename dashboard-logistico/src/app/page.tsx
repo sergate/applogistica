@@ -10094,7 +10094,17 @@ export default function DashboardLayout() {
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-                <h2 className="text-lg font-bold text-slate-800 mb-1">Histórico de Hojas de Ruta</h2>
+                <div className="flex items-center justify-between mb-1 flex-wrap gap-2">
+                  <h2 className="text-lg font-bold text-slate-800">Histórico de Hojas de Ruta</h2>
+                  <a
+                    href="/hoja-ruta/escaner"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-sm font-medium text-blue-600 hover:underline"
+                  >
+                    Control de bultos (handheld) ↗
+                  </a>
+                </div>
 
                 <div className="mb-4">
                   <input

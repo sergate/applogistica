@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
+import JsBarcode from "jsbarcode";
 
 interface InterlocalDetalle {
   numero_movimiento: string;
@@ -54,6 +55,18 @@ export default function ImprimirHojaDeRutaPage() {
   const [items, setItems] = useState<ItemFila[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  const barcodeRef = useRef<SVGSVGElement | null>(null);
+
+  useEffect(() => {
+    if (!hoja || !barcodeRef.current) return;
+    JsBarcode(barcodeRef.current, `HDR-${hoja.id}`, {
+      format: "CODE128",
+      displayValue: true,
+      fontSize: 14,
+      height: 40,
+      margin: 4,
+    });
+  }, [hoja]);
 
   useEffect(() => {
     (async () => {
@@ -113,6 +126,7 @@ export default function ImprimirHojaDeRutaPage() {
         <div className="text-center mb-4">
           <p className="text-xs font-semibold tracking-wide">GRUPO ALTATEX</p>
           <p className="text-2xl font-bold">HOJA DE RUTA</p>
+          <svg ref={barcodeRef} className="mx-auto mt-2" />
         </div>
 
         <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm mb-6 border-t border-b border-slate-400 py-3">
