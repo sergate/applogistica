@@ -269,7 +269,14 @@ async function reporteProductividad(page) {
   await page.evaluate(
     ({ fechaISO, grupos }) => {
       const setVal = (name, value) => {
-        const cmp = Ext.ComponentQuery.query(`field[name=${name}]`)[0];
+        // El WMS deja varias pestañas abiertas en el DOM aunque no estén
+        // visibles (ver nota en clickBotonExt) -- "Productividades por
+        // fecha", que ya viene abierta por defecto, tiene un campo con el
+        // MISMO name "fechaDesde"/"fechaHasta" que esta pantalla. Sin filtrar
+        // por visible, el [0] podía agarrar el de esa otra pestaña oculta y
+        // dejar la nuestra en su valor por defecto (hoy).
+        const candidatos = Ext.ComponentQuery.query(`field[name=${name}]`);
+        const cmp = candidatos.find((c) => c.isVisible && c.isVisible(true)) || candidatos[0];
         if (!cmp) throw new Error(`No encontré el campo "${name}" en Indicadores - Productividad.`);
         cmp.setValue(value);
       };
