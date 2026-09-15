@@ -78,6 +78,7 @@ const REPORTES_POR_SECCION = {
   pd_clientes: ["bandeja_comercial"],
   pd_propios: ["pre_despacho"],
   ocupacion_almacen: ["ocupacion_almacen"],
+  productividad: ["productividad"],
 };
 
 function leerConfig() {

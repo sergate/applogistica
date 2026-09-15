@@ -10,6 +10,7 @@ type Seccion =
   | "pd_clientes"
   | "pd_propios"
   | "ocupacion_almacen"
+  | "productividad"
   | "despacho_importar"
   | "despacho_imprimir"
   | "despacho_reimprimir";

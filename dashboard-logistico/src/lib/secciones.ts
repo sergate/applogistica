@@ -56,6 +56,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     nombre: "Producción por Proceso",
     subsecciones: [
       { key: "PROD-Importar", label: "Importar Datos" },
+      { key: "PROD-ActualizarWMS", label: "Actualizar desde WMS (en Importar Datos)" },
       { key: "PROD-Resumen", label: "Resumen" },
     ],
   },

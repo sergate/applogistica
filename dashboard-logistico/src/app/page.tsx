@@ -4486,6 +4486,13 @@ export default function DashboardLayout() {
                 &quot;Fecha&quot; en la base y se reemplaza toda su información por la del archivo nuevo.
               </p>
 
+              {tienePermiso("PROD-ActualizarWMS") && (
+                <>
+                  <AgenteTokenPanel />
+                  <ActualizarAgenteBoton seccion="productividad" onExito={() => setDataVersion((v) => v + 1)} />
+                </>
+              )}
+
               <div className="border border-dashed border-slate-300 rounded-lg p-6 text-center">
                 <input
                   ref={inputProductividadRef}

@@ -240,6 +240,52 @@ async function reportePreDespacho(page) {
   return descargarConBoton(page, "Excel", `pre_despacho_${timestamp()}.xlsx`);
 }
 
+// "Fecha desde"/"Fecha hasta" de Indicadores > Productividad van siempre en
+// el día hábil (lunes a viernes) anterior a hoy -- si hoy es lunes, retrocede
+// hasta el viernes anterior.
+function diaHabilAnterior() {
+  const fecha = new Date();
+  fecha.setDate(fecha.getDate() - 1);
+  while (fecha.getDay() === 0 || fecha.getDay() === 6) {
+    fecha.setDate(fecha.getDate() - 1);
+  }
+  fecha.setHours(0, 0, 0, 0);
+  return fecha;
+}
+
+// --- Reporte "Productividad" (Indicadores > Productividad) ---
+// A diferencia del resto de las pantallas, acá los campos de fecha NO tienen
+// placeholder (no sirve completarCampoTexto) y "Grupo" es un multi-select
+// (hoy trae Grupo A y Grupo B tildados a la vez) -- en vez de clickear/tipear
+// a ciegas, seteamos los tres campos directo por su "name" de ExtJS
+// (confirmado inspeccionando la pantalla real: fechaDesde/fechaHasta/grupos),
+// que es como ya se resuelve el combo de "Resumen CI" en reporteCargaInicialRema.
+async function reporteProductividad(page) {
+  console.log("> productividad (día hábil anterior, Grupo A)");
+  await abrirPantalla(page, "Indicadores", "Productividad");
+  await page.waitForTimeout(800);
+
+  const fecha = diaHabilAnterior();
+  await page.evaluate(
+    ({ fechaISO, grupos }) => {
+      const setVal = (name, value) => {
+        const cmp = Ext.ComponentQuery.query(`field[name=${name}]`)[0];
+        if (!cmp) throw new Error(`No encontré el campo "${name}" en Indicadores - Productividad.`);
+        cmp.setValue(value);
+      };
+      const fechaDate = new Date(fechaISO);
+      setVal("fechaDesde", fechaDate);
+      setVal("fechaHasta", fechaDate);
+      setVal("grupos", grupos);
+    },
+    { fechaISO: fecha.toISOString(), grupos: ["A"] }
+  );
+
+  await clickBotonExt(page, "Buscar");
+  await esperarGridCargado(page);
+  return descargarConBoton(page, "Excel", `productividad_${timestamp()}.xlsx`);
+}
+
 // --- Reporte "Resumen carga inicial" para TODAS las opciones que contengan REMA ---
 async function reporteCargaInicialRema(page) {
   console.log("> carga_inicial_rema (todas las opciones que contengan REMA)");
@@ -323,6 +369,7 @@ const REPORTES = {
   bandeja_comercial: reporteBandejaComercial,
   pre_despacho: reportePreDespacho,
   ocupacion_almacen: reporteOcupacionAlmacen,
+  productividad: reporteProductividad,
 };
 
 // Corre UN reporte por su id (navega, chequea sesión, ejecuta, devuelve el

@@ -216,6 +216,21 @@ async function subirCargaInicial(page, reportes) {
   if (!r.exito) throw new Error(`Fallo importando Carga Inicial. Detalle: ${r.textoCompleto.slice(-500)}`);
 }
 
+// --- Productividad por Proceso ---
+async function subirProductividad(page, reportes) {
+  console.log("> productividad (Producción por Proceso - Importar Datos)");
+  const archivo = primerArchivo(reportes, "productividad");
+
+  await irYLoguear(page);
+  await abrirMenu(page, "Producción por Proceso", "Importar Datos");
+
+  await page.locator("input[type=file]").first().setInputFiles(archivo);
+  await page.getByRole("button", { name: "Procesar", exact: true }).click();
+  const r = await esperarResultadoImport(page);
+  console.log(`  -> ${r.exito ? "OK" : "ERROR"}: ${r.textoCompleto.slice(-200)}`);
+  if (!r.exito) throw new Error(`Fallo importando Productividad. Detalle: ${r.textoCompleto.slice(-500)}`);
+}
+
 // --- Remanentes: todos los ci_rema juntos ---
 async function subirRemanentes(page, reportes) {
   console.log("> remanentes (Status remanentes)");
@@ -298,6 +313,7 @@ const SECCIONES = {
   pd_clientes: subirPDClientes,
   pd_propios: subirPDPropios,
   ocupacion_almacen: subirOcupacionAlmacen,
+  productividad: subirProductividad,
 };
 
 // Corre UNA sección por su id sobre un browser ya abierto (usa el manifiesto
