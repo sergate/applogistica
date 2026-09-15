@@ -23,12 +23,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
   }
 
-  // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante).
+  // Filtro opcional por fecha: ?desde=YYYY-MM-DD (incluye esa fecha en adelante)
+  // y opcionalmente ?hasta=YYYY-MM-DD (para acotar a una semana puntual, igual
+  // que en /api/ecom/resumen).
   // Filtro opcional por tipo de pedido: ?tipoPedido=REMA|STD.
   // Filtro opcional "Demanda Total": ?incluirTerminados=1 incluye también los
   // pedidos OD_TERMINADO (que por defecto se excluyen de todos los cálculos).
   // Sin estos parámetros, se muestran todos los datos sin filtrar.
   const desde = request.nextUrl.searchParams.get("desde");
+  const hasta = request.nextUrl.searchParams.get("hasta");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
   const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
 
@@ -37,6 +40,9 @@ export async function GET(request: NextRequest) {
     let contables = rows.filter((r) => esContable(r, incluirTerminados));
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+    }
+    if (hasta) {
+      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) <= hasta : false));
     }
     if (tipoPedidoParam === "REMA" || tipoPedidoParam === "STD") {
       const pedidosRemaManual = await fetchPedidosRemaManual();
@@ -91,7 +97,14 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => b.uni - a.uni);
 
-    return NextResponse.json({ success: true, kpis, marcas, updatedAt: ultimaActualizacion(rows) });
+    // Fechas únicas de TODA la tabla (sin filtrar), para que el frontend
+    // arme el selector de "Semana del año" sin depender de los datos de
+    // "Por Fecha" (que solo se piden cuando esa otra pestaña está activa).
+    const fechasDisponibles = Array.from(
+      new Set(rows.map((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) : "SIN FECHA")))
+    );
+
+    return NextResponse.json({ success: true, kpis, marcas, fechasDisponibles, updatedAt: ultimaActualizacion(rows) });
   } catch (err) {
     return NextResponse.json(
       {

@@ -49,5 +49,8 @@ export interface ResumenData {
     totalRegistros: number;
   };
   marcas: MarcaResumen[];
+  // Fechas únicas presentes en la tabla (sin filtrar), para poder armar el
+  // selector de "Semana del año" sin depender de los datos de otras pestañas.
+  fechasDisponibles: string[];
   updatedAt: string | null;
 }

@@ -2118,6 +2118,13 @@ export default function DashboardLayout() {
     return true;
   });
 
+  // Subtotal de "Cantidad" sobre las filas filtradas -- solo tiene sentido
+  // mostrarlo cuando hay algún filtro aplicado (sin filtros, el subtotal
+  // sería igual al total general).
+  const hayFiltroProductividadActivo =
+    rangoProductividad !== null || fechaSeleccionadaProductividad !== "" || filtroTipoProcesoProductividad !== "TODOS";
+  const subtotalCantidadProductividad = filasProductividadFiltradas.reduce((acc, f) => acc + f.cantidad, 0);
+
 
   // =========================================================================
   // DATOS MOCK - OTRAS SECCIONES (Productividad, Carga, Remanentes)
@@ -4646,8 +4653,17 @@ export default function DashboardLayout() {
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left whitespace-nowrap">
-                  <thead className="text-slate-500 font-medium border-b border-slate-200">
-                    <tr>
+                  <thead>
+                    {hayFiltroProductividadActivo && filasProductividadFiltradas.length > 0 && (
+                      <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                        <td className="py-3 px-4 text-left" colSpan={2}>
+                          Subtotal
+                        </td>
+                        <td className="py-3 px-4 text-left">{fmtNum(subtotalCantidadProductividad)}</td>
+                        <td className="py-3 px-4 text-left"></td>
+                      </tr>
+                    )}
+                    <tr className="text-slate-500 font-medium border-b border-slate-200">
                       <th className="py-4 px-4 text-left">Fecha</th>
                       <th className="py-4 px-4 text-left">Tipo Proceso</th>
                       <th className="py-4 px-4 text-left">Cantidad</th>

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonCard } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { fmtNum, fmtPct, fmtFecha, dotForMarca, getThemeClasses } from "@/components/dashboard/formatters";
+import { fmtNum, fmtPct, fmtFecha, dotForMarca, getThemeClasses, semanasConDatosDe } from "@/components/dashboard/formatters";
 import type { ResumenData, CanalResumen } from "./types";
 
 export default function Resumen() {
@@ -14,6 +14,7 @@ export default function Resumen() {
   const [selectedMarca, setSelectedMarca] = useState<string | null>(null);
 
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
+  const [semanaResumen, setSemanaResumen] = useState<{ desde: string; hasta: string } | null>(null);
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
   // "Demanda Total": No (default) = igual que hoy, excluye OD_TERMINADO.
   // Sí = incluye también los pedidos OD_TERMINADO.
@@ -22,7 +23,10 @@ export default function Resumen() {
   const urlResumen = useMemo(() => {
     let url = "/api/resumen";
     const params = new URLSearchParams();
-    if (rangoResumen) {
+    if (semanaResumen) {
+      params.set("desde", semanaResumen.desde);
+      params.set("hasta", semanaResumen.hasta);
+    } else if (rangoResumen) {
       const d = new Date();
       d.setDate(d.getDate() - (rangoResumen - 1));
       params.set("desde", d.toISOString().slice(0, 10));
@@ -35,13 +39,18 @@ export default function Resumen() {
     }
     if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumen, filtroTipoResumen, filtroDemandaTotal]);
+  }, [rangoResumen, semanaResumen, filtroTipoResumen, filtroDemandaTotal]);
 
   const {
     data: resumenData,
     error: resumenError,
     isLoading: resumenLoading,
   } = useTabData<ResumenData>(activeTab, "Resumen", urlResumen, dataVersion);
+
+  // Semanas para el selector de Resumen -- calculadas sobre las fechas que
+  // devuelve la propia API (fechasDisponibles), no sobre los datos de Por
+  // Fecha/Por Pedidos (que solo se piden cuando esas pestañas están activas).
+  const semanasConDatosResumen = semanasConDatosDe(resumenData?.fechasDisponibles ?? []);
 
   const kpiData = [
     { title: "Total Unidades", value: resumenData ? fmtNum(resumenData.kpis.totalUni) : "—", theme: "blue", icon: <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /><polyline strokeLinecap="round" strokeLinejoin="round" points="3.27 6.96 12 12.01 20.73 6.96" /><line strokeLinecap="round" strokeLinejoin="round" x1="12" y1="22.08" x2="12" y2="12" /></svg> },
@@ -131,9 +140,12 @@ export default function Resumen() {
                 ]).map((opcion) => (
                   <button
                     key={opcion.dias}
-                    onClick={() => setRangoResumen(opcion.dias)}
+                    onClick={() => {
+                      setRangoResumen(opcion.dias);
+                      setSemanaResumen(null);
+                    }}
                     className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      rangoResumen === opcion.dias
+                      !semanaResumen && rangoResumen === opcion.dias
                         ? "bg-blue-600 text-white"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
                     }`}
@@ -141,6 +153,25 @@ export default function Resumen() {
                     {opcion.label}
                   </button>
                 ))}
+
+                <select
+                  value={semanaResumen ? semanaResumen.desde : ""}
+                  onChange={(e) => {
+                    const semana = semanasConDatosResumen.find((s) => s.desde === e.target.value);
+                    if (semana) {
+                      setSemanaResumen({ desde: semana.desde, hasta: semana.hasta });
+                      setRangoResumen(null);
+                    }
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium border-none focus:ring-2 focus:ring-blue-500 cursor-pointer ${
+                    semanaResumen ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-600"
+                  }`}
+                >
+                  <option value="">Semana del año...</option>
+                  {semanasConDatosResumen.map((s) => (
+                    <option key={s.desde} value={s.desde}>{s.label}</option>
+                  ))}
+                </select>
 
                 <select
                   value={filtroTipoResumen}
@@ -167,6 +198,7 @@ export default function Resumen() {
                 <button
                   onClick={() => {
                     setRangoResumen(null);
+                    setSemanaResumen(null);
                     setFiltroTipoResumen("TODOS");
                     setFiltroDemandaTotal(false);
                   }}
