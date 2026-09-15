@@ -222,7 +222,7 @@ async function subirProductividad(page, reportes) {
   const archivo = primerArchivo(reportes, "productividad");
 
   await irYLoguear(page);
-  await abrirMenu(page, "Producción por Proceso", "Importar Datos");
+  await abrirMenu(page, "Producción por proceso", "Importar Datos");
 
   await page.locator("input[type=file]").first().setInputFiles(archivo);
   await page.getByRole("button", { name: "Procesar", exact: true }).click();
