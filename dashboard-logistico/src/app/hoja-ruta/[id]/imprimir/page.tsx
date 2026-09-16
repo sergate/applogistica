@@ -85,15 +85,7 @@ export default function ImprimirHojaDeRutaPage() {
   }, [params.id]);
 
   const imprimir = async () => {
-    if (guiasSinPackingList.length > 0) {
-      const lista = guiasSinPackingList.map((d) => d.numero_guia || d.guia || "?").join(", ");
-      const seguir = window.confirm(
-        `Ojo: la guía ${lista} todavía no tiene el packing list procesado -- sus bultos se están contando ` +
-          `todos como "Producto" aunque puedan ser insumos. Esperá unos minutos y volvé a intentar, o ` +
-          `imprimí igual si estás seguro.\n\n¿Imprimir de todas formas?`
-      );
-      if (!seguir) return;
-    }
+    if (guiasSinPackingList.length > 0) return;
     try {
       await fetch(`/api/hoja-ruta/${params.id}/imprimir`, { method: "POST" });
     } catch {
@@ -136,18 +128,19 @@ export default function ImprimirHojaDeRutaPage() {
         <h1 className="text-xl font-bold text-slate-800">Hoja de Ruta #{hoja.id}</h1>
         <button
           onClick={imprimir}
-          className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+          disabled={guiasSinPackingList.length > 0}
+          className="px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed"
         >
           Imprimir
         </button>
       </div>
 
       {guiasSinPackingList.length > 0 && (
-        <div className="print:hidden mb-6 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          <p className="font-semibold">Atención: packing list sin procesar todavía</p>
+        <div className="print:hidden mb-6 rounded-lg border border-red-400 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-semibold">Impresión bloqueada: packing list sin procesar todavía</p>
           <p>
             La guía {guiasSinPackingList.map((d) => d.numero_guia || d.guia || "?").join(", ")} todavía no tiene el
-            desglose de insumos calculado -- por ahora sus bultos figuran todos como &quot;Producto&quot;. Esperá
+            desglose de insumos calculado -- por ahora sus bultos figurarían todos como &quot;Producto&quot;. Esperá
             unos minutos a que el Agente termine de procesar el packing list y volvé a entrar a esta pantalla.
           </p>
         </div>

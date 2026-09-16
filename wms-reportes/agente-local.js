@@ -54,6 +54,12 @@ const INTERVALO_REFRESCO_ESTADOS_MS = 20 * 60 * 1000;
 const VENTANA_DIAS_ATRAS_REFRESCO_ESTADOS = 14;
 const VENTANA_DIAS_ADELANTE_REFRESCO_ESTADOS = 3;
 
+// Cada cuánto se revisan guías Propio cuyo packing list quedó pendiente
+// (bultos_insumos sigue NULL en el Tablero) -- ver completarPackingListsFaltantes().
+// Más seguido que el refresco de estados porque mientras esto no se resuelve
+// la vista de impresión de la Hoja de Ruta bloquea imprimir esas guías.
+const INTERVALO_COMPLETAR_PACKING_MS = 5 * 60 * 1000;
+
 // Deploys de preview de Vercel (ej. el de la rama "test") pueden tener
 // activada la protección SSO, que redirige cualquier request sin sesión de
 // Vercel a una pantalla de login -- rompe las llamadas del agente aunque el
@@ -163,6 +169,82 @@ async function refrescarEstadosDespachoAutomatico(config) {
         }
         console.log(
           `[${new Date().toLocaleTimeString()}] Refresco automático de estados WMS: ${filas.length} guías (${fechaDesde} a ${fechaHasta}).`
+        );
+      } finally {
+        await cerrarContextos(contextos);
+      }
+    },
+    { maxEsperaMs: 5_000, silencioso: true }
+  );
+}
+
+// Completa el packing list de guías Propio que se quedaron a mitad de
+// camino de un import (bultos_insumos sigue NULL): el import de despacho
+// sube la cabecera de todas las guías de golpe, pero el desglose por
+// caja/SKU se consulta al WMS guía por guía dentro del mismo job -- si el
+// Agente se reinicia, o la consulta puntual de una guía falla, esa guía
+// queda sin packing list para siempre a menos que algo la reintente. Se
+// dispara solo desde modoLoop(), sin que nadie apriete ningún botón.
+async function completarPackingListsFaltantes(config) {
+  await conLock(
+    async () => {
+      const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/pendientes-packing`, {
+        headers: headersAgente(config.token),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) throw new Error(data?.error || `HTTP ${res.status}`);
+      const pendientes = data.pendientes || [];
+      if (pendientes.length === 0) return;
+
+      const contextos = await abrirContextos({ headless: true });
+      try {
+        const { paginaWms } = contextos;
+        await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+        await paginaWms.waitForTimeout(1000);
+        await descargador.chequearSesion(paginaWms);
+
+        let packingList = [];
+        let completadas = 0;
+        const GUIAS_POR_LOTE = 25;
+
+        const subirLote = async () => {
+          if (packingList.length === 0) return;
+          const resSubida = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
+            method: "POST",
+            headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+            body: JSON.stringify({ bultos: [], packingList }),
+          });
+          const dataSubida = await resSubida.json().catch(() => null);
+          if (!resSubida.ok || !dataSubida?.success) {
+            throw new Error(dataSubida?.error || `Error subiendo packing list (HTTP ${resSubida.status}).`);
+          }
+          packingList = [];
+        };
+
+        for (let i = 0; i < pendientes.length; i++) {
+          const pendiente = pendientes[i];
+          try {
+            const filasPacking = await reporteDespachos.obtenerPackingList(paginaWms, pendiente.despacho_cab_id);
+            for (const fp of filasPacking) {
+              packingList.push({
+                despacho_cab_id: pendiente.despacho_cab_id,
+                caja: fp.caja,
+                sku: fp.sku,
+                cantidad: fp.cantidad,
+              });
+            }
+            completadas++;
+          } catch (err) {
+            console.error(
+              `  (no pude completar el packing list de la guía ${pendiente.guia || pendiente.numero_guia}: ${err.message})`
+            );
+          }
+          if ((i + 1) % GUIAS_POR_LOTE === 0) await subirLote();
+        }
+        await subirLote();
+
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Packing list pendiente completado: ${completadas}/${pendientes.length} guías.`
         );
       } finally {
         await cerrarContextos(contextos);
@@ -583,17 +665,28 @@ async function modoLoop() {
   // Arranca corriendo uno apenas se levanta el Agente, después cada
   // INTERVALO_REFRESCO_ESTADOS_MS -- ver refrescarEstadosDespachoAutomatico.
   let proximoRefrescoEstados = Date.now();
+  let proximoCompletarPacking = Date.now();
   for (;;) {
     try {
       const pedido = await buscarProximoPedido(config.token);
       if (pedido) {
         await atenderPedido(config, pedido);
-      } else if (Date.now() >= proximoRefrescoEstados) {
-        proximoRefrescoEstados = Date.now() + INTERVALO_REFRESCO_ESTADOS_MS;
-        try {
-          await refrescarEstadosDespachoAutomatico(config);
-        } catch (err) {
-          console.error("Error en el refresco automático de estados WMS:", err instanceof Error ? err.message : err);
+      } else {
+        if (Date.now() >= proximoRefrescoEstados) {
+          proximoRefrescoEstados = Date.now() + INTERVALO_REFRESCO_ESTADOS_MS;
+          try {
+            await refrescarEstadosDespachoAutomatico(config);
+          } catch (err) {
+            console.error("Error en el refresco automático de estados WMS:", err instanceof Error ? err.message : err);
+          }
+        }
+        if (Date.now() >= proximoCompletarPacking) {
+          proximoCompletarPacking = Date.now() + INTERVALO_COMPLETAR_PACKING_MS;
+          try {
+            await completarPackingListsFaltantes(config);
+          } catch (err) {
+            console.error("Error completando packing lists pendientes:", err instanceof Error ? err.message : err);
+          }
         }
       }
     } catch (err) {
