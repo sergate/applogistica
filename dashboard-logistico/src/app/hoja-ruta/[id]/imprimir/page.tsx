@@ -85,6 +85,15 @@ export default function ImprimirHojaDeRutaPage() {
   }, [params.id]);
 
   const imprimir = async () => {
+    if (guiasSinPackingList.length > 0) {
+      const lista = guiasSinPackingList.map((d) => d.numero_guia || d.guia || "?").join(", ");
+      const seguir = window.confirm(
+        `Ojo: la guía ${lista} todavía no tiene el packing list procesado -- sus bultos se están contando ` +
+          `todos como "Producto" aunque puedan ser insumos. Esperá unos minutos y volvé a intentar, o ` +
+          `imprimí igual si estás seguro.\n\n¿Imprimir de todas formas?`
+      );
+      if (!seguir) return;
+    }
     try {
       await fetch(`/api/hoja-ruta/${params.id}/imprimir`, { method: "POST" });
     } catch {
@@ -97,6 +106,17 @@ export default function ImprimirHojaDeRutaPage() {
   if (cargando) return <div className="p-8 text-slate-500 text-sm">Cargando...</div>;
   if (error) return <div className="p-8 text-red-600 text-sm">{error}</div>;
   if (!hoja) return null;
+
+  // Guías Propio cuyo packing list todavía no se procesó (el import trae la
+  // cabecera de la guía en segundos, pero el desglose por caja/SKU tarda
+  // bastante más porque consulta el WMS bulto por bulto) -- mientras tanto
+  // bultosDespacho() cuenta todos sus bultos como "Producto" sin poder
+  // desglosar los insumos, así que avisamos antes de imprimir con ese dato
+  // incompleto.
+  const guiasSinPackingList = items
+    .filter((it) => it.tipo === "despacho")
+    .map((it) => it.detalle as DespachoDetalle | null)
+    .filter((d): d is DespachoDetalle => !!d && (d.tipo || "").trim().toUpperCase() === "PROPIO" && d.bultos_insumos == null);
 
   const subtotalProducto = items.reduce((acc, it) => {
     if (it.tipo === "interlocal") return acc + ((it.detalle as InterlocalDetalle | null)?.cantidad_bultos ?? 1);
@@ -121,6 +141,17 @@ export default function ImprimirHojaDeRutaPage() {
           Imprimir
         </button>
       </div>
+
+      {guiasSinPackingList.length > 0 && (
+        <div className="print:hidden mb-6 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <p className="font-semibold">Atención: packing list sin procesar todavía</p>
+          <p>
+            La guía {guiasSinPackingList.map((d) => d.numero_guia || d.guia || "?").join(", ")} todavía no tiene el
+            desglose de insumos calculado -- por ahora sus bultos figuran todos como &quot;Producto&quot;. Esperá
+            unos minutos a que el Agente termine de procesar el packing list y volvé a entrar a esta pantalla.
+          </p>
+        </div>
+      )}
 
       <div className="border-2 border-slate-800 p-6 print:border-black">
         <div className="text-center mb-4">
