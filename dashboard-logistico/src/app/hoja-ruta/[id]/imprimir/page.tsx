@@ -203,12 +203,15 @@ export default function ImprimirHojaDeRutaPage() {
           </tfoot>
         </table>
 
-        <div className="grid grid-cols-2 gap-8 mt-10 pt-6 text-sm">
+        <div className="grid grid-cols-3 gap-8 mt-10 pt-6 text-sm">
           <div>
             <p className="border-t border-slate-800 pt-1">Firma responsable expedición</p>
           </div>
           <div>
             <p className="border-t border-slate-800 pt-1">Firma transportista</p>
+          </div>
+          <div>
+            <p className="border-t border-slate-800 pt-1">Firma responsable local/cliente</p>
           </div>
         </div>
       </div>
