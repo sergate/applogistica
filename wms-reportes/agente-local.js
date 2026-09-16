@@ -206,6 +206,8 @@ async function completarPackingListsFaltantes(config) {
         let packingList = [];
         let completadas = 0;
         const GUIAS_POR_LOTE = 25;
+        let msPackingTotal = 0;
+        const inicioLoop = Date.now();
 
         const subirLote = async () => {
           if (packingList.length === 0) return;
@@ -224,7 +226,9 @@ async function completarPackingListsFaltantes(config) {
         for (let i = 0; i < pendientes.length; i++) {
           const pendiente = pendientes[i];
           try {
+            const inicioPacking = Date.now();
             const filasPacking = await reporteDespachos.obtenerPackingList(paginaWms, pendiente.despacho_cab_id);
+            msPackingTotal += Date.now() - inicioPacking;
             for (const fp of filasPacking) {
               packingList.push({
                 despacho_cab_id: pendiente.despacho_cab_id,
@@ -245,6 +249,10 @@ async function completarPackingListsFaltantes(config) {
 
         console.log(
           `[${new Date().toLocaleTimeString()}] Packing list pendiente completado: ${completadas}/${pendientes.length} guías.`
+        );
+        console.log(
+          `  -> Timing: loop completo ${Date.now() - inicioLoop}ms | ${completadas} consultas, ` +
+            `${msPackingTotal}ms total, ${completadas ? Math.round(msPackingTotal / completadas) : 0}ms promedio.`
         );
       } finally {
         await cerrarContextos(contextos);
@@ -353,6 +361,15 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
   let bultosSubidos = 0;
   let packingSubido = 0;
 
+  // Timing para medir cuánto tarda cada consulta al WMS -- datos crudos para
+  // decidir si conviene paralelizar estas consultas (hoy son secuenciales,
+  // una guía atrás de la otra). Se loguea un resumen al final del pedido.
+  let msDetalleTotal = 0;
+  let cantDetalle = 0;
+  let msPackingTotal = 0;
+  let cantPacking = 0;
+  const inicioLoop = Date.now();
+
   const subirLote = async () => {
     if (bultos.length === 0 && packingList.length === 0) return;
     const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
@@ -379,7 +396,10 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
       `Detalle de bultos: guía ${i + 1}/${filas.length}...`
     );
     try {
+      const inicioDetalle = Date.now();
       const detalles = await reporteDespachos.detalleDespacho(paginaWms, cab.despacho_cab_id);
+      msDetalleTotal += Date.now() - inicioDetalle;
+      cantDetalle++;
       for (const det of detalles) {
         bultos.push({
           despacho_cab_id: cab.despacho_cab_id,
@@ -394,7 +414,10 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
 
     if ((cab.tipo || "").trim().toUpperCase() === "PROPIO") {
       try {
+        const inicioPacking = Date.now();
         const filasPacking = await reporteDespachos.obtenerPackingList(paginaWms, cab.despacho_cab_id);
+        msPackingTotal += Date.now() - inicioPacking;
+        cantPacking++;
         for (const fp of filasPacking) {
           packingList.push({ despacho_cab_id: cab.despacho_cab_id, caja: fp.caja, sku: fp.sku, cantidad: fp.cantidad });
         }
@@ -412,6 +435,12 @@ async function correrPedidoDespachoImportar(config, pedido, paginas) {
   await avisarProgreso(config.token, pedido.id, 95, "Subiendo el último lote al Tablero...");
   await subirLote();
   console.log(`  -> Subidos ${bultosSubidos} bultos y ${packingSubido} filas de packing list.`);
+  console.log(
+    `  -> Timing: loop completo ${Date.now() - inicioLoop}ms | detalle: ${cantDetalle} consultas, ` +
+      `${msDetalleTotal}ms total, ${cantDetalle ? Math.round(msDetalleTotal / cantDetalle) : 0}ms promedio | ` +
+      `packing: ${cantPacking} consultas, ${msPackingTotal}ms total, ` +
+      `${cantPacking ? Math.round(msPackingTotal / cantPacking) : 0}ms promedio.`
+  );
 
   return []; // no hay archivos locales que borrar en este tipo de pedido
 }
