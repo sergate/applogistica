@@ -12,6 +12,11 @@ interface BultoEstado extends BultoEsperado {
   escaneado: boolean;
 }
 
+// El API devuelve cada bulto esperado ya con su estado "escaneado" resuelto
+// (en true si la sesión se está retomando y ese código ya tenía un evento
+// ok_nuevo antes) -- no se recalcula en el cliente.
+type BultoEsperadoConEstado = BultoEsperado & { escaneado: boolean };
+
 interface HojaInfo {
   id: number;
   fecha: string;
@@ -76,7 +81,12 @@ export default function EscanerHojaDeRutaPage() {
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo iniciar el escaneo.");
       setHoja(data.hoja);
       setEscaneoId(data.escaneoId);
-      setBultos((data.bultosEsperados as BultoEsperado[]).map((b) => ({ ...b, escaneado: false })));
+      setBultos(data.bultosEsperados as BultoEsperadoConEstado[]);
+      setAviso(
+        data.retomada
+          ? `Retomando escaneo anterior: ya tenías ${(data.bultosEsperados as BultoEsperadoConEstado[]).filter((b) => b.escaneado).length} bultos escaneados.`
+          : null
+      );
       setFase("escaneando");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
