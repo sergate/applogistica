@@ -8492,7 +8492,6 @@ export default function DashboardLayout() {
                         <th className="py-3 px-4 text-left">Marca</th>
                         <th className="py-3 px-4 text-left">N° Movimiento</th>
                         <th className="py-3 px-4 text-left">N° Remito</th>
-                        <th className="py-3 px-4 text-left">N° Etiqueta</th>
                         <th className="py-3 px-4 text-left">Bultos</th>
                         <th className="py-3 px-4 text-left">Observaciones</th>
                         <th className="py-3 px-4 text-left">Registrado por</th>
@@ -8508,9 +8507,6 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
                           <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
-                          <td className="py-3 px-4 text-left">
-                            {f.etiquetas && f.etiquetas.length > 1 ? f.etiquetas.join(", ") : f.numero_etiqueta || "—"}
-                          </td>
                           <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
                           <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.registrado_por_nombre || "—"}</td>
@@ -8526,7 +8522,7 @@ export default function DashboardLayout() {
                       ))}
                       {filasFiltradasInterlocalesPendientes(interlocalesData?.filas || []).length === 0 && !interlocalesLoading && (
                         <tr>
-                          <td colSpan={11} className="py-6 px-4 text-center text-slate-400">
+                          <td colSpan={10} className="py-6 px-4 text-center text-slate-400">
                             {(interlocalesData?.filas || []).length === 0
                               ? "No hay interlocales pendientes."
                               : "Ningún interlocal coincide con la búsqueda."}
