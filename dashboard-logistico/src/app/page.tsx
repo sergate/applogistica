@@ -1068,11 +1068,24 @@ export default function DashboardLayout() {
     setInterlocalGuardadoError(null);
     setInterlocalGuardadoOk(false);
     const editando = interlocalEditandoId !== null;
+    // El campo N° Etiqueta arranca precargado con el prefijo "interlocal-0"
+    // como ayuda para tipear -- si el usuario no lo tocó (modo 1 bulto) hay
+    // que tratarlo como vacío, sino se mandaría el prefijo como si fuera una
+    // etiqueta real. En modo varios bultos la lista "etiquetas" ya excluye
+    // el prefijo sin completar (ver agregarEtiquetaInterlocalMultiBulto).
+    const cantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
+    const numeroEtiquetaLimpio = interlocalForm.numeroEtiqueta.trim();
+    const etiquetasParaEnviar =
+      cantidadBultosNum > 1
+        ? interlocalForm.etiquetas
+        : numeroEtiquetaLimpio && numeroEtiquetaLimpio !== PREFIJO_ETIQUETA_INTERLOCAL
+          ? [numeroEtiquetaLimpio]
+          : [];
     try {
       const res = await fetch(editando ? `/api/interlocales/${interlocalEditandoId}` : "/api/interlocales", {
         method: editando ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(interlocalForm),
+        body: JSON.stringify({ ...interlocalForm, etiquetas: etiquetasParaEnviar }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo registrar el interlocal.");
