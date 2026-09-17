@@ -7,6 +7,12 @@ export const dynamic = "force-dynamic";
 
 const MARCAS_VALIDAS = ["CHEEKY", "COMO QUIERES", "AWADA", "ESTUDIO 5"] as const;
 
+// La numeración automática/compartida de N° de Movimiento aplica para
+// "productos" y "varios" (no para "control_calidad", que tiene su propia
+// nomenclatura) solo cuando el origen es el CD (33000) -- con cualquier
+// otro origen, ambos tipos vuelven a cargarse a mano.
+const ORIGEN_CODIGO_NUMERACION_AUTOMATICA = "33000";
+
 // Modifica un interlocal ya registrado (corregir un dato mal transcripto del
 // rótulo). Solo mientras esté "pendiente" -- una vez que entró a una Hoja de
 // Ruta o se despachó, ya no se puede tocar.
@@ -29,7 +35,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { data: actual } = await supabaseAdmin
       .from("interlocales")
-      .select("estado, tipo_envio, numero_remito")
+      .select("estado, tipo_envio, numero_remito, local_origen_codigo")
       .eq("id", interlocalId)
       .maybeSingle();
     if (!actual) return NextResponse.json({ success: false, error: "No existe ese interlocal." }, { status: 404 });
@@ -50,8 +56,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const localOrigenCodigo = typeof body?.localOrigenCodigo === "string" ? body.localOrigenCodigo.trim() : "";
     const localDestinoCodigo = typeof body?.localDestinoCodigo === "string" ? body.localDestinoCodigo.trim() : "";
     const fecha = typeof body?.fecha === "string" ? body.fecha.trim() : "";
+    const numeroMovimientoAutomatico =
+      (tipoEnvio === "productos" || tipoEnvio === "varios") && localOrigenCodigo === ORIGEN_CODIGO_NUMERACION_AUTOMATICA;
 
-    if (!numeroMovimiento && tipoEnvio !== "varios") {
+    if (!numeroMovimiento && !numeroMovimientoAutomatico) {
       return NextResponse.json({ success: false, error: "Falta el N° de Movimiento." }, { status: 400 });
     }
     if (!localOrigenCodigo) {
@@ -119,13 +127,17 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     const numeroEtiqueta = etiquetas[0] || null;
 
-    // Igual criterio que en el alta: "varios" nunca se edita a mano. Si
-    // recién ahora pasa a ser "varios" se le asigna un número nuevo (y se
-    // usa también para N° de Movimiento); si ya era "varios" se mantiene el
-    // que tenía (no se regenera en cada edición).
+    // Igual criterio que en el alta: en modo automático nunca se edita a
+    // mano. Si recién ahora entra en modo automático (cambió el tipo o el
+    // origen) se le asigna un número nuevo (y se usa también para N° de
+    // Movimiento); si ya estaba en modo automático se mantiene el que tenía
+    // (no se regenera en cada edición).
+    const actualEraAutomatico =
+      (actual.tipo_envio === "productos" || actual.tipo_envio === "varios") &&
+      actual.local_origen_codigo === ORIGEN_CODIGO_NUMERACION_AUTOMATICA;
     let numeroRemito: string | null;
-    if (tipoEnvio === "varios") {
-      if (actual.tipo_envio === "varios") {
+    if (numeroMovimientoAutomatico) {
+      if (actualEraAutomatico) {
         numeroRemito = actual.numero_remito;
       } else {
         const { data: numeroGenerado, error: errorNumero } = await supabaseAdmin.rpc("siguiente_numero_varios_interlocal");

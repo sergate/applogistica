@@ -8,6 +8,12 @@ export const revalidate = 0;
 
 const MARCAS_VALIDAS = ["CHEEKY", "COMO QUIERES", "AWADA", "ESTUDIO 5"] as const;
 
+// La numeración automática/compartida de N° de Movimiento aplica para
+// "productos" y "varios" (no para "control_calidad", que tiene su propia
+// nomenclatura) solo cuando el origen es el CD (33000) -- con cualquier
+// otro origen, ambos tipos vuelven a cargarse a mano.
+const ORIGEN_CODIGO_NUMERACION_AUTOMATICA = "33000";
+
 // Listado de interlocales, filtrable por estado (default "pendiente"),
 // local destino y fecha -- es como la futura Hoja de Ruta va a buscar qué
 // hay disponible para un local en un día.
@@ -83,8 +89,10 @@ export async function POST(request: NextRequest) {
     const localOrigenCodigo = typeof body?.localOrigenCodigo === "string" ? body.localOrigenCodigo.trim() : "";
     const localDestinoCodigo = typeof body?.localDestinoCodigo === "string" ? body.localDestinoCodigo.trim() : "";
     const fecha = typeof body?.fecha === "string" ? body.fecha.trim() : "";
+    const numeroMovimientoAutomatico =
+      (tipoEnvio === "productos" || tipoEnvio === "varios") && localOrigenCodigo === ORIGEN_CODIGO_NUMERACION_AUTOMATICA;
 
-    if (!numeroMovimiento && tipoEnvio !== "varios") {
+    if (!numeroMovimiento && !numeroMovimientoAutomatico) {
       return NextResponse.json({ success: false, error: "Falta el N° de Movimiento." }, { status: 400 });
     }
     if (!localOrigenCodigo) {
@@ -155,11 +163,13 @@ export async function POST(request: NextRequest) {
     }
     const numeroEtiqueta = etiquetas[0] || null;
 
-    // "Varios" no se carga a mano -- el número lo asigna la función de
-    // Postgres de forma atómica (evita que dos altas simultáneas se lleven
-    // el mismo número), y se usa igual para N° de Remito y N° de Movimiento.
+    // "Productos"/"varios" con origen 33000 (CD) no se cargan a mano -- el
+    // número lo asigna la función de Postgres de forma atómica (evita que
+    // dos altas simultáneas se lleven el mismo número), y se usa igual para
+    // N° de Remito y N° de Movimiento. Cualquier otro caso (otro origen, o
+    // "control_calidad" que tiene su propia nomenclatura) se carga a mano.
     let numeroRemito: string | null;
-    if (tipoEnvio === "varios") {
+    if (numeroMovimientoAutomatico) {
       const { data: numeroGenerado, error: errorNumero } = await supabaseAdmin.rpc("siguiente_numero_varios_interlocal");
       if (errorNumero) throw new Error(`Supabase (siguiente_numero_varios_interlocal): ${errorNumero.message}`);
       numeroRemito = String(numeroGenerado);

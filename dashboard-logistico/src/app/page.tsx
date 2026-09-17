@@ -949,6 +949,13 @@ export default function DashboardLayout() {
   // completar los dígitos que le falten, en vez de tipear todo el código.
   const PREFIJO_ETIQUETA_INTERLOCAL = "interlocal-0";
 
+  // La numeración automática/compartida de N° de Movimiento aplica para
+  // "productos" y "varios" (no para "control_calidad", que tiene su propia
+  // nomenclatura) solo cuando el origen es el CD (33000) -- con cualquier
+  // otro origen, ambos tipos vuelven a cargarse a mano. Mismo criterio que
+  // en el backend (src/app/api/interlocales/route.ts).
+  const ORIGEN_CODIGO_NUMERACION_AUTOMATICA = "33000";
+
   const interlocalFormVacio = {
     tipoEnvio: "",
     localDestinoCodigo: "",
@@ -968,7 +975,10 @@ export default function DashboardLayout() {
   const [interlocalGuardadoOk, setInterlocalGuardadoOk] = useState(false);
   const [interlocalEditandoId, setInterlocalEditandoId] = useState<number | null>(null);
   const interlocalTipoEnvioElegido = interlocalForm.tipoEnvio !== "";
-  const interlocalRemitoEditable = interlocalForm.tipoEnvio === "productos" || interlocalForm.tipoEnvio === "control_calidad";
+  const interlocalNumeroAutomatico =
+    (interlocalForm.tipoEnvio === "productos" || interlocalForm.tipoEnvio === "varios") &&
+    interlocalForm.localOrigenCodigo.trim() === ORIGEN_CODIGO_NUMERACION_AUTOMATICA;
+  const interlocalRemitoEditable = interlocalTipoEnvioElegido && !interlocalNumeroAutomatico;
   const interlocalCantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
   // Obligatorio cargar la etiqueta de cada bulto -- en modo 1 bulto, el
   // campo tiene que tener algo más que el prefijo precargado sin completar.
@@ -1042,27 +1052,30 @@ export default function DashboardLayout() {
     setInterlocalGuardadoOk(false);
   };
 
-  // "Varios" no se carga a mano -- solo mostramos una vista previa de qué
-  // número le tocaría (no lo reserva, el real se asigna recién al guardar).
-  // "Control de Calidad" se carga a mano igual que "productos" (arranca en
-  // blanco al elegirlo), pero con su propia nomenclatura -- no comparte la
-  // secuencia numérica de productos/varios.
-  const cambiarTipoEnvioInterlocal = async (valor: string) => {
-    const esManual = valor === "productos" || valor === "control_calidad";
-    setInterlocalForm((prev) => ({
-      ...prev,
-      tipoEnvio: valor,
-      numeroRemito: esManual ? "" : prev.numeroRemito,
-      numeroMovimiento: esManual ? "" : prev.numeroMovimiento,
-    }));
-    setInterlocalGuardadoOk(false);
-    if (valor !== "varios") return;
+  // Sincroniza el modo automático de N° de Movimiento/Remito según tipo +
+  // origen (ver interlocalNumeroAutomatico) -- se llama explícitamente desde
+  // los onChange del tipo y del origen, nunca de forma reactiva a un efecto,
+  // para no pisar el número ya guardado al abrir una edición existente
+  // (iniciarEdicionInterlocal solo setea el form, no pasa por acá).
+  const sincronizarNumeroAutomaticoInterlocal = async (tipoEnvio: string, localOrigenCodigo: string) => {
+    const automatico =
+      (tipoEnvio === "productos" || tipoEnvio === "varios") &&
+      localOrigenCodigo.trim() === ORIGEN_CODIGO_NUMERACION_AUTOMATICA;
+    if (!automatico) {
+      setInterlocalForm((prev) =>
+        prev.tipoEnvio === tipoEnvio && prev.localOrigenCodigo === localOrigenCodigo && (prev.numeroMovimiento || prev.numeroRemito)
+          ? { ...prev, numeroMovimiento: "", numeroRemito: "" }
+          : prev
+      );
+      return;
+    }
     try {
       const res = await fetch("/api/interlocales/proximo-numero-varios");
       const data = await res.json();
       if (data.success) {
         setInterlocalForm((prev) =>
-          prev.tipoEnvio === "varios"
+          (prev.tipoEnvio === "productos" || prev.tipoEnvio === "varios") &&
+          prev.localOrigenCodigo.trim() === ORIGEN_CODIGO_NUMERACION_AUTOMATICA
             ? { ...prev, numeroRemito: String(data.proximoNumero), numeroMovimiento: String(data.proximoNumero) }
             : prev
         );
@@ -1071,6 +1084,12 @@ export default function DashboardLayout() {
       // Si falla la vista previa no bloqueamos la carga -- el número real
       // se asigna igual al guardar.
     }
+  };
+
+  const cambiarTipoEnvioInterlocal = (valor: string) => {
+    setInterlocalForm((prev) => ({ ...prev, tipoEnvio: valor }));
+    setInterlocalGuardadoOk(false);
+    sincronizarNumeroAutomaticoInterlocal(valor, interlocalForm.localOrigenCodigo);
   };
 
   const registrarInterlocal = async () => {
@@ -8296,6 +8315,9 @@ export default function DashboardLayout() {
                       onChange={(e) => {
                         actualizarInterlocalForm("localOrigenCodigo", e.target.value);
                         buscarClientesDebounced(e.target.value, setBusquedaOrigen);
+                        if (interlocalForm.tipoEnvio === "productos" || interlocalForm.tipoEnvio === "varios") {
+                          sincronizarNumeroAutomaticoInterlocal(interlocalForm.tipoEnvio, e.target.value);
+                        }
                       }}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
@@ -8328,12 +8350,12 @@ export default function DashboardLayout() {
 
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">
-                      N° de Movimiento{interlocalForm.tipoEnvio !== "varios" ? " *" : ""}
+                      N° de Movimiento{!interlocalNumeroAutomatico ? " *" : ""}
                     </label>
                     <input
                       type="text"
                       disabled={!interlocalTipoEnvioElegido || !interlocalRemitoEditable}
-                      placeholder={interlocalForm.tipoEnvio === "varios" ? "Se asigna automáticamente" : undefined}
+                      placeholder={interlocalNumeroAutomatico ? "Se asigna automáticamente" : undefined}
                       value={interlocalForm.numeroMovimiento}
                       onChange={(e) => actualizarInterlocalForm("numeroMovimiento", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -8345,7 +8367,7 @@ export default function DashboardLayout() {
                     <input
                       type="text"
                       disabled={!interlocalTipoEnvioElegido || !interlocalRemitoEditable}
-                      placeholder={interlocalForm.tipoEnvio === "varios" ? "Se asigna automáticamente" : undefined}
+                      placeholder={interlocalNumeroAutomatico ? "Se asigna automáticamente" : undefined}
                       value={interlocalForm.numeroRemito}
                       onChange={(e) => actualizarInterlocalForm("numeroRemito", e.target.value)}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
