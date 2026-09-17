@@ -103,6 +103,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     nombre: "Expedición",
     subsecciones: [
       { key: "EXP-Interlocales", label: "Interlocales" },
+      { key: "EXP-InterlocalesEliminar", label: "Eliminar Interlocal (en Interlocales)" },
       { key: "EXP-HojaRuta", label: "Hoja de Ruta" },
       { key: "EXP-Historico", label: "Histórico Despachados" },
       { key: "EXP-Etiquetas", label: "Etiquetas" },

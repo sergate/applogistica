@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { requireAdminPermission } from "@/lib/adminAuth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -204,6 +205,52 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     return NextResponse.json({ success: true, fila: { ...data, etiquetas } });
+  } catch (err) {
+    return NextResponse.json(
+      { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
+      { status: 500 }
+    );
+  }
+}
+
+// Elimina un interlocal cargado por error. Requiere el permiso especial
+// EXP-InterlocalesEliminar (aparte de EXP-Interlocales) -- se piensa para
+// otorgárselo puntualmente a un perfil, no a cualquiera que carga
+// interlocales. Solo mientras esté "pendiente", igual que la edición.
+export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!supabaseEnvOk) {
+    return NextResponse.json({ success: false, error: "Faltan configurar las variables de Supabase." }, { status: 500 });
+  }
+
+  const auth = await requireAdminPermission("EXP-InterlocalesEliminar");
+  if (!auth.autorizado) {
+    return NextResponse.json({ success: false, error: auth.error }, { status: auth.status });
+  }
+
+  try {
+    const { id } = await params;
+    const interlocalId = Number(id);
+    if (!Number.isFinite(interlocalId)) {
+      return NextResponse.json({ success: false, error: "ID de interlocal inválido." }, { status: 400 });
+    }
+
+    const { data: actual } = await supabaseAdmin
+      .from("interlocales")
+      .select("estado")
+      .eq("id", interlocalId)
+      .maybeSingle();
+    if (!actual) return NextResponse.json({ success: false, error: "No existe ese interlocal." }, { status: 404 });
+    if (actual.estado !== "pendiente") {
+      return NextResponse.json(
+        { success: false, error: "Solo se puede eliminar un interlocal mientras esté pendiente." },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabaseAdmin.from("interlocales").delete().eq("id", interlocalId);
+    if (error) throw new Error(`Supabase (interlocales): ${error.message}`);
+
+    return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

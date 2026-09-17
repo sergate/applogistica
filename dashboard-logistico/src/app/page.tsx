@@ -1056,6 +1056,39 @@ export default function DashboardLayout() {
     }));
   };
 
+  // El prefijo "interlocal-0" del campo N° Etiqueta no se puede borrar ni
+  // pisar en ninguna instancia (ni en modo 1 bulto ni en modo varios
+  // bultos) -- si el cambio resultante no lo respeta, se ignora.
+  const onChangeNumeroEtiquetaInterlocal = (valor: string) => {
+    if (!valor.startsWith(PREFIJO_ETIQUETA_INTERLOCAL)) return;
+    actualizarInterlocalForm("numeroEtiqueta", valor);
+  };
+
+  const onKeyDownNumeroEtiquetaInterlocal = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    const min = PREFIJO_ETIQUETA_INTERLOCAL.length;
+    const inicio = el.selectionStart ?? 0;
+    const fin = el.selectionEnd ?? 0;
+    if ((e.key === "Backspace" && inicio <= min && fin <= min) || (e.key === "Delete" && inicio < min)) {
+      e.preventDefault();
+      return;
+    }
+    if (interlocalCantidadBultosNum > 1) agregarEtiquetaInterlocalMultiBulto(e);
+  };
+
+  // Además de bloquear borrar el prefijo, evitamos que el cursor/selección
+  // quede posicionado adentro de él (click, foco, flechas) -- así el usuario
+  // siempre escribe después del prefijo, nunca en medio.
+  const clampCursorNumeroEtiquetaInterlocal = (e: React.SyntheticEvent<HTMLInputElement>) => {
+    const el = e.currentTarget;
+    const min = PREFIJO_ETIQUETA_INTERLOCAL.length;
+    const inicio = el.selectionStart ?? 0;
+    const fin = el.selectionEnd ?? 0;
+    if (inicio < min || fin < min) {
+      el.setSelectionRange(Math.max(inicio, min), Math.max(fin, min));
+    }
+  };
+
   const quitarEtiquetaInterlocalMultiBulto = (idx: number) => {
     setInterlocalForm((prev) => ({ ...prev, etiquetas: prev.etiquetas.filter((_, i) => i !== idx) }));
     setInterlocalGuardadoOk(false);
@@ -1163,6 +1196,28 @@ export default function DashboardLayout() {
     setInterlocalForm(interlocalFormVacio);
     setInterlocalGuardadoError(null);
     setInterlocalGuardadoOk(false);
+  };
+
+  const [interlocalEliminandoId, setInterlocalEliminandoId] = useState<number | null>(null);
+
+  // Requiere el permiso especial EXP-InterlocalesEliminar (aparte de
+  // EXP-Interlocales) -- ver src/app/api/interlocales/[id]/route.ts (DELETE).
+  const eliminarInterlocal = async (f: InterlocalFila) => {
+    if (!window.confirm(`¿Eliminar el interlocal Mov. ${f.numero_movimiento}? Esta acción no se puede deshacer.`)) {
+      return;
+    }
+    setInterlocalEliminandoId(f.id);
+    try {
+      const res = await fetch(`/api/interlocales/${f.id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo eliminar el interlocal.");
+      if (interlocalEditandoId === f.id) cancelarEdicionInterlocal();
+      mutateInterlocales();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setInterlocalEliminandoId(null);
+    }
   };
 
   const {
@@ -8398,8 +8453,11 @@ export default function DashboardLayout() {
                       }
                       placeholder="se usa como guía WMS"
                       value={interlocalForm.numeroEtiqueta}
-                      onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
-                      onKeyDown={interlocalCantidadBultosNum > 1 ? agregarEtiquetaInterlocalMultiBulto : undefined}
+                      onChange={(e) => onChangeNumeroEtiquetaInterlocal(e.target.value)}
+                      onKeyDown={onKeyDownNumeroEtiquetaInterlocal}
+                      onKeyUp={clampCursorNumeroEtiquetaInterlocal}
+                      onClick={clampCursorNumeroEtiquetaInterlocal}
+                      onFocus={clampCursorNumeroEtiquetaInterlocal}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     {interlocalCantidadBultosNum > 1 && interlocalForm.etiquetas.length > 0 && (
@@ -8549,10 +8607,19 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">
                             <button
                               onClick={() => iniciarEdicionInterlocal(f)}
-                              className="text-sm text-blue-600 hover:underline"
+                              className="text-sm text-blue-600 hover:underline mr-3"
                             >
                               Modificar
                             </button>
+                            {tienePermiso("EXP-InterlocalesEliminar") && (
+                              <button
+                                onClick={() => eliminarInterlocal(f)}
+                                disabled={interlocalEliminandoId === f.id}
+                                className="text-sm text-red-600 hover:underline disabled:opacity-50"
+                              >
+                                {interlocalEliminandoId === f.id ? "Eliminando..." : "Eliminar"}
+                              </button>
+                            )}
                           </td>
                         </tr>
                       ))}
