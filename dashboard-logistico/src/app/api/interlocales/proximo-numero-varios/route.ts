@@ -20,14 +20,10 @@ export async function GET() {
   }
 
   try {
-    const { data, error } = await supabaseAdmin
-      .from("interlocales_contador_varios")
-      .select("ultimo_numero")
-      .eq("id", 1)
-      .single();
-    if (error) throw new Error(`Supabase (interlocales_contador_varios): ${error.message}`);
+    const { data, error } = await supabaseAdmin.rpc("proximo_numero_varios_interlocal_preview");
+    if (error) throw new Error(`Supabase (proximo_numero_varios_interlocal_preview): ${error.message}`);
 
-    return NextResponse.json({ success: true, proximoNumero: (data?.ultimo_numero || 0) + 1 });
+    return NextResponse.json({ success: true, proximoNumero: data });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
