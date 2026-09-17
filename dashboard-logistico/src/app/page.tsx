@@ -969,6 +969,13 @@ export default function DashboardLayout() {
   const [interlocalEditandoId, setInterlocalEditandoId] = useState<number | null>(null);
   const interlocalTipoEnvioElegido = interlocalForm.tipoEnvio !== "";
   const interlocalRemitoEditable = interlocalForm.tipoEnvio === "productos";
+  const interlocalCantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
+  // Obligatorio cargar la etiqueta de cada bulto -- en modo 1 bulto, el
+  // campo tiene que tener algo más que el prefijo precargado sin completar.
+  const interlocalEtiquetasCompletas =
+    interlocalCantidadBultosNum > 1
+      ? interlocalForm.etiquetas.length === interlocalCantidadBultosNum
+      : interlocalForm.numeroEtiqueta.trim() !== "" && interlocalForm.numeroEtiqueta.trim() !== PREFIJO_ETIQUETA_INTERLOCAL;
   const [busquedaOrigen, setBusquedaOrigen] = useState<{ codigo: string; nombre: string }[]>([]);
   const [busquedaDestino, setBusquedaDestino] = useState<{ codigo: string; nombre: string }[]>([]);
   const interlocalBusquedaTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1015,10 +1022,9 @@ export default function DashboardLayout() {
   const agregarEtiquetaInterlocalMultiBulto = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
-    const cantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
     const codigo = interlocalForm.numeroEtiqueta.trim();
     if (!codigo || codigo === PREFIJO_ETIQUETA_INTERLOCAL) return;
-    if (interlocalForm.etiquetas.length >= cantidadBultosNum) return;
+    if (interlocalForm.etiquetas.length >= interlocalCantidadBultosNum) return;
     if (interlocalForm.etiquetas.includes(codigo)) {
       setInterlocalGuardadoError(`La etiqueta "${codigo}" ya se cargó para este interlocal.`);
       return;
@@ -1073,10 +1079,9 @@ export default function DashboardLayout() {
     // que tratarlo como vacío, sino se mandaría el prefijo como si fuera una
     // etiqueta real. En modo varios bultos la lista "etiquetas" ya excluye
     // el prefijo sin completar (ver agregarEtiquetaInterlocalMultiBulto).
-    const cantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
     const numeroEtiquetaLimpio = interlocalForm.numeroEtiqueta.trim();
     const etiquetasParaEnviar =
-      cantidadBultosNum > 1
+      interlocalCantidadBultosNum > 1
         ? interlocalForm.etiquetas
         : numeroEtiquetaLimpio && numeroEtiquetaLimpio !== PREFIJO_ETIQUETA_INTERLOCAL
           ? [numeroEtiquetaLimpio]
@@ -8342,51 +8347,49 @@ export default function DashboardLayout() {
                     />
                   </div>
 
-                  {(() => {
-                    const cantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
-                    const esMultiBulto = cantidadBultosNum > 1;
-                    return (
-                      <div className={esMultiBulto ? "md:col-span-2" : undefined}>
-                        <label className="block text-xs font-medium text-slate-500 mb-1">
-                          N° Etiqueta{esMultiBulto ? ` (${interlocalForm.etiquetas.length}/${cantidadBultosNum} cargadas)` : ""}
-                        </label>
-                        <input
-                          type="text"
-                          disabled={
-                            !interlocalTipoEnvioElegido || (esMultiBulto && interlocalForm.etiquetas.length >= cantidadBultosNum)
-                          }
-                          placeholder="se usa como guía WMS"
-                          value={interlocalForm.numeroEtiqueta}
-                          onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
-                          onKeyDown={esMultiBulto ? agregarEtiquetaInterlocalMultiBulto : undefined}
-                          className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                        />
-                        {esMultiBulto && interlocalForm.etiquetas.length > 0 && (
-                          <ul className="mt-2 flex flex-wrap gap-2">
-                            {interlocalForm.etiquetas.map((et, i) => (
-                              <li
-                                key={et}
-                                className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-full bg-slate-200 text-xs text-slate-600"
-                              >
-                                {et}
-                                <button
-                                  type="button"
-                                  onClick={() => quitarEtiquetaInterlocalMultiBulto(i)}
-                                  className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-300 hover:text-red-600"
-                                  aria-label={`Quitar etiqueta ${et}`}
-                                >
-                                  ×
-                                </button>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                        {esMultiBulto && interlocalForm.etiquetas.length >= cantidadBultosNum && (
-                          <p className="text-xs text-emerald-600 mt-1">Ya cargaste las {cantidadBultosNum} etiquetas.</p>
-                        )}
-                      </div>
-                    );
-                  })()}
+                  <div className={interlocalCantidadBultosNum > 1 ? "md:col-span-2" : undefined}>
+                    <label className="block text-xs font-medium text-slate-500 mb-1">
+                      N° Etiqueta *
+                      {interlocalCantidadBultosNum > 1
+                        ? ` (${interlocalForm.etiquetas.length}/${interlocalCantidadBultosNum} cargadas)`
+                        : ""}
+                    </label>
+                    <input
+                      type="text"
+                      disabled={
+                        !interlocalTipoEnvioElegido ||
+                        (interlocalCantidadBultosNum > 1 && interlocalForm.etiquetas.length >= interlocalCantidadBultosNum)
+                      }
+                      placeholder="se usa como guía WMS"
+                      value={interlocalForm.numeroEtiqueta}
+                      onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
+                      onKeyDown={interlocalCantidadBultosNum > 1 ? agregarEtiquetaInterlocalMultiBulto : undefined}
+                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    {interlocalCantidadBultosNum > 1 && interlocalForm.etiquetas.length > 0 && (
+                      <ul className="mt-2 flex flex-wrap gap-2">
+                        {interlocalForm.etiquetas.map((et, i) => (
+                          <li
+                            key={et}
+                            className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-full bg-slate-200 text-xs text-slate-600"
+                          >
+                            {et}
+                            <button
+                              type="button"
+                              onClick={() => quitarEtiquetaInterlocalMultiBulto(i)}
+                              className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-300 hover:text-red-600"
+                              aria-label={`Quitar etiqueta ${et}`}
+                            >
+                              ×
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {interlocalCantidadBultosNum > 1 && interlocalForm.etiquetas.length >= interlocalCantidadBultosNum && (
+                      <p className="text-xs text-emerald-600 mt-1">Ya cargaste las {interlocalCantidadBultosNum} etiquetas.</p>
+                    )}
+                  </div>
 
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Bultos</label>
@@ -8434,7 +8437,8 @@ export default function DashboardLayout() {
                       !interlocalForm.numeroMovimiento ||
                       !interlocalForm.localOrigenCodigo ||
                       !interlocalForm.localDestinoCodigo ||
-                      !interlocalForm.fecha
+                      !interlocalForm.fecha ||
+                      !interlocalEtiquetasCompletas
                     }
                     className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
                       interlocalGuardando

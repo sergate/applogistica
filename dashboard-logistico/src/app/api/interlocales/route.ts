@@ -140,11 +140,14 @@ export async function POST(request: NextRequest) {
         ? [body.numeroEtiqueta]
         : [];
     const etiquetas = [...new Set(etiquetasCrudas.map((e) => e.trim()).filter(Boolean))];
-    if (etiquetas.length > cantidadBultosFinal) {
+    // Obligatorio cargar el N° de Etiqueta de cada bulto -- ni de más
+    // (no se puede identificar un bulto que no existe) ni de menos (si no,
+    // el control de bultos por handheld no puede verificar ese bulto).
+    if (etiquetas.length !== cantidadBultosFinal) {
       return NextResponse.json(
         {
           success: false,
-          error: `No se pueden cargar más etiquetas (${etiquetas.length}) que bultos (${cantidadBultosFinal}).`,
+          error: `Hace falta cargar el N° de Etiqueta de los ${cantidadBultosFinal} bulto(s) (van ${etiquetas.length}).`,
         },
         { status: 400 }
       );
