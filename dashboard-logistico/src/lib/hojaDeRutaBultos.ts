@@ -63,15 +63,34 @@ export async function bultosEsperadosPorHoja(hojaIds: number[]): Promise<Map<num
       .in("id", interlocalIds);
     if (errorInterlocales) throw new Error(`Supabase (interlocales): ${errorInterlocales.message}`);
 
+    // Una etiqueta por bulto (form "Registrar Interlocal", cantidad_bultos
+    // puede ser > 1) -- si un interlocal viejo (previo a esta tabla) no
+    // tiene filas acá, caemos al numero_etiqueta único de antes como si
+    // fuera su único bulto esperado.
+    const { data: etiquetasBultos, error: errorEtiquetasBultos } = await supabaseAdmin
+      .from("interlocales_bultos_etiquetas")
+      .select("interlocal_id, codigo")
+      .in("interlocal_id", interlocalIds);
+    if (errorEtiquetasBultos) {
+      throw new Error(`Supabase (interlocales_bultos_etiquetas): ${errorEtiquetasBultos.message}`);
+    }
+    const etiquetasPorInterlocal = new Map<number, string[]>();
+    for (const e of etiquetasBultos || []) {
+      if (!etiquetasPorInterlocal.has(e.interlocal_id)) etiquetasPorInterlocal.set(e.interlocal_id, []);
+      etiquetasPorInterlocal.get(e.interlocal_id)!.push(e.codigo);
+    }
+
     for (const i of interlocales || []) {
-      if (!i.numero_etiqueta) continue; // sin etiqueta cargada: no se puede verificar por handheld
       const hojaId = hojaPorInterlocalId.get(i.id);
       if (!hojaId) continue;
-      resultado.get(hojaId)!.push({
-        codigo: i.numero_etiqueta,
-        tipo: "interlocal",
-        referencia: `Mov. ${i.numero_movimiento}`,
-      });
+      const codigos = etiquetasPorInterlocal.get(i.id) || (i.numero_etiqueta ? [i.numero_etiqueta] : []);
+      for (const codigo of codigos) {
+        resultado.get(hojaId)!.push({
+          codigo,
+          tipo: "interlocal",
+          referencia: `Mov. ${i.numero_movimiento}`,
+        });
+      }
     }
   }
 

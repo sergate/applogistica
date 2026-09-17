@@ -35,7 +35,24 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query;
     if (error) throw new Error(`Supabase (interlocales): ${error.message}`);
 
-    return NextResponse.json({ success: true, filas: data || [] });
+    const ids = (data || []).map((f) => f.id);
+    const etiquetasPorInterlocal = new Map<number, string[]>();
+    if (ids.length > 0) {
+      const { data: etiquetas, error: errorEtiquetas } = await supabaseAdmin
+        .from("interlocales_bultos_etiquetas")
+        .select("interlocal_id, codigo, orden")
+        .in("interlocal_id", ids)
+        .order("orden", { ascending: true });
+      if (errorEtiquetas) throw new Error(`Supabase (interlocales_bultos_etiquetas): ${errorEtiquetas.message}`);
+      for (const e of etiquetas || []) {
+        if (!etiquetasPorInterlocal.has(e.interlocal_id)) etiquetasPorInterlocal.set(e.interlocal_id, []);
+        etiquetasPorInterlocal.get(e.interlocal_id)!.push(e.codigo);
+      }
+    }
+
+    const filas = (data || []).map((f) => ({ ...f, etiquetas: etiquetasPorInterlocal.get(f.id) || [] }));
+
+    return NextResponse.json({ success: true, filas });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
@@ -112,8 +129,27 @@ export async function POST(request: NextRequest) {
     if (body?.cantidadBultos !== undefined && (!Number.isInteger(cantidadBultos) || cantidadBultos < 1)) {
       return NextResponse.json({ success: false, error: "La cantidad de bultos tiene que ser un entero mayor a 0." }, { status: 400 });
     }
+    const cantidadBultosFinal = Number.isInteger(cantidadBultos) && cantidadBultos >= 1 ? cantidadBultos : 1;
 
-    const numeroEtiqueta = typeof body?.numeroEtiqueta === "string" ? body.numeroEtiqueta.trim() || null : null;
+    // "etiquetas": una por bulto (form nuevo, cantidad_bultos > 1). Si no
+    // viene, caemos al campo viejo "numeroEtiqueta" (un solo valor) para no
+    // romper nada que todavía lo mande así.
+    const etiquetasCrudas = Array.isArray(body?.etiquetas)
+      ? (body.etiquetas as unknown[]).filter((e): e is string => typeof e === "string")
+      : typeof body?.numeroEtiqueta === "string" && body.numeroEtiqueta.trim()
+        ? [body.numeroEtiqueta]
+        : [];
+    const etiquetas = [...new Set(etiquetasCrudas.map((e) => e.trim()).filter(Boolean))];
+    if (etiquetas.length > cantidadBultosFinal) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `No se pueden cargar más etiquetas (${etiquetas.length}) que bultos (${cantidadBultosFinal}).`,
+        },
+        { status: 400 }
+      );
+    }
+    const numeroEtiqueta = etiquetas[0] || null;
 
     // "Varios" no se carga a mano -- el número lo asigna la función de
     // Postgres de forma atómica (evita que dos altas simultáneas se lleven
@@ -143,7 +179,7 @@ export async function POST(request: NextRequest) {
         local_destino_nombre: nombrePorCodigo.get(localDestinoCodigo) || null,
         fecha,
         marca,
-        cantidad_bultos: Number.isInteger(cantidadBultos) && cantidadBultos >= 1 ? cantidadBultos : 1,
+        cantidad_bultos: cantidadBultosFinal,
         observaciones: typeof body?.observaciones === "string" ? body.observaciones.trim() || null : null,
         registrado_por_id: auth.userId,
         registrado_por_nombre: usuario?.nombre || null,
@@ -161,7 +197,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true, fila: data });
+    if (etiquetas.length > 0) {
+      const { error: errorEtiquetas } = await supabaseAdmin
+        .from("interlocales_bultos_etiquetas")
+        .insert(etiquetas.map((codigo, i) => ({ interlocal_id: data.id, codigo, orden: i + 1 })));
+      if (errorEtiquetas) {
+        // No dejamos el interlocal a medio registrar si alguna etiqueta no
+        // se pudo guardar (ej. ya estaba usada en otro bulto) -- se borra y
+        // se informa el error real.
+        await supabaseAdmin.from("interlocales").delete().eq("id", data.id);
+        throw new Error(
+          errorEtiquetas.code === "23505"
+            ? "Ya existe un bulto registrado con alguna de esas etiquetas."
+            : `Supabase (interlocales_bultos_etiquetas): ${errorEtiquetas.message}`
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, fila: { ...data, etiquetas } });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

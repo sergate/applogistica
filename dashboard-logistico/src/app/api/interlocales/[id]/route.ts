@@ -93,8 +93,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (body?.cantidadBultos !== undefined && (!Number.isInteger(cantidadBultos) || cantidadBultos < 1)) {
       return NextResponse.json({ success: false, error: "La cantidad de bultos tiene que ser un entero mayor a 0." }, { status: 400 });
     }
+    const cantidadBultosFinal = Number.isInteger(cantidadBultos) && cantidadBultos >= 1 ? cantidadBultos : 1;
 
-    const numeroEtiqueta = typeof body?.numeroEtiqueta === "string" ? body.numeroEtiqueta.trim() || null : null;
+    // "etiquetas": una por bulto (form nuevo, cantidad_bultos > 1). Si no
+    // viene, caemos al campo viejo "numeroEtiqueta" (un solo valor) para no
+    // romper nada que todavía lo mande así.
+    const etiquetasCrudas = Array.isArray(body?.etiquetas)
+      ? (body.etiquetas as unknown[]).filter((e): e is string => typeof e === "string")
+      : typeof body?.numeroEtiqueta === "string" && body.numeroEtiqueta.trim()
+        ? [body.numeroEtiqueta]
+        : [];
+    const etiquetas = [...new Set(etiquetasCrudas.map((e) => e.trim()).filter(Boolean))];
+    if (etiquetas.length > cantidadBultosFinal) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `No se pueden cargar más etiquetas (${etiquetas.length}) que bultos (${cantidadBultosFinal}).`,
+        },
+        { status: 400 }
+      );
+    }
+    const numeroEtiqueta = etiquetas[0] || null;
 
     // Igual criterio que en el alta: "varios" nunca se edita a mano. Si
     // recién ahora pasa a ser "varios" se le asigna un número nuevo (y se
@@ -127,7 +146,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         local_destino_nombre: nombrePorCodigo.get(localDestinoCodigo) || null,
         fecha,
         marca,
-        cantidad_bultos: Number.isInteger(cantidadBultos) && cantidadBultos >= 1 ? cantidadBultos : 1,
+        cantidad_bultos: cantidadBultosFinal,
         observaciones: typeof body?.observaciones === "string" ? body.observaciones.trim() || null : null,
       })
       .eq("id", interlocalId)
@@ -144,7 +163,31 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       );
     }
 
-    return NextResponse.json({ success: true, fila: data });
+    // Reemplazo total de las etiquetas por bulto (se borran las que tenía y
+    // se cargan las que mandó el form) -- más simple que diffear, y este
+    // endpoint solo se usa mientras el interlocal está "pendiente" (poco
+    // volumen de filas por vez).
+    const { error: errorBorrarEtiquetas } = await supabaseAdmin
+      .from("interlocales_bultos_etiquetas")
+      .delete()
+      .eq("interlocal_id", interlocalId);
+    if (errorBorrarEtiquetas) {
+      throw new Error(`Supabase (interlocales_bultos_etiquetas - borrado): ${errorBorrarEtiquetas.message}`);
+    }
+    if (etiquetas.length > 0) {
+      const { error: errorEtiquetas } = await supabaseAdmin
+        .from("interlocales_bultos_etiquetas")
+        .insert(etiquetas.map((codigo, i) => ({ interlocal_id: interlocalId, codigo, orden: i + 1 })));
+      if (errorEtiquetas) {
+        throw new Error(
+          errorEtiquetas.code === "23505"
+            ? "Ya existe un bulto registrado con alguna de esas etiquetas."
+            : `Supabase (interlocales_bultos_etiquetas): ${errorEtiquetas.message}`
+        );
+      }
+    }
+
+    return NextResponse.json({ success: true, fila: { ...data, etiquetas } });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

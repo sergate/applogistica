@@ -896,6 +896,7 @@ export default function DashboardLayout() {
     numero_movimiento: string;
     numero_remito: string | null;
     numero_etiqueta: string | null;
+    etiquetas?: string[];
     local_origen_codigo: string;
     local_origen_nombre: string | null;
     local_destino_codigo: string;
@@ -943,6 +944,11 @@ export default function DashboardLayout() {
     dataVersion
   );
 
+  // Prefijo fijo del rótulo impreso ("interlocal-00001", etc, ver pestaña
+  // Etiquetas) -- se precarga en el campo para que el usuario solo tenga que
+  // completar los dígitos que le falten, en vez de tipear todo el código.
+  const PREFIJO_ETIQUETA_INTERLOCAL = "interlocal-0";
+
   const interlocalFormVacio = {
     tipoEnvio: "",
     localDestinoCodigo: "",
@@ -950,7 +956,8 @@ export default function DashboardLayout() {
     localOrigenCodigo: "",
     numeroMovimiento: "",
     numeroRemito: "",
-    numeroEtiqueta: "",
+    numeroEtiqueta: PREFIJO_ETIQUETA_INTERLOCAL,
+    etiquetas: [] as string[],
     marca: "",
     cantidadBultos: "1",
     observaciones: "",
@@ -985,6 +992,47 @@ export default function DashboardLayout() {
 
   const actualizarInterlocalForm = (campo: keyof typeof interlocalFormVacio, valor: string) => {
     setInterlocalForm((prev) => ({ ...prev, [campo]: valor }));
+    setInterlocalGuardadoOk(false);
+  };
+
+  // Cambiar la cantidad de bultos reinicia la carga de etiquetas (pasar de 1
+  // a varios, o viceversa, cambia el modo del campo -- más simple volver a
+  // empezar que migrar el valor a medio cargar entre los dos modos).
+  const actualizarCantidadBultosInterlocal = (valor: string) => {
+    setInterlocalForm((prev) => ({
+      ...prev,
+      cantidadBultos: valor,
+      etiquetas: [],
+      numeroEtiqueta: PREFIJO_ETIQUETA_INTERLOCAL,
+    }));
+    setInterlocalGuardadoOk(false);
+    setInterlocalGuardadoError(null);
+  };
+
+  // Modo "varios bultos": cada Enter agrega la etiqueta tipeada a la lista y
+  // reinicia el campo con el prefijo listo para la siguiente, hasta llegar a
+  // la cantidad de bultos declarada.
+  const agregarEtiquetaInterlocalMultiBulto = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const cantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
+    const codigo = interlocalForm.numeroEtiqueta.trim();
+    if (!codigo || codigo === PREFIJO_ETIQUETA_INTERLOCAL) return;
+    if (interlocalForm.etiquetas.length >= cantidadBultosNum) return;
+    if (interlocalForm.etiquetas.includes(codigo)) {
+      setInterlocalGuardadoError(`La etiqueta "${codigo}" ya se cargó para este interlocal.`);
+      return;
+    }
+    setInterlocalGuardadoError(null);
+    setInterlocalForm((prev) => ({
+      ...prev,
+      etiquetas: [...prev.etiquetas, codigo],
+      numeroEtiqueta: PREFIJO_ETIQUETA_INTERLOCAL,
+    }));
+  };
+
+  const quitarEtiquetaInterlocalMultiBulto = (idx: number) => {
+    setInterlocalForm((prev) => ({ ...prev, etiquetas: prev.etiquetas.filter((_, i) => i !== idx) }));
     setInterlocalGuardadoOk(false);
   };
 
@@ -1041,6 +1089,8 @@ export default function DashboardLayout() {
 
   const iniciarEdicionInterlocal = (f: InterlocalFila) => {
     setInterlocalEditandoId(f.id);
+    const esMultiBulto = f.cantidad_bultos > 1;
+    const etiquetasExistentes = f.etiquetas && f.etiquetas.length > 0 ? f.etiquetas : f.numero_etiqueta ? [f.numero_etiqueta] : [];
     setInterlocalForm({
       tipoEnvio: f.tipo_envio || "productos",
       localDestinoCodigo: f.local_destino_codigo,
@@ -1048,7 +1098,8 @@ export default function DashboardLayout() {
       localOrigenCodigo: f.local_origen_codigo,
       numeroMovimiento: f.numero_movimiento,
       numeroRemito: f.numero_remito || "",
-      numeroEtiqueta: f.numero_etiqueta || "",
+      numeroEtiqueta: esMultiBulto ? PREFIJO_ETIQUETA_INTERLOCAL : f.numero_etiqueta || PREFIJO_ETIQUETA_INTERLOCAL,
+      etiquetas: esMultiBulto ? etiquetasExistentes : [],
       marca: f.marca || "",
       cantidadBultos: String(f.cantidad_bultos),
       observaciones: f.observaciones || "",
@@ -8278,17 +8329,51 @@ export default function DashboardLayout() {
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-xs font-medium text-slate-500 mb-1">N° Etiqueta</label>
-                    <input
-                      type="text"
-                      disabled={!interlocalTipoEnvioElegido}
-                      placeholder="se usa como guía WMS"
-                      value={interlocalForm.numeroEtiqueta}
-                      onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
+                  {(() => {
+                    const cantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
+                    const esMultiBulto = cantidadBultosNum > 1;
+                    return (
+                      <div className={esMultiBulto ? "md:col-span-2" : undefined}>
+                        <label className="block text-xs font-medium text-slate-500 mb-1">
+                          N° Etiqueta{esMultiBulto ? ` (${interlocalForm.etiquetas.length}/${cantidadBultosNum} cargadas)` : ""}
+                        </label>
+                        <input
+                          type="text"
+                          disabled={
+                            !interlocalTipoEnvioElegido || (esMultiBulto && interlocalForm.etiquetas.length >= cantidadBultosNum)
+                          }
+                          placeholder="se usa como guía WMS"
+                          value={interlocalForm.numeroEtiqueta}
+                          onChange={(e) => actualizarInterlocalForm("numeroEtiqueta", e.target.value)}
+                          onKeyDown={esMultiBulto ? agregarEtiquetaInterlocalMultiBulto : undefined}
+                          className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                        />
+                        {esMultiBulto && interlocalForm.etiquetas.length > 0 && (
+                          <ul className="mt-2 flex flex-wrap gap-2">
+                            {interlocalForm.etiquetas.map((et, i) => (
+                              <li
+                                key={et}
+                                className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-full bg-slate-200 text-xs text-slate-600"
+                              >
+                                {et}
+                                <button
+                                  type="button"
+                                  onClick={() => quitarEtiquetaInterlocalMultiBulto(i)}
+                                  className="w-4 h-4 flex items-center justify-center rounded-full text-slate-400 hover:bg-slate-300 hover:text-red-600"
+                                  aria-label={`Quitar etiqueta ${et}`}
+                                >
+                                  ×
+                                </button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {esMultiBulto && interlocalForm.etiquetas.length >= cantidadBultosNum && (
+                          <p className="text-xs text-emerald-600 mt-1">Ya cargaste las {cantidadBultosNum} etiquetas.</p>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   <div>
                     <label className="block text-xs font-medium text-slate-500 mb-1">Bultos</label>
@@ -8298,7 +8383,7 @@ export default function DashboardLayout() {
                       step={1}
                       disabled={!interlocalTipoEnvioElegido}
                       value={interlocalForm.cantidadBultos}
-                      onChange={(e) => actualizarInterlocalForm("cantidadBultos", e.target.value)}
+                      onChange={(e) => actualizarCantidadBultosInterlocal(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                   </div>
@@ -8406,7 +8491,9 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
                           <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
-                          <td className="py-3 px-4 text-left">{f.numero_etiqueta || "—"}</td>
+                          <td className="py-3 px-4 text-left">
+                            {f.etiquetas && f.etiquetas.length > 1 ? f.etiquetas.join(", ") : f.numero_etiqueta || "—"}
+                          </td>
                           <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
                           <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.registrado_por_nombre || "—"}</td>
@@ -8863,7 +8950,9 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.tipo_envio === "varios" ? "Varios" : "Productos"}</td>
                           <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
                           <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
-                          <td className="py-3 px-4 text-left">{f.numero_etiqueta || "—"}</td>
+                          <td className="py-3 px-4 text-left">
+                            {f.etiquetas && f.etiquetas.length > 1 ? f.etiquetas.join(", ") : f.numero_etiqueta || "—"}
+                          </td>
                           <td className="py-3 px-4 text-left">{f.cantidad_bultos}</td>
                           <td className="py-3 px-4 text-left">{f.observaciones || "—"}</td>
                         </tr>
