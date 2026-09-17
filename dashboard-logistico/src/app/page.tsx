@@ -48,13 +48,18 @@ export default function DashboardLayout() {
           throw new Error(data.error || "No se pudieron cargar tus permisos.");
         }
         if (!cancelado) {
-          // Perfil dedicado exclusivamente al escáner (handheld) -- lo
-          // mandamos directo ahí en vez del Tablero completo, que no entra
-          // bien en la pantalla chica del handheld. Cubre el caso de sesión
-          // ya guardada que entra directo a "/" sin pasar por /login.
+          // Perfil dedicado exclusivamente a uno de los dos escáneres
+          // (handheld o celular) -- lo mandamos directo ahí en vez del
+          // Tablero completo, que no entra bien en una pantalla chica.
+          // Cubre el caso de sesión ya guardada que entra directo a "/" sin
+          // pasar por /login.
           const subsecciones: string[] = data.subsecciones || [];
           if (subsecciones.length === 1 && subsecciones[0] === "EXP-Escaner") {
             router.replace("/hoja-ruta/escaner");
+            return;
+          }
+          if (subsecciones.length === 1 && subsecciones[0] === "EXP-EscanerCelular") {
+            router.replace("/hoja-ruta/escaner-celular");
             return;
           }
           setUsuarioActual({ email: data.email, nombre: data.nombre, perfil: data.perfil });
@@ -897,6 +902,7 @@ export default function DashboardLayout() {
     { key: "EXP-Historico", label: "Histórico Despachados" },
     { key: "EXP-Etiquetas", label: "Etiquetas" },
     { key: "EXP-Escaner", label: "Control de Bultos (Escáner)" },
+    { key: "EXP-EscanerCelular", label: "Control de Bultos (Escáner Celular)" },
     { key: "EXP-EscaneoHistorico", label: "Histórico de Escaneos" },
   ];
 
@@ -4609,6 +4615,7 @@ export default function DashboardLayout() {
              activeTab === "EXP-Historico" ? "Expedición - Histórico Despachados" :
              activeTab === "EXP-Etiquetas" ? "Expedición - Etiquetas" :
              activeTab === "EXP-Escaner" ? "Expedición - Control de Bultos (Escáner)" :
+             activeTab === "EXP-EscanerCelular" ? "Expedición - Control de Bultos (Escáner Celular)" :
              activeTab === "EXP-EscaneoHistorico" ? "Expedición - Histórico de Escaneos" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
@@ -9186,10 +9193,10 @@ export default function DashboardLayout() {
             <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
               <h2 className="text-lg font-bold text-slate-800 mb-1">Control de Bultos (Escáner)</h2>
               <p className="text-sm text-slate-500 mb-6">
-                Abrí esta herramienta desde el handheld (o cualquier celular con lector de código de barras) para
-                controlar, hoja de ruta por hoja de ruta, que todos los bultos que salen coincidan con lo cargado.
-                Escaneás el código de la Hoja de Ruta impresa y después cada bulto (caja de despacho o etiqueta de
-                interlocal) uno por uno.
+                Abrí esta herramienta desde el handheld (lector de código de barras físico) para controlar, hoja de
+                ruta por hoja de ruta, que todos los bultos que salen coincidan con lo cargado. Escaneás el código
+                de la Hoja de Ruta impresa y después cada bulto (caja de despacho o etiqueta de interlocal) uno por
+                uno.
               </p>
               <a
                 href="/hoja-ruta/escaner"
@@ -9198,6 +9205,26 @@ export default function DashboardLayout() {
                 className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
               >
                 Abrir escáner ↗
+              </a>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA: EXPEDICIÓN - ESCÁNER CELULAR (CÁMARA) ================= */}
+          {activeTab === "EXP-EscanerCelular" && (
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-xl">
+              <h2 className="text-lg font-bold text-slate-800 mb-1">Control de Bultos (Escáner Celular)</h2>
+              <p className="text-sm text-slate-500 mb-6">
+                Misma herramienta de control de bultos que el escáner de handheld, pero pensada para un celular
+                Android sin lector físico: usa la cámara para leer los códigos (necesita Chrome en Android). Abrila
+                desde el celular, escaneá el código de la Hoja de Ruta y después cada bulto uno por uno.
+              </p>
+              <a
+                href="/hoja-ruta/escaner-celular"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Abrir escáner celular ↗
               </a>
             </div>
           )}
@@ -9800,7 +9827,7 @@ export default function DashboardLayout() {
           )}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

@@ -108,6 +108,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "EXP-Historico", label: "Histórico Despachados" },
       { key: "EXP-Etiquetas", label: "Etiquetas" },
       { key: "EXP-Escaner", label: "Control de Bultos (Escáner)" },
+      { key: "EXP-EscanerCelular", label: "Control de Bultos (Escáner Celular)" },
       { key: "EXP-EscaneoHistorico", label: "Histórico de Escaneos" },
     ],
   },

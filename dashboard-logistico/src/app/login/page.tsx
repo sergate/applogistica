@@ -16,18 +16,25 @@ export default function LoginPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
-  // Si el perfil del usuario tiene únicamente el permiso del escáner (un
-  // handheld dedicado a control de bultos, sin acceso a nada más del
-  // Tablero), lo mandamos directo a esa pantalla en vez del menú completo --
-  // en una pantalla chica de handheld el Tablero entero no entra bien.
+  // Si el perfil del usuario tiene únicamente el permiso de uno de los dos
+  // escáneres (handheld o celular), lo mandamos directo a esa pantalla en
+  // vez del menú completo -- en una pantalla chica ni el handheld ni el
+  // celular entran bien con el Tablero entero.
   const irSegunPermisos = async () => {
     try {
       const res = await fetch("/api/auth/me");
       const data = await res.json();
-      if (data.success && data.subsecciones?.length === 1 && data.subsecciones[0] === "EXP-Escaner") {
-        router.push("/hoja-ruta/escaner");
-        router.refresh();
-        return;
+      if (data.success && data.subsecciones?.length === 1) {
+        if (data.subsecciones[0] === "EXP-Escaner") {
+          router.push("/hoja-ruta/escaner");
+          router.refresh();
+          return;
+        }
+        if (data.subsecciones[0] === "EXP-EscanerCelular") {
+          router.push("/hoja-ruta/escaner-celular");
+          router.refresh();
+          return;
+        }
       }
     } catch {
       // Si falla la consulta de permisos, no bloqueamos el login -- entra al
