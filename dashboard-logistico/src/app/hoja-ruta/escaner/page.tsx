@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
+import ScanInput, { type ScanInputHandle } from "@/components/ScanInput";
 
 interface BultoEsperado {
   codigo: string;
@@ -32,7 +33,6 @@ type Fase = "escanear_hoja" | "escaneando" | "resultado";
 // para cada escaneo.
 export default function EscanerHojaDeRutaPage() {
   const [fase, setFase] = useState<Fase>("escanear_hoja");
-  const [valorInput, setValorInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -48,15 +48,10 @@ export default function EscanerHojaDeRutaPage() {
     faltantes: BultoEsperado[];
   } | null>(null);
 
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, [fase, mostrarConfirmarFaltante]);
+  const scanInputRef = useRef<ScanInputHandle>(null);
 
   const reiniciar = () => {
     setFase("escanear_hoja");
-    setValorInput("");
     setError(null);
     setAviso(null);
     setHoja(null);
@@ -124,10 +119,7 @@ export default function EscanerHojaDeRutaPage() {
     registrarEvento(codigo.trim(), bultos[idx].tipo, "ok_nuevo");
   };
 
-  const onSubmitInput = (e: React.FormEvent) => {
-    e.preventDefault();
-    const codigo = valorInput.trim();
-    setValorInput("");
+  const onScan = (codigo: string) => {
     if (!codigo) return;
     if (fase === "escanear_hoja") escanearHoja(codigo);
     else if (fase === "escaneando") escanearBulto(codigo);
@@ -181,18 +173,10 @@ export default function EscanerHojaDeRutaPage() {
         {fase === "escanear_hoja" && (
           <>
             <p className="text-sm text-slate-500 mb-4 text-center">Escaneá el código de la Hoja de Ruta.</p>
-            <form onSubmit={onSubmitInput}>
-              <input
-                ref={inputRef}
-                type="text"
-                autoFocus
-                value={valorInput}
-                onChange={(e) => setValorInput(e.target.value)}
-                disabled={cargando}
-                placeholder="Esperando escaneo..."
-                className="w-full px-4 py-4 text-lg text-center rounded-lg bg-slate-100 border-none focus:ring-2 focus:ring-blue-500"
-              />
-            </form>
+            <div className="w-full px-4 py-4 text-lg text-center rounded-lg bg-slate-100 text-slate-400">
+              Esperando escaneo...
+            </div>
+            <ScanInput ref={scanInputRef} onScan={onScan} disabled={cargando} />
             {cargando && <p className="text-sm text-slate-400 mt-3 text-center">Buscando hoja...</p>}
             {error && <p className="text-sm text-red-600 mt-3 text-center">{error}</p>}
           </>
@@ -210,17 +194,10 @@ export default function EscanerHojaDeRutaPage() {
               <p className="text-xs text-slate-400">bultos escaneados</p>
             </div>
 
-            <form onSubmit={onSubmitInput} className="mb-3">
-              <input
-                ref={inputRef}
-                type="text"
-                autoFocus
-                value={valorInput}
-                onChange={(e) => setValorInput(e.target.value)}
-                placeholder="Escaneá un bulto..."
-                className="w-full px-4 py-4 text-lg text-center rounded-lg bg-slate-100 border-none focus:ring-2 focus:ring-blue-500"
-              />
-            </form>
+            <div className="mb-3 w-full px-4 py-4 text-lg text-center rounded-lg bg-slate-100 text-slate-400">
+              Escaneá un bulto...
+            </div>
+            <ScanInput ref={scanInputRef} onScan={onScan} disabled={cargando || mostrarConfirmarFaltante} />
 
             {aviso && (
               <div className="mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700 text-center">
