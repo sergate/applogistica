@@ -16,6 +16,27 @@ export default function LoginPage() {
   const [mostrarPassword, setMostrarPassword] = useState(false);
   const [mensajeExito, setMensajeExito] = useState<string | null>(null);
 
+  // Si el perfil del usuario tiene únicamente el permiso del escáner (un
+  // handheld dedicado a control de bultos, sin acceso a nada más del
+  // Tablero), lo mandamos directo a esa pantalla en vez del menú completo --
+  // en una pantalla chica de handheld el Tablero entero no entra bien.
+  const irSegunPermisos = async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json();
+      if (data.success && data.subsecciones?.length === 1 && data.subsecciones[0] === "EXP-Escaner") {
+        router.push("/hoja-ruta/escaner");
+        router.refresh();
+        return;
+      }
+    } catch {
+      // Si falla la consulta de permisos, no bloqueamos el login -- entra al
+      // Tablero normal como siempre.
+    }
+    router.push("/");
+    router.refresh();
+  };
+
   const cambiarModo = (nuevoModo: "login" | "signup") => {
     setModo(nuevoModo);
     setError(null);
@@ -46,8 +67,7 @@ export default function LoginPage() {
           );
         }
 
-        router.push("/");
-        router.refresh();
+        await irSegunPermisos();
         return;
       }
 
@@ -81,8 +101,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/");
-      router.refresh();
+      await irSegunPermisos();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {

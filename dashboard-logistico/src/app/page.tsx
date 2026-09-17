@@ -48,6 +48,15 @@ export default function DashboardLayout() {
           throw new Error(data.error || "No se pudieron cargar tus permisos.");
         }
         if (!cancelado) {
+          // Perfil dedicado exclusivamente al escáner (handheld) -- lo
+          // mandamos directo ahí en vez del Tablero completo, que no entra
+          // bien en la pantalla chica del handheld. Cubre el caso de sesión
+          // ya guardada que entra directo a "/" sin pasar por /login.
+          const subsecciones: string[] = data.subsecciones || [];
+          if (subsecciones.length === 1 && subsecciones[0] === "EXP-Escaner") {
+            router.replace("/hoja-ruta/escaner");
+            return;
+          }
           setUsuarioActual({ email: data.email, nombre: data.nombre, perfil: data.perfil });
           setPermisos(data.subsecciones);
         }
