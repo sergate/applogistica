@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
 
     // "Varios" no pide N° de Movimiento -- usa el mismo número que el N° de
     // Remito (ambos se asignan más abajo, de forma atómica).
-    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    const tipoEnvio =
+      body?.tipoEnvio === "varios" ? "varios" : body?.tipoEnvio === "control_calidad" ? "control_calidad" : "productos";
     let numeroMovimiento = typeof body?.numeroMovimiento === "string" ? body.numeroMovimiento.trim() : "";
     const localOrigenCodigo = typeof body?.localOrigenCodigo === "string" ? body.localOrigenCodigo.trim() : "";
     const localDestinoCodigo = typeof body?.localDestinoCodigo === "string" ? body.localDestinoCodigo.trim() : "";

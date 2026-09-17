@@ -44,7 +44,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     // "Varios" no pide N° de Movimiento -- usa el mismo número que el N° de
     // Remito.
-    const tipoEnvio = body?.tipoEnvio === "varios" ? "varios" : "productos";
+    const tipoEnvio =
+      body?.tipoEnvio === "varios" ? "varios" : body?.tipoEnvio === "control_calidad" ? "control_calidad" : "productos";
     let numeroMovimiento = typeof body?.numeroMovimiento === "string" ? body.numeroMovimiento.trim() : "";
     const localOrigenCodigo = typeof body?.localOrigenCodigo === "string" ? body.localOrigenCodigo.trim() : "";
     const localDestinoCodigo = typeof body?.localDestinoCodigo === "string" ? body.localDestinoCodigo.trim() : "";

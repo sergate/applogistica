@@ -968,7 +968,7 @@ export default function DashboardLayout() {
   const [interlocalGuardadoOk, setInterlocalGuardadoOk] = useState(false);
   const [interlocalEditandoId, setInterlocalEditandoId] = useState<number | null>(null);
   const interlocalTipoEnvioElegido = interlocalForm.tipoEnvio !== "";
-  const interlocalRemitoEditable = interlocalForm.tipoEnvio === "productos";
+  const interlocalRemitoEditable = interlocalForm.tipoEnvio === "productos" || interlocalForm.tipoEnvio === "control_calidad";
   const interlocalCantidadBultosNum = Math.max(1, parseInt(interlocalForm.cantidadBultos, 10) || 1);
   // Obligatorio cargar la etiqueta de cada bulto -- en modo 1 bulto, el
   // campo tiene que tener algo más que el prefijo precargado sin completar.
@@ -1044,12 +1044,16 @@ export default function DashboardLayout() {
 
   // "Varios" no se carga a mano -- solo mostramos una vista previa de qué
   // número le tocaría (no lo reserva, el real se asigna recién al guardar).
+  // "Control de Calidad" se carga a mano igual que "productos" (arranca en
+  // blanco al elegirlo), pero con su propia nomenclatura -- no comparte la
+  // secuencia numérica de productos/varios.
   const cambiarTipoEnvioInterlocal = async (valor: string) => {
+    const esManual = valor === "productos" || valor === "control_calidad";
     setInterlocalForm((prev) => ({
       ...prev,
       tipoEnvio: valor,
-      numeroRemito: valor === "productos" ? "" : prev.numeroRemito,
-      numeroMovimiento: valor === "productos" ? "" : prev.numeroMovimiento,
+      numeroRemito: esManual ? "" : prev.numeroRemito,
+      numeroMovimiento: esManual ? "" : prev.numeroMovimiento,
     }));
     setInterlocalGuardadoOk(false);
     if (valor !== "varios") return;
@@ -8251,6 +8255,7 @@ export default function DashboardLayout() {
                       <option value="">Seleccioná una opción...</option>
                       <option value="productos">Productos</option>
                       <option value="varios">Varios</option>
+                      <option value="control_calidad">Control de Calidad</option>
                     </select>
                   </div>
 
@@ -8880,9 +8885,10 @@ export default function DashboardLayout() {
                     onChange={(e) => setFiltroTipoEnvioHistorico(e.target.value)}
                     className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
                   >
-                    <option value="TODOS">Productos y Varios</option>
+                    <option value="TODOS">Todos los tipos</option>
                     <option value="productos">Solo Productos</option>
                     <option value="varios">Solo Varios</option>
+                    <option value="control_calidad">Solo Control de Calidad</option>
                   </select>
                   <div className="flex items-center gap-2 text-sm text-slate-500">
                     <span>Desde</span>
@@ -8954,7 +8960,9 @@ export default function DashboardLayout() {
                           <td className="py-3 px-4 text-left">{f.local_origen_codigo} — {f.local_origen_nombre || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.local_destino_codigo} — {f.local_destino_nombre || "—"}</td>
                           <td className="py-3 px-4 text-left">{f.marca || "—"}</td>
-                          <td className="py-3 px-4 text-left">{f.tipo_envio === "varios" ? "Varios" : "Productos"}</td>
+                          <td className="py-3 px-4 text-left">
+                            {f.tipo_envio === "varios" ? "Varios" : f.tipo_envio === "control_calidad" ? "Control de Calidad" : "Productos"}
+                          </td>
                           <td className="py-3 px-4 text-left">{f.numero_movimiento}</td>
                           <td className="py-3 px-4 text-left">{f.numero_remito || "—"}</td>
                           <td className="py-3 px-4 text-left">
