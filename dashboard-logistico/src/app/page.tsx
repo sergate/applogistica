@@ -8759,7 +8759,7 @@ export default function DashboardLayout() {
                 )}
                 {hojasDeRutaLoading && !hojasDeRutaData && (
                   <div className="rounded-lg border border-slate-200 overflow-hidden">
-                    <SkeletonTable rows={6} columns={8} />
+                    <SkeletonTable rows={6} columns={5} />
                   </div>
                 )}
 
@@ -8769,9 +8769,6 @@ export default function DashboardLayout() {
                       <tr>
                         <th className="py-3 px-4 text-left">Fecha</th>
                         <th className="py-3 px-4 text-left">Local</th>
-                        <th className="py-3 px-4 text-left">Transporte</th>
-                        <th className="py-3 px-4 text-left">Patente</th>
-                        <th className="py-3 px-4 text-left">Chofer</th>
                         <th className="py-3 px-4 text-left">Estado</th>
                         <th className="py-3 px-4 text-left">Creado por</th>
                         <th className="py-3 px-4 text-left">Acciones</th>
@@ -8782,9 +8779,6 @@ export default function DashboardLayout() {
                         <tr key={h.id}>
                           <td className="py-3 px-4 text-left">{h.fecha}</td>
                           <td className="py-3 px-4 text-left">{h.local_codigo} — {h.local_nombre || "—"}</td>
-                          <td className="py-3 px-4 text-left">{h.transporte || "—"}</td>
-                          <td className="py-3 px-4 text-left">{h.patente || "—"}</td>
-                          <td className="py-3 px-4 text-left">{h.chofer || "—"}</td>
                           <td className="py-3 px-4 text-left">
                             <span
                               className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -8838,7 +8832,7 @@ export default function DashboardLayout() {
                       ))}
                       {hojasDeRutaFiltradas.length === 0 && !hojasDeRutaLoading && (
                         <tr>
-                          <td colSpan={8} className="py-6 px-4 text-center text-slate-400">
+                          <td colSpan={5} className="py-6 px-4 text-center text-slate-400">
                             {(hojasDeRutaData?.filas || []).length === 0
                               ? "Todavía no se creó ninguna Hoja de Ruta."
                               : "Ninguna hoja de ruta coincide con la búsqueda."}
