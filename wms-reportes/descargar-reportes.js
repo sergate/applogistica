@@ -261,13 +261,15 @@ function diaHabilAnterior() {
 // (confirmado inspeccionando la pantalla real: fechaDesde/fechaHasta/grupos),
 // que es como ya se resuelve el combo de "Resumen CI" en reporteCargaInicialRema.
 async function reporteProductividad(page) {
-  console.log("> productividad (día hábil anterior, Grupo A)");
+  console.log("> productividad (día hábil anterior a hoy, Grupo A)");
   await abrirPantalla(page, "Indicadores", "Productividad");
   await page.waitForTimeout(800);
 
-  const fecha = diaHabilAnterior();
+  const fechaDesde = diaHabilAnterior();
+  const fechaHasta = new Date();
+  fechaHasta.setHours(0, 0, 0, 0);
   await page.evaluate(
-    ({ fechaISO, grupos }) => {
+    ({ fechaDesdeISO, fechaHastaISO, grupos }) => {
       const setVal = (name, value) => {
         // El WMS deja varias pestañas abiertas en el DOM aunque no estén
         // visibles (ver nota en clickBotonExt) -- "Productividades por
@@ -280,12 +282,11 @@ async function reporteProductividad(page) {
         if (!cmp) throw new Error(`No encontré el campo "${name}" en Indicadores - Productividad.`);
         cmp.setValue(value);
       };
-      const fechaDate = new Date(fechaISO);
-      setVal("fechaDesde", fechaDate);
-      setVal("fechaHasta", fechaDate);
+      setVal("fechaDesde", new Date(fechaDesdeISO));
+      setVal("fechaHasta", new Date(fechaHastaISO));
       setVal("grupos", grupos);
     },
-    { fechaISO: fecha.toISOString(), grupos: ["A"] }
+    { fechaDesdeISO: fechaDesde.toISOString(), fechaHastaISO: fechaHasta.toISOString(), grupos: ["A"] }
   );
 
   await clickBotonExt(page, "Buscar");
