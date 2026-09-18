@@ -20,17 +20,25 @@ export default function Resumen() {
   // Sí = incluye también los pedidos OD_TERMINADO.
   const [filtroDemandaTotal, setFiltroDemandaTotal] = useState(false);
 
+  // Rango de fechas activo en Resumen (semana puntual o "últimos N días") --
+  // se usa tanto para /api/resumen como para /api/resumen/canal, así el
+  // desglose por canal siempre suma lo mismo que la fila de la marca de
+  // arriba en vez de traer todo el histórico sin filtrar.
+  const filtroFechas = useMemo(() => {
+    if (semanaResumen) return { desde: semanaResumen.desde, hasta: semanaResumen.hasta };
+    if (rangoResumen) {
+      const d = new Date();
+      d.setDate(d.getDate() - (rangoResumen - 1));
+      return { desde: d.toISOString().slice(0, 10), hasta: null as string | null };
+    }
+    return { desde: null as string | null, hasta: null as string | null };
+  }, [rangoResumen, semanaResumen]);
+
   const urlResumen = useMemo(() => {
     let url = "/api/resumen";
     const params = new URLSearchParams();
-    if (semanaResumen) {
-      params.set("desde", semanaResumen.desde);
-      params.set("hasta", semanaResumen.hasta);
-    } else if (rangoResumen) {
-      const d = new Date();
-      d.setDate(d.getDate() - (rangoResumen - 1));
-      params.set("desde", d.toISOString().slice(0, 10));
-    }
+    if (filtroFechas.desde) params.set("desde", filtroFechas.desde);
+    if (filtroFechas.hasta) params.set("hasta", filtroFechas.hasta);
     if (filtroTipoResumen !== "TODOS") {
       params.set("tipoPedido", filtroTipoResumen);
     }
@@ -39,7 +47,7 @@ export default function Resumen() {
     }
     if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [rangoResumen, semanaResumen, filtroTipoResumen, filtroDemandaTotal]);
+  }, [filtroFechas, filtroTipoResumen, filtroDemandaTotal]);
 
   const {
     data: resumenData,
@@ -86,6 +94,8 @@ export default function Resumen() {
     setCanalRows(null);
     try {
       let url = `/api/resumen/canal?marca=${encodeURIComponent(marca)}`;
+      if (filtroFechas.desde) url += `&desde=${filtroFechas.desde}`;
+      if (filtroFechas.hasta) url += `&hasta=${filtroFechas.hasta}`;
       if (filtroTipoResumen !== "TODOS") url += `&tipoPedido=${filtroTipoResumen}`;
       if (filtroDemandaTotal) url += `&incluirTerminados=1`;
       const res = await fetch(url, {
@@ -119,16 +129,16 @@ export default function Resumen() {
     void cargarCanalPorMarca(marca);
   };
 
-  // Si cambia el filtro REMA/STD o Demanda Total de Resumen mientras el
-  // desglose por canal de una marca está abierto, lo recarga para que
-  // muestre lo mismo que la tabla de arriba (en vez de quedarse con los
-  // datos del filtro anterior).
+  // Si cambia cualquier filtro de Resumen (fecha, REMA/STD, Demanda Total)
+  // mientras el desglose por canal de una marca está abierto, lo recarga
+  // para que muestre lo mismo que la tabla de arriba (en vez de quedarse
+  // con los datos del filtro anterior).
   useEffect(() => {
     if (!selectedMarca) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void cargarCanalPorMarca(selectedMarca);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroTipoResumen, filtroDemandaTotal]);
+  }, [filtroFechas, filtroTipoResumen, filtroDemandaTotal]);
 
   return (
             <>

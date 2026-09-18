@@ -36,11 +36,13 @@ export async function GET(request: NextRequest) {
       { status: 400 }
     );
   }
-  // Filtro opcional por tipo de pedido: ?tipoPedido=REMA|STD (mismo filtro
-  // que Resumen, para que el desglose por canal muestre lo mismo que ya se
-  // ve arriba en vez de siempre todos los pedidos de la marca).
+  // Mismos filtros que Resumen (desde/hasta, tipoPedido, incluirTerminados)
+  // -- si no se propagan todos acá, el desglose por canal deja de sumar lo
+  // mismo que la fila de la marca en la tabla de arriba en cuanto haya
+  // cualquier filtro activo (no solo Demanda Total).
+  const desde = request.nextUrl.searchParams.get("desde");
+  const hasta = request.nextUrl.searchParams.get("hasta");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
-  // Mismo filtro "Demanda Total" que Resumen: ?incluirTerminados=1.
   const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
 
   try {
@@ -49,6 +51,12 @@ export async function GET(request: NextRequest) {
     let contables = rows.filter(
       (r) => esContable(r, incluirTerminados) && ((r.seller || "").trim() || "SIN SELLER") === marcaTrim
     );
+    if (desde) {
+      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
+    }
+    if (hasta) {
+      contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) <= hasta : false));
+    }
     if (tipoPedidoParam === "REMA" || tipoPedidoParam === "STD") {
       const pedidosRemaManual = await fetchPedidosRemaManual();
       contables = contables.filter((r) => tipoPedido(r.pedido, r.nombre_pedido, pedidosRemaManual) === tipoPedidoParam);
