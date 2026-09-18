@@ -49,6 +49,12 @@ export default function EscanerCelularHojaDeRutaPage() {
     faltantes: BultoEsperado[];
   } | null>(null);
 
+  // Carga manual: por defecto apagada (solo cámara) -- el usuario la prende
+  // a propósito cuando por algún motivo no puede escanear (código dañado,
+  // mala luz, cámara rota) y ahí sí aparece un input real con teclado.
+  const [modoManual, setModoManual] = useState(false);
+  const [valorManual, setValorManual] = useState("");
+
   const reiniciar = () => {
     setFase("escanear_hoja");
     setError(null);
@@ -58,6 +64,8 @@ export default function EscanerCelularHojaDeRutaPage() {
     setBultos([]);
     setMostrarConfirmarFaltante(false);
     setResultadoFinal(null);
+    setModoManual(false);
+    setValorManual("");
   };
 
   const escanearHoja = async (codigo: string) => {
@@ -124,6 +132,13 @@ export default function EscanerCelularHojaDeRutaPage() {
     else if (fase === "escaneando") escanearBulto(codigo);
   };
 
+  const onSubmitManual = (e: React.FormEvent) => {
+    e.preventDefault();
+    const codigo = valorManual.trim();
+    setValorManual("");
+    if (codigo) onScan(codigo);
+  };
+
   const escaneados = bultos.filter((b) => b.escaneado).length;
   const faltantes = bultos.filter((b) => !b.escaneado);
 
@@ -171,8 +186,34 @@ export default function EscanerCelularHojaDeRutaPage() {
 
         {fase === "escanear_hoja" && (
           <>
-            <p className="text-sm text-slate-500 mb-4 text-center">Apuntá la cámara al código de la Hoja de Ruta.</p>
-            <CameraScanInput onScan={onScan} disabled={cargando} />
+            {modoManual ? (
+              <>
+                <p className="text-sm text-slate-500 mb-4 text-center">Escribí el código de la Hoja de Ruta.</p>
+                <form onSubmit={onSubmitManual}>
+                  <input
+                    type="text"
+                    autoFocus
+                    disabled={cargando}
+                    value={valorManual}
+                    onChange={(e) => setValorManual(e.target.value)}
+                    placeholder="Ej. HDR-123"
+                    className="w-full px-4 py-4 text-lg text-center rounded-lg bg-slate-100 border-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </form>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-500 mb-4 text-center">Apuntá la cámara al código de la Hoja de Ruta.</p>
+                <CameraScanInput onScan={onScan} disabled={cargando} />
+              </>
+            )}
+            <button
+              type="button"
+              onClick={() => setModoManual((v) => !v)}
+              className="text-xs text-slate-400 hover:text-slate-600 underline block mx-auto mt-3"
+            >
+              {modoManual ? "Volver a la cámara" : "No puedo escanear — escribir a mano"}
+            </button>
             {cargando && <p className="text-sm text-slate-400 mt-3 text-center">Buscando hoja...</p>}
             {error && <p className="text-sm text-red-600 mt-3 text-center">{error}</p>}
           </>
@@ -190,9 +231,30 @@ export default function EscanerCelularHojaDeRutaPage() {
               <p className="text-xs text-slate-400">bultos escaneados</p>
             </div>
 
-            <div className="mb-3">
-              <CameraScanInput onScan={onScan} disabled={cargando || mostrarConfirmarFaltante} />
+            <div className="mb-1">
+              {modoManual ? (
+                <form onSubmit={onSubmitManual}>
+                  <input
+                    type="text"
+                    autoFocus
+                    disabled={cargando || mostrarConfirmarFaltante}
+                    value={valorManual}
+                    onChange={(e) => setValorManual(e.target.value)}
+                    placeholder="Escribí el código del bulto"
+                    className="w-full px-4 py-4 text-lg text-center rounded-lg bg-slate-100 border-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </form>
+              ) : (
+                <CameraScanInput onScan={onScan} disabled={cargando || mostrarConfirmarFaltante} />
+              )}
             </div>
+            <button
+              type="button"
+              onClick={() => setModoManual((v) => !v)}
+              className="text-xs text-slate-400 hover:text-slate-600 underline block mx-auto mb-3"
+            >
+              {modoManual ? "Volver a la cámara" : "No puedo escanear — escribir a mano"}
+            </button>
 
             {aviso && (
               <div className="mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-sm text-amber-700 text-center">
