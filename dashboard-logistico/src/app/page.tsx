@@ -1121,8 +1121,18 @@ export default function DashboardLayout() {
     timer: ReturnType<typeof setTimeout> | null;
   }>({ chars: "", selStart: 0, selEnd: 0, timer: null });
 
+  // Algunos lectores USB vienen configurados con un layout de teclado
+  // distinto al de la PC (ej. "US" en una PC con teclado en español/LatAm)
+  // y pierden o cambian el guion al escanear el código -- toleramos que
+  // venga sin separador (o con uno distinto, ej. "_"/"/") y reconstruimos
+  // el formato canónico "interlocal-NNNNN" antes de validar/guardar.
+  const normalizarCodigoEscaneado = (codigo: string): string => {
+    const m = codigo.match(/^interlocal[-_/\s]?(\d+)$/i);
+    return m ? `interlocal-${m[1]}` : codigo;
+  };
+
   const procesarEtiquetaEscaneada = (codigoCrudo: string) => {
-    const codigo = codigoCrudo.trim();
+    const codigo = normalizarCodigoEscaneado(codigoCrudo.trim());
     if (!FORMATO_ETIQUETA_INTERLOCAL.test(codigo)) {
       setInterlocalGuardadoError(
         `Ese código no tiene el formato de una etiqueta interlocal ("interlocal-00001"): "${codigo}"`
