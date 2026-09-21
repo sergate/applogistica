@@ -1091,19 +1091,35 @@ export default function DashboardLayout() {
 
   // Complemento: detección de escaneo con lector USB (teclado-wedge). Un
   // lector tipea el código completo carácter por carácter en pocos
-  // milisegundos -- muchísimo más rápido que cualquier tipeo humano -- así
-  // que medimos el tiempo entre teclas para distinguir uno de otro sin que
-  // el usuario tenga que avisar nada. No usamos preventDefault por
-  // carácter (se deja tipear normal, con el prefijo protegido de siempre);
-  // reconstruimos el código en un buffer propio en paralelo, y recién al
-  // detectar Enter con timing de escaneo lo usamos como fuente de verdad
-  // (corrigiendo cualquier cosa rara que haya quedado en el campo visible
-  // por la ráfaga) -- si el timing no da de escaneo, no hacemos nada y el
-  // tipeo manual sigue exactamente el camino de siempre.
+  // milisegundos -- muchísimo más rápido que cualquier tipeo humano.
+  //
+  // Primera versión midió el tiempo entre keydowns dejando que cada tecla
+  // pasara normal al input -- en producción eso rompía el prefijo
+  // ("interlocal-0interlocal-00165"): como este componente es gigante, el
+  // re-render de React que dispara cada tecla (vía onChange) demora lo
+  // suficiente al hilo principal como para que los keydown siguientes del
+  // lector lleguen a destiempo, así que el timing medido después del
+  // render no reflejaba la velocidad real del lector y la ráfaga se
+  // clasificaba mal como tipeo manual.
+  //
+  // Ahora NINGUNA tecla imprimible llega al input directamente (preventDefault
+  // siempre): se acumulan en un buffer por fuera de React (sin disparar
+  // re-render, así no hay forma de que el hilo se atrase entre teclas de
+  // una ráfaga real) y recién se confirman contra el campo cuando: (a) llega
+  // Enter, o (b) pasan TIMEOUT_SIN_TECLA_MS sin ninguna tecla nueva (el
+  // lector no manda Enter, o el usuario dejó de tipear a mano). Si lo
+  // acumulado en ese momento es largo, se trata como escaneo; si es corto,
+  // se aplica al campo como tipeo manual normal (respetando el prefijo) y
+  // sigue el flujo de siempre.
   const FORMATO_ETIQUETA_INTERLOCAL = /^interlocal-\d+$/i;
-  const UMBRAL_ESCANEO_MS = 40;
   const LARGO_MINIMO_ESCANEO = 5;
-  const escaneoEtiquetaRef = useRef<{ buffer: string; ultimaTecla: number }>({ buffer: "", ultimaTecla: 0 });
+  const TIMEOUT_SIN_TECLA_MS = 60;
+  const bufferEtiquetaRef = useRef<{
+    chars: string;
+    selStart: number;
+    selEnd: number;
+    timer: ReturnType<typeof setTimeout> | null;
+  }>({ chars: "", selStart: 0, selEnd: 0, timer: null });
 
   const procesarEtiquetaEscaneada = (codigoCrudo: string) => {
     const codigo = codigoCrudo.trim();
@@ -1121,34 +1137,79 @@ export default function DashboardLayout() {
     }
   };
 
+  // Aplica lo bufferizado (que no llegó a ser un escaneo) al campo real,
+  // insertándolo en la posición del cursor de cuando arrancó el buffer --
+  // mismo chequeo de prefijo que onChangeNumeroEtiquetaInterlocal.
+  const confirmarBufferComoTipeoManual = (pendiente: string, selStart: number, selEnd: number) => {
+    const actual = interlocalForm.numeroEtiqueta;
+    const nuevo = actual.slice(0, selStart) + pendiente + actual.slice(selEnd);
+    if (nuevo.startsWith(PREFIJO_ETIQUETA_INTERLOCAL)) {
+      actualizarInterlocalForm("numeroEtiqueta", nuevo);
+    }
+  };
+
   const onKeyDownEtiquetaConEscaneo = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    const estado = escaneoEtiquetaRef.current;
-    const ahora = Date.now();
-    const esRafagaRapida = ahora - estado.ultimaTecla <= UMBRAL_ESCANEO_MS;
+    const estado = bufferEtiquetaRef.current;
 
     if (e.key === "Enter") {
-      const bufferCompleto = estado.buffer;
-      const fueEscaneo = esRafagaRapida && bufferCompleto.length >= LARGO_MINIMO_ESCANEO;
-      estado.buffer = "";
-      estado.ultimaTecla = 0;
-      if (fueEscaneo) {
+      if (estado.timer) {
+        clearTimeout(estado.timer);
+        estado.timer = null;
+      }
+      const pendiente = estado.chars;
+      const { selStart, selEnd } = estado;
+      estado.chars = "";
+      if (pendiente.length >= LARGO_MINIMO_ESCANEO) {
         e.preventDefault();
-        procesarEtiquetaEscaneada(bufferCompleto);
+        procesarEtiquetaEscaneada(pendiente);
         return;
+      }
+      if (pendiente.length > 0) {
+        confirmarBufferComoTipeoManual(pendiente, selStart, selEnd);
       }
       onKeyDownNumeroEtiquetaInterlocal(e);
       return;
     }
 
-    if (e.key.length === 1) {
-      estado.buffer = esRafagaRapida ? estado.buffer + e.key : e.key;
-    } else if (e.key !== "Shift") {
-      // Tecla no imprimible (Backspace, flechas, etc.) -- no forma parte de
-      // un código escaneado, reiniciamos el buffer para no arrastrar basura.
-      estado.buffer = "";
+    // Teclas imprimibles de un solo carácter (letras, números, "-"): nunca
+    // llegan al input directo -- se bufferizan y se decide después.
+    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      if (estado.chars === "") {
+        const el = e.currentTarget;
+        estado.selStart = el.selectionStart ?? el.value.length;
+        estado.selEnd = el.selectionEnd ?? el.value.length;
+      }
+      estado.chars += e.key;
+      if (estado.timer) clearTimeout(estado.timer);
+      estado.timer = setTimeout(() => {
+        estado.timer = null;
+        const pendiente = estado.chars;
+        const { selStart, selEnd } = estado;
+        estado.chars = "";
+        if (!pendiente) return;
+        if (pendiente.length >= LARGO_MINIMO_ESCANEO) {
+          procesarEtiquetaEscaneada(pendiente);
+        } else {
+          confirmarBufferComoTipeoManual(pendiente, selStart, selEnd);
+        }
+      }, TIMEOUT_SIN_TECLA_MS);
+      return;
     }
-    estado.ultimaTecla = ahora;
 
+    // Backspace, Delete, flechas, etc. -- no forman parte de un código
+    // escaneado. Si había algo bufferizado sin confirmar, se aplica primero
+    // para no perderlo, y después sigue el manejo existente de esa tecla.
+    if (estado.timer) {
+      clearTimeout(estado.timer);
+      estado.timer = null;
+    }
+    if (estado.chars) {
+      const pendiente = estado.chars;
+      const { selStart, selEnd } = estado;
+      estado.chars = "";
+      confirmarBufferComoTipeoManual(pendiente, selStart, selEnd);
+    }
     onKeyDownNumeroEtiquetaInterlocal(e);
   };
 
