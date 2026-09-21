@@ -7,6 +7,35 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+interface DespachoGuiaRow {
+  despacho_cab_id: number;
+  cliente: string | null;
+  estado_wms: string | null;
+  hoja_de_ruta_id: number | null;
+  [key: string]: unknown;
+}
+
+const PAGE_SIZE = 1000;
+
+// Supabase/PostgREST devuelve como máximo 1000 filas por página salvo que se
+// pagine con .range() -- esta función pide páginas seguidas hasta que una
+// vuelve con menos de PAGE_SIZE filas (fin de la tabla).
+async function fetchTodosPaginados<T>(
+  pedirPagina: (from: number, hasta: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
+): Promise<T[]> {
+  const resultado: T[] = [];
+  let from = 0;
+  for (;;) {
+    const { data, error } = await pedirPagina(from, from + PAGE_SIZE - 1);
+    if (error) throw new Error(`Supabase (despacho_guias): ${error.message}`);
+    const pagina = data || [];
+    resultado.push(...pagina);
+    if (pagina.length < PAGE_SIZE) break;
+    from += PAGE_SIZE;
+  }
+  return resultado;
+}
+
 // Trae lo que hay disponible para armar (o editar) una Hoja de Ruta de un
 // local: interlocales pendientes (misma tabla que usa /api/interlocales) +
 // guías de despacho del WMS todavía no incluidas en otra hoja -- sin
@@ -46,12 +75,15 @@ export async function GET(request: NextRequest) {
       .order("registrado_en");
     if (errorInterlocales) throw new Error(`Supabase (interlocales): ${errorInterlocales.message}`);
 
-    const { data: despachosDisponibles, error: errorDespachos } = await supabaseAdmin
-      .from("despacho_guias")
-      .select("*")
-      .is("hoja_de_ruta_id", null)
-      .order("fecha_creacion");
-    if (errorDespachos) throw new Error(`Supabase (despacho_guias): ${errorDespachos.message}`);
+    // despacho_guias nunca borra filas (los imports son upsert) y crece sin
+    // límite mientras haya guías sin asignar a una hoja -- Supabase corta en
+    // 1000 filas por default si no se pagina, y como el orden es ascendente
+    // por fecha, las guías MÁS NUEVAS quedaban afuera del resultado apenas
+    // había más de 1000 pendientes (bug real: guías recién importadas no
+    // aparecían para armar la Hoja de Ruta).
+    const despachosDisponibles = await fetchTodosPaginados<DespachoGuiaRow>((from, hasta) =>
+      supabaseAdmin.from("despacho_guias").select("*").is("hoja_de_ruta_id", null).order("fecha_creacion").range(from, hasta)
+    );
 
     // Las guías ya despachadas (estado_wms = "DP_COT_OK" -- Código de
     // Operación de Traslado de ARBA aprobado, confirmado contra guías
