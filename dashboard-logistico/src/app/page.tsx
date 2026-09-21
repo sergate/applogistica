@@ -1041,13 +1041,11 @@ export default function DashboardLayout() {
     setInterlocalGuardadoError(null);
   };
 
-  // Modo "varios bultos": cada Enter agrega la etiqueta tipeada a la lista y
-  // reinicia el campo con el prefijo listo para la siguiente, hasta llegar a
-  // la cantidad de bultos declarada.
-  const agregarEtiquetaInterlocalMultiBulto = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== "Enter") return;
-    e.preventDefault();
-    const codigo = interlocalForm.numeroEtiqueta.trim();
+  // Núcleo de "agregar una etiqueta al interlocal", compartido entre la
+  // carga manual (Enter en modo varios bultos) y el escaneo por lector USB
+  // (ver más abajo) -- misma validación de duplicados/cupo sin importar de
+  // dónde vino el código.
+  const agregarEtiquetaALista = (codigo: string) => {
     if (!codigo || codigo === PREFIJO_ETIQUETA_INTERLOCAL) return;
     if (interlocalForm.etiquetas.length >= interlocalCantidadBultosNum) return;
     if (interlocalForm.etiquetas.includes(codigo)) {
@@ -1060,6 +1058,15 @@ export default function DashboardLayout() {
       etiquetas: [...prev.etiquetas, codigo],
       numeroEtiqueta: PREFIJO_ETIQUETA_INTERLOCAL,
     }));
+  };
+
+  // Modo "varios bultos": cada Enter agrega la etiqueta tipeada a la lista y
+  // reinicia el campo con el prefijo listo para la siguiente, hasta llegar a
+  // la cantidad de bultos declarada.
+  const agregarEtiquetaInterlocalMultiBulto = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    agregarEtiquetaALista(interlocalForm.numeroEtiqueta.trim());
   };
 
   // El prefijo "interlocal-0" del campo N° Etiqueta no se puede borrar ni
@@ -1080,6 +1087,69 @@ export default function DashboardLayout() {
       return;
     }
     if (interlocalCantidadBultosNum > 1) agregarEtiquetaInterlocalMultiBulto(e);
+  };
+
+  // Complemento: detección de escaneo con lector USB (teclado-wedge). Un
+  // lector tipea el código completo carácter por carácter en pocos
+  // milisegundos -- muchísimo más rápido que cualquier tipeo humano -- así
+  // que medimos el tiempo entre teclas para distinguir uno de otro sin que
+  // el usuario tenga que avisar nada. No usamos preventDefault por
+  // carácter (se deja tipear normal, con el prefijo protegido de siempre);
+  // reconstruimos el código en un buffer propio en paralelo, y recién al
+  // detectar Enter con timing de escaneo lo usamos como fuente de verdad
+  // (corrigiendo cualquier cosa rara que haya quedado en el campo visible
+  // por la ráfaga) -- si el timing no da de escaneo, no hacemos nada y el
+  // tipeo manual sigue exactamente el camino de siempre.
+  const FORMATO_ETIQUETA_INTERLOCAL = /^interlocal-\d+$/i;
+  const UMBRAL_ESCANEO_MS = 40;
+  const LARGO_MINIMO_ESCANEO = 5;
+  const escaneoEtiquetaRef = useRef<{ buffer: string; ultimaTecla: number }>({ buffer: "", ultimaTecla: 0 });
+
+  const procesarEtiquetaEscaneada = (codigoCrudo: string) => {
+    const codigo = codigoCrudo.trim();
+    if (!FORMATO_ETIQUETA_INTERLOCAL.test(codigo)) {
+      setInterlocalGuardadoError(
+        `Ese código no tiene el formato de una etiqueta interlocal ("interlocal-00001"): "${codigo}"`
+      );
+      return;
+    }
+    setInterlocalGuardadoError(null);
+    if (interlocalCantidadBultosNum > 1) {
+      agregarEtiquetaALista(codigo);
+    } else {
+      setInterlocalForm((prev) => ({ ...prev, numeroEtiqueta: codigo }));
+    }
+  };
+
+  const onKeyDownEtiquetaConEscaneo = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const estado = escaneoEtiquetaRef.current;
+    const ahora = Date.now();
+    const esRafagaRapida = ahora - estado.ultimaTecla <= UMBRAL_ESCANEO_MS;
+
+    if (e.key === "Enter") {
+      const bufferCompleto = estado.buffer;
+      const fueEscaneo = esRafagaRapida && bufferCompleto.length >= LARGO_MINIMO_ESCANEO;
+      estado.buffer = "";
+      estado.ultimaTecla = 0;
+      if (fueEscaneo) {
+        e.preventDefault();
+        procesarEtiquetaEscaneada(bufferCompleto);
+        return;
+      }
+      onKeyDownNumeroEtiquetaInterlocal(e);
+      return;
+    }
+
+    if (e.key.length === 1) {
+      estado.buffer = esRafagaRapida ? estado.buffer + e.key : e.key;
+    } else if (e.key !== "Shift") {
+      // Tecla no imprimible (Backspace, flechas, etc.) -- no forma parte de
+      // un código escaneado, reiniciamos el buffer para no arrastrar basura.
+      estado.buffer = "";
+    }
+    estado.ultimaTecla = ahora;
+
+    onKeyDownNumeroEtiquetaInterlocal(e);
   };
 
   // Además de bloquear borrar el prefijo, evitamos que el cursor/selección
@@ -8461,12 +8531,13 @@ export default function DashboardLayout() {
                       placeholder="se usa como guía WMS"
                       value={interlocalForm.numeroEtiqueta}
                       onChange={(e) => onChangeNumeroEtiquetaInterlocal(e.target.value)}
-                      onKeyDown={onKeyDownNumeroEtiquetaInterlocal}
+                      onKeyDown={onKeyDownEtiquetaConEscaneo}
                       onKeyUp={clampCursorNumeroEtiquetaInterlocal}
                       onClick={clampCursorNumeroEtiquetaInterlocal}
                       onFocus={clampCursorNumeroEtiquetaInterlocal}
                       className="w-full px-3 py-2 rounded-lg text-sm bg-slate-100 text-slate-700 border-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                     />
+                    <p className="text-xs text-slate-400 mt-1">Podés escribirla a mano o escanearla con un lector USB.</p>
                     {interlocalCantidadBultosNum > 1 && interlocalForm.etiquetas.length > 0 && (
                       <ul className="mt-2 flex flex-wrap gap-2">
                         {interlocalForm.etiquetas.map((et, i) => (
