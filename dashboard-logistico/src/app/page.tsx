@@ -1123,11 +1123,13 @@ export default function DashboardLayout() {
 
   // Algunos lectores USB vienen configurados con un layout de teclado
   // distinto al de la PC (ej. "US" en una PC con teclado en español/LatAm)
-  // y pierden o cambian el guion al escanear el código -- toleramos que
-  // venga sin separador (o con uno distinto, ej. "_"/"/") y reconstruimos
-  // el formato canónico "interlocal-NNNNN" antes de validar/guardar.
+  // y el guion sale cambiado por otro símbolo según esa combinación de
+  // layouts (confirmado en la práctica: apareció como apóstrofo) -- en vez
+  // de intentar listar cada símbolo posible, toleramos CUALQUIER carácter
+  // único (o ninguno) en esa posición y reconstruimos el formato canónico
+  // "interlocal-NNNNN" antes de validar/guardar.
   const normalizarCodigoEscaneado = (codigo: string): string => {
-    const m = codigo.match(/^interlocal[-_/\s]?(\d+)$/i);
+    const m = codigo.match(/^interlocal.?(\d+)$/i);
     return m ? `interlocal-${m[1]}` : codigo;
   };
 
