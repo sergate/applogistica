@@ -2,7 +2,11 @@ import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getCached } from "@/lib/queryCache";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
-const ALMACEN_TTL_MS = 20_000;
+// Ver el mismo comentario en resumenHelpers.ts (MAESTROS_TTL_MS): un TTL
+// más largo no muestra datos más viejos que la última importación (que
+// invalida el caché a mano), solo evita recalcular de más en cada request
+// -- ayuda a bajar "Fluid Active CPU" en Vercel.
+const ALMACEN_TTL_MS = 120_000;
 
 export interface AlmacenLayoutRow {
   nave: string | null;

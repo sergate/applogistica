@@ -2,10 +2,10 @@ import { getCached } from "@/lib/queryCache";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
 // Tablas grandes que se piden completas en cada visita a su pestaña de
-// Resumen -- un TTL corto evita traer la tabla entera de vuelta si se
-// cambia de filtro o se vuelve a la pestaña a los pocos segundos. Se
-// invalida a mano en los endpoints de import/borrado correspondientes.
-const PENDIENTE_DESPACHO_TTL_MS = 20_000;
+// Resumen. Se invalida a mano en los endpoints de import/borrado
+// correspondientes, así que un TTL más largo no muestra datos más viejos
+// que eso -- ver el mismo comentario en resumenHelpers.ts (MAESTROS_TTL_MS).
+const PENDIENTE_DESPACHO_TTL_MS = 120_000;
 
 export interface PendienteDespachoRow {
   numero: string;

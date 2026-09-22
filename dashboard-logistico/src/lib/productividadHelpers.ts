@@ -1,7 +1,8 @@
 import { getCached } from "@/lib/queryCache";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
-const PRODUCTIVIDAD_TTL_MS = 20_000;
+// Ver el mismo comentario en resumenHelpers.ts (MAESTROS_TTL_MS).
+const PRODUCTIVIDAD_TTL_MS = 120_000;
 
 export interface ProductividadRow {
   fecha: string;

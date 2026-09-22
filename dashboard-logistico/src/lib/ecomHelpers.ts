@@ -1,7 +1,8 @@
 import { getCached } from "@/lib/queryCache";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
-const ECOM_TTL_MS = 20_000;
+// Ver el mismo comentario en resumenHelpers.ts (MAESTROS_TTL_MS).
+const ECOM_TTL_MS = 120_000;
 
 // Pedidos con alguno de estos estados, o marcados como cancelados, no
 // cuentan para los cálculos de la sección Ecom (equivalente a OD_TERMINADO

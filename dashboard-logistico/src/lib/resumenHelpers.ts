@@ -4,10 +4,13 @@ import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
 
 // Los "maestros" (grupo_pedidos, tiendas_destino, clientes) los piden
 // completos y sin filtrar varias rutas distintas en la misma ventana de
-// tiempo (Resumen, Por Fecha, Por Pedidos, Por Canal...). Cachearlos unos
-// segundos evita traer la tabla entera de vuelta en cada request -- se
-// invalida a mano en /api/import-maestros apenas se reimporta alguno.
-const MAESTROS_TTL_MS = 20_000;
+// tiempo (Resumen, Por Fecha, Por Pedidos, Por Canal...). Cachearlos evita
+// traer la tabla entera de vuelta y volver a agregarla en cada request --
+// se invalida a mano en /api/import-maestros apenas se reimporta alguno,
+// así que un TTL más largo no muestra datos más viejos que eso, solo evita
+// recalcular de más mientras alguien navega el dashboard (el recálculo de
+// miles de filas en JS es la parte que más pesa en "Fluid Active CPU").
+const MAESTROS_TTL_MS = 120_000;
 
 // Grupos que NO cuentan para los cálculos de Status de Preparación
 // (son materiales de vidriera/empaque/packaging/promoción, no unidades de venta)
