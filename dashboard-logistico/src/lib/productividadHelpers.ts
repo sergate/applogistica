@@ -9,6 +9,7 @@ export interface ProductividadRow {
   tipo_proceso: string | null;
   cantidad: number | null;
   usuario: string | null;
+  grupo: string | null;
   created_at: string | null;
 }
 
@@ -26,6 +27,6 @@ export function mapearTipoProceso(tipo: string): string | null {
 
 export async function fetchAllProductividad(): Promise<ProductividadRow[]> {
   return getCached("productividad:all", PRODUCTIVIDAD_TTL_MS, () =>
-    fetchAllPaginated<ProductividadRow>("productividad", "fecha, tipo_proceso, cantidad, usuario, created_at")
+    fetchAllPaginated<ProductividadRow>("productividad", "fecha, tipo_proceso, cantidad, usuario, grupo, created_at")
   );
 }

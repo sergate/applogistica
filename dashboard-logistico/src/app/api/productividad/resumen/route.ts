@@ -39,7 +39,7 @@ export async function GET() {
 
     const grupos = new Map<
       string,
-      { fecha: string; tipoProceso: string; cantidad: number; usuarios: Set<string> }
+      { fecha: string; tipoProceso: string; grupoWms: string; cantidad: number; usuarios: Set<string> }
     >();
     let updatedAt: string | null = null;
 
@@ -47,9 +47,10 @@ export async function GET() {
       const tipoMapeado = mapearTipoProceso(r.tipo_proceso || "");
       if (!tipoMapeado) continue; // INGRESO excluido
 
-      const key = `${r.fecha}__${tipoMapeado}`;
+      const grupoWms = (r.grupo || "").trim().toUpperCase() || "SIN GRUPO";
+      const key = `${r.fecha}__${tipoMapeado}__${grupoWms}`;
       if (!grupos.has(key)) {
-        grupos.set(key, { fecha: r.fecha, tipoProceso: tipoMapeado, cantidad: 0, usuarios: new Set() });
+        grupos.set(key, { fecha: r.fecha, tipoProceso: tipoMapeado, grupoWms, cantidad: 0, usuarios: new Set() });
       }
       const g = grupos.get(key)!;
       g.cantidad += num(r.cantidad);
@@ -60,7 +61,13 @@ export async function GET() {
     }
 
     const filas = Array.from(grupos.values())
-      .map((g) => ({ fecha: g.fecha, tipoProceso: g.tipoProceso, cantidad: g.cantidad, usuariosUnicos: g.usuarios.size }))
+      .map((g) => ({
+        fecha: g.fecha,
+        tipoProceso: g.tipoProceso,
+        grupo: g.grupoWms,
+        cantidad: g.cantidad,
+        usuariosUnicos: g.usuarios.size,
+      }))
       .sort((a, b) => {
         if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1; // fecha más reciente primero
         const rankA = ORDEN_PROCESOS.indexOf(a.tipoProceso);

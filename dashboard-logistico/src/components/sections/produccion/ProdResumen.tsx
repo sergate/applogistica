@@ -9,6 +9,7 @@ import { fmtNum, fmtFecha } from "@/components/dashboard/formatters";
 interface ProductividadFila {
   fecha: string;
   tipoProceso: string;
+  grupo: string;
   cantidad: number;
   usuariosUnicos: number;
 }
@@ -41,6 +42,11 @@ export default function ProdResumen() {
   const [rangoProductividad, setRangoProductividad] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [fechaSeleccionadaProductividad, setFechaSeleccionadaProductividad] = useState<string>("");
   const [filtroTipoProcesoProductividad, setFiltroTipoProcesoProductividad] = useState<string>("TODOS");
+  const [filtroGrupoProductividad, setFiltroGrupoProductividad] = useState<string>("TODOS");
+
+  const gruposDisponiblesProductividad = [
+    ...new Set((productividadResumen?.filas ?? []).map((f) => f.grupo)),
+  ].sort();
 
   const hoyProductividadISO = new Date().toISOString().slice(0, 10);
 
@@ -61,6 +67,9 @@ export default function ProdResumen() {
       if (!permitidos.includes(f.tipoProceso)) return false;
     }
 
+    // Filtro de grupo WMS (A, C, etc.)
+    if (filtroGrupoProductividad !== "TODOS" && f.grupo !== filtroGrupoProductividad) return false;
+
     return true;
   });
 
@@ -68,7 +77,10 @@ export default function ProdResumen() {
   // mostrarlo cuando hay algún filtro aplicado (sin filtros, el subtotal
   // sería igual al total general).
   const hayFiltroProductividadActivo =
-    rangoProductividad !== null || fechaSeleccionadaProductividad !== "" || filtroTipoProcesoProductividad !== "TODOS";
+    rangoProductividad !== null ||
+    fechaSeleccionadaProductividad !== "" ||
+    filtroTipoProcesoProductividad !== "TODOS" ||
+    filtroGrupoProductividad !== "TODOS";
   const subtotalCantidadProductividad = filasProductividadFiltradas.reduce((acc, f) => acc + f.cantidad, 0);
 
   return (
@@ -148,11 +160,23 @@ export default function ProdResumen() {
           <option value="REPO">Repo (Picking + Finishing)</option>
         </select>
 
+        <select
+          value={filtroGrupoProductividad}
+          onChange={(e) => setFiltroGrupoProductividad(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        >
+          <option value="TODOS">Todos los grupos</option>
+          {gruposDisponiblesProductividad.map((g) => (
+            <option key={g} value={g}>{g}</option>
+          ))}
+        </select>
+
         <button
           onClick={() => {
             setRangoProductividad(null);
             setFechaSeleccionadaProductividad("");
             setFiltroTipoProcesoProductividad("TODOS");
+            setFiltroGrupoProductividad("TODOS");
           }}
           className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
         >
@@ -165,7 +189,7 @@ export default function ProdResumen() {
           <thead>
             {hayFiltroProductividadActivo && filasProductividadFiltradas.length > 0 && (
               <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                <td className="py-3 px-4 text-left" colSpan={2}>
+                <td className="py-3 px-4 text-left" colSpan={3}>
                   Subtotal
                 </td>
                 <td className="py-3 px-4 text-left">{fmtNum(subtotalCantidadProductividad)}</td>
@@ -175,6 +199,7 @@ export default function ProdResumen() {
             <tr className="text-slate-500 font-medium border-b border-slate-200">
               <th className="py-4 px-4 text-left">Fecha</th>
               <th className="py-4 px-4 text-left">Tipo Proceso</th>
+              <th className="py-4 px-4 text-left">Grupo</th>
               <th className="py-4 px-4 text-left">Cantidad</th>
               <th className="py-4 px-4 text-left">Usuarios Únicos</th>
             </tr>
@@ -184,6 +209,7 @@ export default function ProdResumen() {
               <tr key={i} className="hover:bg-slate-50 transition-colors">
                 <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
                 <td className="py-4 px-4 text-left font-semibold text-slate-900">{row.tipoProceso}</td>
+                <td className="py-4 px-4 text-left text-slate-600">{row.grupo}</td>
                 <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.cantidad)}</td>
                 <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.usuariosUnicos)}</td>
               </tr>

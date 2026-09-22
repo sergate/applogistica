@@ -261,7 +261,7 @@ function diaHabilAnterior() {
 // (confirmado inspeccionando la pantalla real: fechaDesde/fechaHasta/grupos),
 // que es como ya se resuelve el combo de "Resumen CI" en reporteCargaInicialRema.
 async function reporteProductividad(page) {
-  console.log("> productividad (día hábil anterior a hoy, Grupo A)");
+  console.log("> productividad (día hábil anterior a hoy, Grupos A y C)");
   await abrirPantalla(page, "Indicadores", "Productividad");
   await page.waitForTimeout(800);
 
@@ -286,7 +286,7 @@ async function reporteProductividad(page) {
       setVal("fechaHasta", new Date(fechaHastaISO));
       setVal("grupos", grupos);
     },
-    { fechaDesdeISO: fechaDesde.toISOString(), fechaHastaISO: fechaHasta.toISOString(), grupos: ["A"] }
+    { fechaDesdeISO: fechaDesde.toISOString(), fechaHastaISO: fechaHasta.toISOString(), grupos: ["A", "C"] }
   );
 
   await clickBotonExt(page, "Buscar");
