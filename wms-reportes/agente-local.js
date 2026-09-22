@@ -42,6 +42,9 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // un deploy preview en vez de a producción sin tocar código.
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
 const INTERVALO_POLLING_MS = 2500; // solo se usa en --loop
+// Backoff de modoLoop() cuando no hay pedidos -- ver comentario ahí.
+const MINUTOS_ANTES_DE_ESPACIAR_POLLING = 5;
+const INTERVALO_POLLING_OCIOSO_MS = 60_000;
 
 // Cada cuánto se refresca solo (sin que nadie apriete el botón) el
 // estado_wms de las guías -- lo necesita el bloqueo de Modificar/Anular
@@ -695,12 +698,22 @@ async function modoLoop() {
   // INTERVALO_REFRESCO_ESTADOS_MS -- ver refrescarEstadosDespachoAutomatico.
   let proximoRefrescoEstados = Date.now();
   let proximoCompletarPacking = Date.now();
+  // Backoff: recién arrancado (o apenas terminó un pedido) consulta rápido
+  // por si hay otro pedido encolado enseguida; si se queda sin nada por un
+  // rato, va espaciando las consultas -- el Agente corre 24/7 en cada PC
+  // del depósito aunque de noche/fin de semana no haya nadie cargando
+  // nada, y el polling fijo cada 2.5s (~1M requests/mes por Agente, solo
+  // uno) venía comiéndose el plan gratuito de Vercel (Function
+  // Invocations/Edge Requests) sin necesidad.
+  let ociosoDesde = null;
   for (;;) {
     try {
       const pedido = await buscarProximoPedido(config.token);
       if (pedido) {
         await atenderPedido(config, pedido);
+        ociosoDesde = null;
       } else {
+        if (ociosoDesde === null) ociosoDesde = Date.now();
         if (Date.now() >= proximoRefrescoEstados) {
           proximoRefrescoEstados = Date.now() + INTERVALO_REFRESCO_ESTADOS_MS;
           try {
@@ -720,8 +733,16 @@ async function modoLoop() {
       }
     } catch (err) {
       console.error("Error consultando pedidos pendientes:", err instanceof Error ? err.message : err);
+      if (ociosoDesde === null) ociosoDesde = Date.now();
     }
-    await new Promise((r) => setTimeout(r, INTERVALO_POLLING_MS));
+
+    const esperaMs = (() => {
+      if (ociosoDesde === null) return INTERVALO_POLLING_MS;
+      const ociosoMs = Date.now() - ociosoDesde;
+      if (ociosoMs < MINUTOS_ANTES_DE_ESPACIAR_POLLING * 60_000) return INTERVALO_POLLING_MS;
+      return INTERVALO_POLLING_OCIOSO_MS;
+    })();
+    await new Promise((r) => setTimeout(r, esperaMs));
   }
 }
 
