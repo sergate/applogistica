@@ -152,6 +152,7 @@ export default function EscanerCelularHojaDeRutaPage() {
         body: JSON.stringify({
           bultosEscaneados: escaneados,
           faltantes: faltantesACerrar.map((f) => ({ codigo: f.codigo, tipo: f.tipo })),
+          escaneados: bultos.filter((b) => b.escaneado).map((b) => ({ codigo: b.codigo, tipo: b.tipo })),
         }),
       });
       const data = await res.json();
