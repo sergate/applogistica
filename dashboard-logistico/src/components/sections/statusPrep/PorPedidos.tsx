@@ -37,7 +37,7 @@ export default function PorPedidos() {
     data: pedidosData,
     error: pedidosError,
     isLoading: pedidosLoading,
-  } = useTabData<{ filas: PedidoResumen[]; gruposClientesDisponibles: string[]; updatedAt: string | null }>(
+  } = useTabData<{ filas: PedidoResumen[]; updatedAt: string | null }>(
     activeTab,
     "Por pedidos",
     "/api/resumen/pedidos",
@@ -133,6 +133,11 @@ export default function PorPedidos() {
   const marcasDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.marca))).sort();
   const canalesDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.canal))).sort();
   const gruposDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.grupo))).sort();
+  // Solo los grupos de clientes que realmente aparecen en los pedidos
+  // traídos (no la lista completa del maestro despacho_grupos_clientes).
+  const gruposClientesDisponiblesPedidos = Array.from(
+    new Set((pedidosData?.filas ?? []).flatMap((f) => f.gruposClientes))
+  ).sort();
 
   const busquedaNormalizada = busquedaPedidos.trim().toLowerCase();
 
@@ -311,19 +316,19 @@ export default function PorPedidos() {
                         type="button"
                         onClick={() =>
                           setFiltroGruposClientesPedidos(
-                            filtroGruposClientesPedidos.length === (pedidosData?.gruposClientesDisponibles ?? []).length
+                            filtroGruposClientesPedidos.length === gruposClientesDisponiblesPedidos.length
                               ? []
-                              : pedidosData?.gruposClientesDisponibles ?? []
+                              : gruposClientesDisponiblesPedidos
                           )
                         }
                         className="w-full text-left px-2 py-1.5 rounded text-xs font-medium text-blue-600 hover:bg-blue-50"
                       >
-                        {filtroGruposClientesPedidos.length === (pedidosData?.gruposClientesDisponibles ?? []).length
+                        {filtroGruposClientesPedidos.length === gruposClientesDisponiblesPedidos.length
                           ? "Deseleccionar todos"
                           : "Seleccionar todos"}
                       </button>
                       <div className="border-t border-slate-100 my-1" />
-                      {(pedidosData?.gruposClientesDisponibles ?? []).map((g) => (
+                      {gruposClientesDisponiblesPedidos.map((g) => (
                         <label key={g} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
                           <input
                             type="checkbox"

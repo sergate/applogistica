@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { supabaseEnvOk } from "@/lib/supabaseClient";
 import {
   fetchAllGrupoPedidos,
   esContable,
@@ -110,23 +110,7 @@ export async function GET() {
       };
     });
 
-    // Lista completa de grupos (el filtro por Grupo de Clientes se aplica
-    // del lado del cliente, igual que el resto de los filtros de esta
-    // pestaña -- esta lista es para poblar el selector con todas las
-    // opciones, no solo las presentes en los pedidos actuales).
-    const { data: gruposClientesTodos, error: errorGruposClientes } = await supabaseAdmin
-      .from("despacho_grupos_clientes")
-      .select("nombre")
-      .order("nombre");
-    if (errorGruposClientes) throw new Error(`Supabase (despacho_grupos_clientes): ${errorGruposClientes.message}`);
-    const gruposClientesDisponibles = (gruposClientesTodos || []).map((g) => g.nombre);
-
-    return NextResponse.json({
-      success: true,
-      filas,
-      gruposClientesDisponibles,
-      updatedAt: ultimaActualizacion(rows),
-    });
+    return NextResponse.json({ success: true, filas, updatedAt: ultimaActualizacion(rows) });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },
