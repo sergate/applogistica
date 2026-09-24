@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { RealtimeChannel } from "@supabase/supabase-js";
+import { createClient } from "@/lib/supabase/client";
 
 type Seccion =
   | "no_ecom"
@@ -28,7 +30,10 @@ interface PedidoEstado {
 // es esperar casi 60s a que lo tome, así que el aviso de "no detectamos tu
 // Agente" espera más que eso para no disparar en falso en el uso normal.
 const SEGUNDOS_ANTES_DE_AVISAR_SIN_AGENTE = 90;
-const INTERVALO_POLLING_MS = 6000;
+// El estado real llega por un canal Realtime (ver src/lib/realtimeBroadcast.ts
+// del lado del servidor) apenas el Agente/el servidor lo cambian -- esto es
+// solo la red de seguridad por si se pierde algún aviso.
+const INTERVALO_POLLING_SEGURIDAD_MS = 30_000;
 
 // Botón "Actualizar esta sección": crea un pedido en actualizaciones_wms y
 // hace polling de su estado hasta que el Agente Local (corriendo en la PC
@@ -58,20 +63,26 @@ export default function ActualizarAgenteBoton({
   const [error, setError] = useState<string | null>(null);
   const [avisoSinAgente, setAvisoSinAgente] = useState(false);
   const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const canalRef = useRef<RealtimeChannel | null>(null);
+  const supabaseRef = useRef<ReturnType<typeof createClient> | null>(null);
   const inicioEsperaRef = useRef<number>(0);
+  if (!supabaseRef.current) supabaseRef.current = createClient();
 
-  useEffect(() => {
-    return () => {
-      if (intervaloRef.current) clearInterval(intervaloRef.current);
-    };
-  }, []);
-
-  const detenerPolling = () => {
+  const detenerEscucha = () => {
     if (intervaloRef.current) {
       clearInterval(intervaloRef.current);
       intervaloRef.current = null;
     }
+    if (canalRef.current) {
+      supabaseRef.current!.removeChannel(canalRef.current);
+      canalRef.current = null;
+    }
   };
+
+  useEffect(() => {
+    return () => detenerEscucha();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const consultarEstado = async () => {
     try {
@@ -92,13 +103,26 @@ export default function ActualizarAgenteBoton({
       }
 
       if (p.estado === "ok" || p.estado === "error") {
-        detenerPolling();
+        detenerEscucha();
         if (p.estado === "ok") onExito?.();
       }
     } catch (err) {
-      detenerPolling();
+      detenerEscucha();
       setError(err instanceof Error ? err.message : "Error inesperado.");
     }
+  };
+
+  // En vez de poleaer, escucha el canal Realtime de este pedido puntual
+  // (ver emitirCambioEstado del lado del servidor) y reacciona al toque --
+  // el intervalo que queda es solo una red de seguridad por si se pierde
+  // algún aviso (conexión cortada un rato, etc).
+  const escucharTrabajo = (id: number) => {
+    detenerEscucha();
+    canalRef.current = supabaseRef
+      .current!.channel(`actualizaciones:trabajo:${id}`)
+      .on("broadcast", { event: "cambio_estado" }, () => consultarEstado())
+      .subscribe();
+    intervaloRef.current = setInterval(consultarEstado, INTERVALO_POLLING_SEGURIDAD_MS);
   };
 
   const solicitarActualizacion = async () => {
@@ -124,8 +148,7 @@ export default function ActualizarAgenteBoton({
         created_at: new Date().toISOString(),
       });
 
-      detenerPolling();
-      intervaloRef.current = setInterval(consultarEstado, INTERVALO_POLLING_MS);
+      escucharTrabajo(data.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
