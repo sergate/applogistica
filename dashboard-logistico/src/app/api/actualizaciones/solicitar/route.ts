@@ -71,6 +71,12 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
+      // Reavisar aunque sea un pedido reusado: si quedó "pendiente" de un
+      // click anterior (ej. el Agente no estaba corriendo en ese momento y
+      // se perdió el aviso original), este nuevo click debe volver a
+      // despertarlo -- si ya está "corriendo" no hace falta, el Agente ya
+      // lo sabe.
+      if (existente.estado === "pendiente") await emitirNuevoPedido(auth.userId);
       return NextResponse.json({ success: true, id: existente.id, estado: existente.estado, reusado: true });
     }
 
