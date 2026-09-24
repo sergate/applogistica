@@ -232,7 +232,7 @@ export default function Resumen() {
                     </svg>
                   </button>
                   {canalDropdownAbiertoResumen && (
-                    <div className="absolute z-10 mt-1 w-56 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg p-2">
+                    <div className="absolute z-20 mt-1 w-56 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg p-2">
                       <button
                         type="button"
                         onClick={() =>
