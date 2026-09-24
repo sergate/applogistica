@@ -41,10 +41,18 @@ const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // Mismo override que actualizar-tablero.js, para poder apuntar el agente a
 // un deploy preview en vez de a producción sin tocar código.
 const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
-const INTERVALO_POLLING_MS = 2500; // solo se usa en --loop
+// Desde que se agregó Despacho (Para Imprimir/Reimprimir), los pedidos son
+// mucho más frecuentes durante el día (cada guía que se imprime genera uno)
+// -- eso hacía que el Agente nunca llegara a los 5 minutos ociosos y se
+// quedara todo el día en el polling rápido de 2.5s, disparando Function
+// Invocations/Edge Requests de Vercel. Se espació el polling activo y se
+// acortó la ventana para caer a modo ocioso, sin impacto perceptible para
+// el usuario (el trabajo del Agente ya tarda varios segundos por el
+// automatismo de Playwright).
+const INTERVALO_POLLING_MS = 5000; // solo se usa en --loop
 // Backoff de modoLoop() cuando no hay pedidos -- ver comentario ahí.
-const MINUTOS_ANTES_DE_ESPACIAR_POLLING = 5;
-const INTERVALO_POLLING_OCIOSO_MS = 60_000;
+const MINUTOS_ANTES_DE_ESPACIAR_POLLING = 2;
+const INTERVALO_POLLING_OCIOSO_MS = 90_000;
 
 // Cada cuánto se refresca solo (sin que nadie apriete el botón) el
 // estado_wms de las guías -- lo necesita el bloqueo de Modificar/Anular

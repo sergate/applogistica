@@ -28,7 +28,7 @@ interface PedidoEstado {
 // es esperar casi 60s a que lo tome, así que el aviso de "no detectamos tu
 // Agente" espera más que eso para no disparar en falso en el uso normal.
 const SEGUNDOS_ANTES_DE_AVISAR_SIN_AGENTE = 90;
-const INTERVALO_POLLING_MS = 3000;
+const INTERVALO_POLLING_MS = 6000;
 
 // Botón "Actualizar esta sección": crea un pedido en actualizaciones_wms y
 // hace polling de su estado hasta que el Agente Local (corriendo en la PC

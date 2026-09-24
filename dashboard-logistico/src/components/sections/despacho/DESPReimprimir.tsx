@@ -21,7 +21,7 @@ export default function DESPReimprimir() {
     "DESP-Reimprimir",
     "/api/despacho/guias?vista=reimprimir",
     dataVersion,
-    { refreshInterval: despachoReimprimiendoEnCurso ? 3000 : 0 }
+    { refreshInterval: despachoReimprimiendoEnCurso ? 6000 : 0 }
   );
   const [despachoReimprimirSeleccion, setDespachoReimprimirSeleccion] = useState<Set<number>>(new Set());
   const [despachoReimprimirDocumentos, setDespachoReimprimirDocumentos] = useState<"ambos" | "guia" | "remito">("ambos");

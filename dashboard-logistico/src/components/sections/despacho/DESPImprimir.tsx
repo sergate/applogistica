@@ -22,7 +22,7 @@ export default function DESPImprimir() {
     "DESP-Imprimir",
     "/api/despacho/guias?vista=imprimir",
     dataVersion,
-    { refreshInterval: despachoImprimiendoEnCurso ? 3000 : 0 }
+    { refreshInterval: despachoImprimiendoEnCurso ? 6000 : 0 }
   );
   const [despachoImprimirSeleccion, setDespachoImprimirSeleccion] = useState<Set<number>>(new Set());
   const toggleDespachoImprimirFila = (id: number) => {
