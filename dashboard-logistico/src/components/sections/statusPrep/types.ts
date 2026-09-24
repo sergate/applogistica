@@ -52,5 +52,8 @@ export interface ResumenData {
   // Fechas únicas presentes en la tabla (sin filtrar), para poder armar el
   // selector de "Semana del año" sin depender de los datos de otras pestañas.
   fechasDisponibles: string[];
+  // Canales únicos presentes en la tabla (sin filtrar), para el selector del
+  // filtro por Canal -- mismo criterio que fechasDisponibles.
+  canalesDisponibles: string[];
   updatedAt: string | null;
 }

@@ -189,7 +189,7 @@ export default function ProdResumen() {
           <thead>
             {hayFiltroProductividadActivo && filasProductividadFiltradas.length > 0 && (
               <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                <td className="py-3 px-4 text-left" colSpan={3}>
+                <td className="py-3 px-4 text-left" colSpan={2}>
                   Subtotal
                 </td>
                 <td className="py-3 px-4 text-left">{fmtNum(subtotalCantidadProductividad)}</td>
@@ -199,7 +199,6 @@ export default function ProdResumen() {
             <tr className="text-slate-500 font-medium border-b border-slate-200">
               <th className="py-4 px-4 text-left">Fecha</th>
               <th className="py-4 px-4 text-left">Tipo Proceso</th>
-              <th className="py-4 px-4 text-left">Grupo</th>
               <th className="py-4 px-4 text-left">Cantidad</th>
               <th className="py-4 px-4 text-left">Usuarios Únicos</th>
             </tr>
@@ -209,7 +208,6 @@ export default function ProdResumen() {
               <tr key={i} className="hover:bg-slate-50 transition-colors">
                 <td className="py-4 px-4 text-left text-slate-600 font-medium">{row.fecha}</td>
                 <td className="py-4 px-4 text-left font-semibold text-slate-900">{row.tipoProceso}</td>
-                <td className="py-4 px-4 text-left text-slate-600">{row.grupo}</td>
                 <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.cantidad)}</td>
                 <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.usuariosUnicos)}</td>
               </tr>

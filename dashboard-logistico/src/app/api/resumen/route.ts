@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllGrupoPedidos, esContable, num, ultimaActualizacion, tipoPedido, fetchPedidosRemaManual } from "@/lib/resumenHelpers";
+import {
+  fetchAllGrupoPedidos,
+  esContable,
+  num,
+  ultimaActualizacion,
+  tipoPedido,
+  fetchPedidosRemaManual,
+  fetchTiendasPorPedido,
+  fetchCanalPorCodigoTienda,
+  resolverCanal,
+} from "@/lib/resumenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -34,9 +44,18 @@ export async function GET(request: NextRequest) {
   const hasta = request.nextUrl.searchParams.get("hasta");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
   const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
+  // Filtro opcional por canal: ?canal=<nombre> (mismos valores que devuelve
+  // canalesDisponibles). El canal se define a nivel PEDIDO, no por línea --
+  // se resuelve vía tiendas_destino/clientes, igual que en /api/resumen/canal.
+  const canalParam = request.nextUrl.searchParams.get("canal");
 
   try {
     const rows = await fetchAllGrupoPedidos();
+    const [tiendasPorPedido, canalPorCodigo] = await Promise.all([
+      fetchTiendasPorPedido(),
+      fetchCanalPorCodigoTienda(),
+    ]);
+
     let contables = rows.filter((r) => esContable(r, incluirTerminados));
     if (desde) {
       contables = contables.filter((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) >= desde : false));
@@ -47,6 +66,9 @@ export async function GET(request: NextRequest) {
     if (tipoPedidoParam === "REMA" || tipoPedidoParam === "STD") {
       const pedidosRemaManual = await fetchPedidosRemaManual();
       contables = contables.filter((r) => tipoPedido(r.pedido, r.nombre_pedido, pedidosRemaManual) === tipoPedidoParam);
+    }
+    if (canalParam) {
+      contables = contables.filter((r) => resolverCanal(r.pedido, tiendasPorPedido, canalPorCodigo) === canalParam);
     }
 
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);
@@ -104,7 +126,25 @@ export async function GET(request: NextRequest) {
       new Set(rows.map((r) => (r.fecha_creacion ? r.fecha_creacion.slice(0, 10) : "SIN FECHA")))
     );
 
-    return NextResponse.json({ success: true, kpis, marcas, fechasDisponibles, updatedAt: ultimaActualizacion(rows) });
+    // Canales únicos de TODA la tabla (sin filtrar) -- mismo criterio que
+    // fechasDisponibles, un canal por pedido (no por línea).
+    const pedidosVistos = new Set<string>();
+    const canalesDisponiblesSet = new Set<string>();
+    for (const r of rows) {
+      if (pedidosVistos.has(r.pedido)) continue;
+      pedidosVistos.add(r.pedido);
+      canalesDisponiblesSet.add(resolverCanal(r.pedido, tiendasPorPedido, canalPorCodigo));
+    }
+    const canalesDisponibles = Array.from(canalesDisponiblesSet).sort();
+
+    return NextResponse.json({
+      success: true,
+      kpis,
+      marcas,
+      fechasDisponibles,
+      canalesDisponibles,
+      updatedAt: ultimaActualizacion(rows),
+    });
   } catch (err) {
     return NextResponse.json(
       {

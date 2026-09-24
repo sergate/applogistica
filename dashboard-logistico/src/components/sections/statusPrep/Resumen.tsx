@@ -16,6 +16,7 @@ export default function Resumen() {
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [semanaResumen, setSemanaResumen] = useState<{ desde: string; hasta: string } | null>(null);
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
+  const [filtroCanalResumen, setFiltroCanalResumen] = useState<string>("TODOS");
   // "Demanda Total": No (default) = igual que hoy, excluye OD_TERMINADO.
   // Sí = incluye también los pedidos OD_TERMINADO.
   const [filtroDemandaTotal, setFiltroDemandaTotal] = useState(false);
@@ -42,12 +43,15 @@ export default function Resumen() {
     if (filtroTipoResumen !== "TODOS") {
       params.set("tipoPedido", filtroTipoResumen);
     }
+    if (filtroCanalResumen !== "TODOS") {
+      params.set("canal", filtroCanalResumen);
+    }
     if (filtroDemandaTotal) {
       params.set("incluirTerminados", "1");
     }
     if (params.toString()) url += `?${params.toString()}`;
     return url;
-  }, [filtroFechas, filtroTipoResumen, filtroDemandaTotal]);
+  }, [filtroFechas, filtroTipoResumen, filtroCanalResumen, filtroDemandaTotal]);
 
   const {
     data: resumenData,
@@ -97,6 +101,7 @@ export default function Resumen() {
       if (filtroFechas.desde) url += `&desde=${filtroFechas.desde}`;
       if (filtroFechas.hasta) url += `&hasta=${filtroFechas.hasta}`;
       if (filtroTipoResumen !== "TODOS") url += `&tipoPedido=${filtroTipoResumen}`;
+      if (filtroCanalResumen !== "TODOS") url += `&canal=${encodeURIComponent(filtroCanalResumen)}`;
       if (filtroDemandaTotal) url += `&incluirTerminados=1`;
       const res = await fetch(url, {
         cache: "no-store",
@@ -138,7 +143,7 @@ export default function Resumen() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void cargarCanalPorMarca(selectedMarca);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroFechas, filtroTipoResumen, filtroDemandaTotal]);
+  }, [filtroFechas, filtroTipoResumen, filtroCanalResumen, filtroDemandaTotal]);
 
   return (
             <>
@@ -193,6 +198,17 @@ export default function Resumen() {
                   <option value="STD">STD</option>
                 </select>
 
+                <select
+                  value={filtroCanalResumen}
+                  onChange={(e) => setFiltroCanalResumen(e.target.value)}
+                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="TODOS">Todos los canales</option>
+                  {(resumenData?.canalesDisponibles ?? []).map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+
                 <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
                   Demanda Total
                   <select
@@ -210,6 +226,7 @@ export default function Resumen() {
                     setRangoResumen(null);
                     setSemanaResumen(null);
                     setFiltroTipoResumen("TODOS");
+                    setFiltroCanalResumen("TODOS");
                     setFiltroDemandaTotal(false);
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"

@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
   const hasta = request.nextUrl.searchParams.get("hasta");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
   const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
+  const canalParam = request.nextUrl.searchParams.get("canal");
 
   try {
     const rows = await fetchAllGrupoPedidos();
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest) {
       c.pedidos.add(pedido);
     }
 
-    const canales = Array.from(porCanal.entries())
+    let canales = Array.from(porCanal.entries())
       .map(([name, acc]) => ({
         name,
         uni: acc.uni,
@@ -111,6 +112,13 @@ export async function GET(request: NextRequest) {
         reg: acc.pedidos.size,
       }))
       .sort((a, b) => b.uni - a.uni);
+
+    // Si ya hay un canal elegido en el filtro de Resumen, el desglose de
+    // esta marca queda acotado a ese mismo canal (consistente con la fila
+    // de arriba, que ya está filtrada por él).
+    if (canalParam) {
+      canales = canales.filter((c) => c.name === canalParam);
+    }
 
     return NextResponse.json({ success: true, marca: marcaTrim, canales });
   } catch (err) {
