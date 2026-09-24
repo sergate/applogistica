@@ -44,10 +44,11 @@ export async function GET(request: NextRequest) {
   const hasta = request.nextUrl.searchParams.get("hasta");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
   const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
-  // Filtro opcional por canal: ?canal=<nombre> (mismos valores que devuelve
-  // canalesDisponibles). El canal se define a nivel PEDIDO, no por línea --
-  // se resuelve vía tiendas_destino/clientes, igual que en /api/resumen/canal.
-  const canalParam = request.nextUrl.searchParams.get("canal");
+  // Filtro opcional por canal (selección múltiple): ?canal=<nombre>&canal=<otro>
+  // (mismos valores que devuelve canalesDisponibles). El canal se define a
+  // nivel PEDIDO, no por línea -- se resuelve vía tiendas_destino/clientes,
+  // igual que en /api/resumen/canal. Array vacío = sin filtrar.
+  const canalesParam = request.nextUrl.searchParams.getAll("canal");
 
   try {
     const rows = await fetchAllGrupoPedidos();
@@ -67,8 +68,8 @@ export async function GET(request: NextRequest) {
       const pedidosRemaManual = await fetchPedidosRemaManual();
       contables = contables.filter((r) => tipoPedido(r.pedido, r.nombre_pedido, pedidosRemaManual) === tipoPedidoParam);
     }
-    if (canalParam) {
-      contables = contables.filter((r) => resolverCanal(r.pedido, tiendasPorPedido, canalPorCodigo) === canalParam);
+    if (canalesParam.length > 0) {
+      contables = contables.filter((r) => canalesParam.includes(resolverCanal(r.pedido, tiendasPorPedido, canalPorCodigo)));
     }
 
     const totalUni = contables.reduce((acc, r) => acc + num(r.uni), 0);

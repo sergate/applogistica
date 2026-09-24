@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonCard } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -16,10 +16,28 @@ export default function Resumen() {
   const [rangoResumen, setRangoResumen] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [semanaResumen, setSemanaResumen] = useState<{ desde: string; hasta: string } | null>(null);
   const [filtroTipoResumen, setFiltroTipoResumen] = useState<"TODOS" | "REMA" | "STD">("TODOS");
-  const [filtroCanalResumen, setFiltroCanalResumen] = useState<string>("TODOS");
+  // Selección múltiple: array vacío = sin filtrar (todos los canales).
+  const [filtroCanalResumen, setFiltroCanalResumen] = useState<string[]>([]);
+  const [canalDropdownAbiertoResumen, setCanalDropdownAbiertoResumen] = useState(false);
+  const canalDropdownRefResumen = useRef<HTMLDivElement>(null);
   // "Demanda Total": No (default) = igual que hoy, excluye OD_TERMINADO.
   // Sí = incluye también los pedidos OD_TERMINADO.
   const [filtroDemandaTotal, setFiltroDemandaTotal] = useState(false);
+
+  const toggleFiltroCanalResumen = (canal: string) => {
+    setFiltroCanalResumen((prev) => (prev.includes(canal) ? prev.filter((c) => c !== canal) : [...prev, canal]));
+  };
+
+  useEffect(() => {
+    if (!canalDropdownAbiertoResumen) return;
+    const onClickFuera = (e: MouseEvent) => {
+      if (canalDropdownRefResumen.current && !canalDropdownRefResumen.current.contains(e.target as Node)) {
+        setCanalDropdownAbiertoResumen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickFuera);
+    return () => document.removeEventListener("mousedown", onClickFuera);
+  }, [canalDropdownAbiertoResumen]);
 
   // Rango de fechas activo en Resumen (semana puntual o "últimos N días") --
   // se usa tanto para /api/resumen como para /api/resumen/canal, así el
@@ -43,8 +61,8 @@ export default function Resumen() {
     if (filtroTipoResumen !== "TODOS") {
       params.set("tipoPedido", filtroTipoResumen);
     }
-    if (filtroCanalResumen !== "TODOS") {
-      params.set("canal", filtroCanalResumen);
+    for (const canal of filtroCanalResumen) {
+      params.append("canal", canal);
     }
     if (filtroDemandaTotal) {
       params.set("incluirTerminados", "1");
@@ -101,7 +119,9 @@ export default function Resumen() {
       if (filtroFechas.desde) url += `&desde=${filtroFechas.desde}`;
       if (filtroFechas.hasta) url += `&hasta=${filtroFechas.hasta}`;
       if (filtroTipoResumen !== "TODOS") url += `&tipoPedido=${filtroTipoResumen}`;
-      if (filtroCanalResumen !== "TODOS") url += `&canal=${encodeURIComponent(filtroCanalResumen)}`;
+      for (const canal of filtroCanalResumen) {
+        url += `&canal=${encodeURIComponent(canal)}`;
+      }
       if (filtroDemandaTotal) url += `&incluirTerminados=1`;
       const res = await fetch(url, {
         cache: "no-store",
@@ -198,16 +218,51 @@ export default function Resumen() {
                   <option value="STD">STD</option>
                 </select>
 
-                <select
-                  value={filtroCanalResumen}
-                  onChange={(e) => setFiltroCanalResumen(e.target.value)}
-                  className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                >
-                  <option value="TODOS">Todos los canales</option>
-                  {(resumenData?.canalesDisponibles ?? []).map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                <div className="relative" ref={canalDropdownRefResumen}>
+                  <button
+                    type="button"
+                    onClick={() => setCanalDropdownAbiertoResumen((v) => !v)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    {filtroCanalResumen.length === 0
+                      ? "Todos los canales"
+                      : `${filtroCanalResumen.length} canal${filtroCanalResumen.length === 1 ? "" : "es"} seleccionado${filtroCanalResumen.length === 1 ? "" : "s"}`}
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <polyline points="6 9 12 15 18 9" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {canalDropdownAbiertoResumen && (
+                    <div className="absolute z-10 mt-1 w-56 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg p-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiltroCanalResumen(
+                            filtroCanalResumen.length === (resumenData?.canalesDisponibles ?? []).length
+                              ? []
+                              : resumenData?.canalesDisponibles ?? []
+                          )
+                        }
+                        className="w-full text-left px-2 py-1.5 rounded text-xs font-medium text-blue-600 hover:bg-blue-50"
+                      >
+                        {filtroCanalResumen.length === (resumenData?.canalesDisponibles ?? []).length
+                          ? "Deseleccionar todos"
+                          : "Seleccionar todos"}
+                      </button>
+                      <div className="border-t border-slate-100 my-1" />
+                      {(resumenData?.canalesDisponibles ?? []).map((c) => (
+                        <label key={c} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={filtroCanalResumen.includes(c)}
+                            onChange={() => toggleFiltroCanalResumen(c)}
+                            className="w-3.5 h-3.5"
+                          />
+                          {c}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 <label className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600">
                   Demanda Total
@@ -226,7 +281,7 @@ export default function Resumen() {
                     setRangoResumen(null);
                     setSemanaResumen(null);
                     setFiltroTipoResumen("TODOS");
-                    setFiltroCanalResumen("TODOS");
+                    setFiltroCanalResumen([]);
                     setFiltroDemandaTotal(false);
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"

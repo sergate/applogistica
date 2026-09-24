@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
   const hasta = request.nextUrl.searchParams.get("hasta");
   const tipoPedidoParam = request.nextUrl.searchParams.get("tipoPedido");
   const incluirTerminados = request.nextUrl.searchParams.get("incluirTerminados") === "1";
-  const canalParam = request.nextUrl.searchParams.get("canal");
+  const canalesParam = request.nextUrl.searchParams.getAll("canal");
 
   try {
     const rows = await fetchAllGrupoPedidos();
@@ -116,8 +116,8 @@ export async function GET(request: NextRequest) {
     // Si ya hay un canal elegido en el filtro de Resumen, el desglose de
     // esta marca queda acotado a ese mismo canal (consistente con la fila
     // de arriba, que ya está filtrada por él).
-    if (canalParam) {
-      canales = canales.filter((c) => c.name === canalParam);
+    if (canalesParam.length > 0) {
+      canales = canales.filter((c) => canalesParam.includes(c.name));
     }
 
     return NextResponse.json({ success: true, marca: marcaTrim, canales });
