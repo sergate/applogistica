@@ -9,7 +9,6 @@ import { fmtNum, fmtFecha } from "@/components/dashboard/formatters";
 interface ProductividadFila {
   fecha: string;
   tipoProceso: string;
-  grupo: string;
   cantidad: number;
   usuariosUnicos: number;
 }
@@ -42,11 +41,6 @@ export default function ProdResumen() {
   const [rangoProductividad, setRangoProductividad] = useState<7 | 14 | 30 | null>(null); // null = todos los datos
   const [fechaSeleccionadaProductividad, setFechaSeleccionadaProductividad] = useState<string>("");
   const [filtroTipoProcesoProductividad, setFiltroTipoProcesoProductividad] = useState<string>("TODOS");
-  const [filtroGrupoProductividad, setFiltroGrupoProductividad] = useState<string>("TODOS");
-
-  const gruposDisponiblesProductividad = [
-    ...new Set((productividadResumen?.filas ?? []).map((f) => f.grupo)),
-  ].sort();
 
   const hoyProductividadISO = new Date().toISOString().slice(0, 10);
 
@@ -67,9 +61,6 @@ export default function ProdResumen() {
       if (!permitidos.includes(f.tipoProceso)) return false;
     }
 
-    // Filtro de grupo WMS (A, C, etc.)
-    if (filtroGrupoProductividad !== "TODOS" && f.grupo !== filtroGrupoProductividad) return false;
-
     return true;
   });
 
@@ -79,8 +70,7 @@ export default function ProdResumen() {
   const hayFiltroProductividadActivo =
     rangoProductividad !== null ||
     fechaSeleccionadaProductividad !== "" ||
-    filtroTipoProcesoProductividad !== "TODOS" ||
-    filtroGrupoProductividad !== "TODOS";
+    filtroTipoProcesoProductividad !== "TODOS";
   const subtotalCantidadProductividad = filasProductividadFiltradas.reduce((acc, f) => acc + f.cantidad, 0);
 
   return (
@@ -160,23 +150,11 @@ export default function ProdResumen() {
           <option value="REPO">Repo (Picking + Finishing)</option>
         </select>
 
-        <select
-          value={filtroGrupoProductividad}
-          onChange={(e) => setFiltroGrupoProductividad(e.target.value)}
-          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
-        >
-          <option value="TODOS">Todos los grupos</option>
-          {gruposDisponiblesProductividad.map((g) => (
-            <option key={g} value={g}>{g}</option>
-          ))}
-        </select>
-
         <button
           onClick={() => {
             setRangoProductividad(null);
             setFechaSeleccionadaProductividad("");
             setFiltroTipoProcesoProductividad("TODOS");
-            setFiltroGrupoProductividad("TODOS");
           }}
           className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
         >
