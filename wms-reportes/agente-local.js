@@ -28,7 +28,9 @@
 require("./entorno-portable.js");
 const fs = require("fs");
 const path = require("path");
+const { EventEmitter } = require("events");
 const { chromium } = require("playwright");
+const { createClient } = require("@supabase/supabase-js");
 
 const descargador = require("./descargar-reportes.js");
 const subidor = require("./actualizar-tablero.js");
@@ -49,10 +51,14 @@ const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.ver
 // acortó la ventana para caer a modo ocioso, sin impacto perceptible para
 // el usuario (el trabajo del Agente ya tarda varios segundos por el
 // automatismo de Playwright).
-const INTERVALO_POLLING_MS = 5000; // solo se usa en --loop
-// Backoff de modoLoop() cuando no hay pedidos -- ver comentario ahí.
+const INTERVALO_POLLING_MS = 5000; // solo se usa en --loop, y solo si no hay Realtime conectado
+// Backoff de modoLoop() cuando no hay pedidos Y no hay Realtime -- ver comentario ahí.
 const MINUTOS_ANTES_DE_ESPACIAR_POLLING = 2;
 const INTERVALO_POLLING_OCIOSO_MS = 90_000;
+// Con Realtime conectado, esto pasa a ser solo la red de seguridad por si
+// se pierde algún aviso (conexión cortada un rato, etc) -- el aviso real
+// llega mucho antes que esto, así que 10 min es seguro.
+const INTERVALO_POLLING_SEGURIDAD_MS = 10 * 60 * 1000;
 
 // Cada cuánto se refresca solo (sin que nadie apriete el botón) el
 // estado_wms de las guías -- lo necesita el bloqueo de Modificar/Anular
@@ -608,6 +614,69 @@ async function buscarProximoPedido(token) {
   return data.pedido || null;
 }
 
+// El Agente solo conoce su token -- esto le dice su propio usuarioId, para
+// poder suscribirse al canal Realtime que le corresponde (ver
+// src/lib/realtimeBroadcast.ts del Tablero).
+async function obtenerUsuarioId(token) {
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/quien-soy`, {
+    headers: headersAgente(token),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || `Error consultando quien-soy (HTTP ${res.status}).`);
+  }
+  return data.usuarioId;
+}
+
+// Reemplaza el polling fijo por una conexión Realtime: en vez de preguntar
+// "¿hay pedido?" cada pocos segundos para siempre, el Agente se queda
+// escuchando y el Tablero le avisa apenas se crea uno (ver "solicitar"
+// -> emitirNuevoPedido en el Tablero). Devuelve un EventEmitter que dispara
+// "pedido" con cada aviso, o null si no se pudo conectar -- en ese caso
+// modoLoop() sigue con el polling de siempre (comportamiento sin cambios,
+// pensado para no romper las PCs que todavía no tengan supabaseUrl/
+// supabaseAnonKey configurados en agente-config.json).
+async function conectarRealtime(config) {
+  if (!config.supabaseUrl || !config.supabaseAnonKey) return null;
+  try {
+    const usuarioId = await obtenerUsuarioId(config.token);
+    const supabase = createClient(config.supabaseUrl, config.supabaseAnonKey);
+    const eventos = new EventEmitter();
+    supabase
+      .channel(`actualizaciones:agente:${usuarioId}`)
+      .on("broadcast", { event: "nuevo_pedido" }, () => eventos.emit("pedido"))
+      .subscribe((estado) => {
+        if (estado === "SUBSCRIBED") {
+          console.log("Realtime conectado -- escuchando pedidos nuevos (sin poleaer).");
+        } else if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT" || estado === "CLOSED") {
+          console.error(
+            `Realtime: estado "${estado}" -- mientras tanto, sigo con el chequeo de seguridad cada ` +
+              `${INTERVALO_POLLING_SEGURIDAD_MS / 60_000} min (el cliente de Supabase reconecta solo).`
+          );
+        }
+      });
+    return eventos;
+  } catch (err) {
+    console.error("No se pudo conectar a Realtime, sigo con el polling de siempre:", err instanceof Error ? err.message : err);
+    return null;
+  }
+}
+
+// Duerme hasta "ms", o menos si llega un evento "pedido" antes (cuando hay
+// Realtime conectado) -- así el Agente reacciona al toque sin necesidad de
+// acortar el intervalo de polling.
+function esperar(ms, eventos) {
+  return new Promise((resolve) => {
+    const terminar = () => {
+      clearTimeout(timer);
+      if (eventos) eventos.removeListener("pedido", terminar);
+      resolve();
+    };
+    const timer = setTimeout(terminar, ms);
+    if (eventos) eventos.once("pedido", terminar);
+  });
+}
+
 // Ejecuta UN pedido de punta a punta: abre los navegadores (recién acá, no
 // antes) sólo si hay algo para hacer, corre la sección, avisa el resultado,
 // borra los archivos si salió bien, y cierra todo.
@@ -702,17 +771,26 @@ async function modoUnaVez() {
 async function modoLoop() {
   const config = leerConfig();
   console.log("Agente Local corriendo (modo loop). Ctrl+C para detener.\n");
+
+  // Si agente-config.json tiene supabaseUrl/supabaseAnonKey, el Agente se
+  // queda escuchando por Realtime en vez de preguntar todo el tiempo --
+  // "eventosRealtime" dispara "pedido" apenas el Tablero avisa uno nuevo.
+  // Si no está configurado (o falla la conexión), conectarRealtime()
+  // devuelve null y se sigue con el polling de siempre (ver esperaMs más
+  // abajo) -- así una PC que todavía no migró sigue funcionando igual.
+  const eventosRealtime = await conectarRealtime(config);
+
   // Arranca corriendo uno apenas se levanta el Agente, después cada
   // INTERVALO_REFRESCO_ESTADOS_MS -- ver refrescarEstadosDespachoAutomatico.
   let proximoRefrescoEstados = Date.now();
   let proximoCompletarPacking = Date.now();
-  // Backoff: recién arrancado (o apenas terminó un pedido) consulta rápido
-  // por si hay otro pedido encolado enseguida; si se queda sin nada por un
-  // rato, va espaciando las consultas -- el Agente corre 24/7 en cada PC
-  // del depósito aunque de noche/fin de semana no haya nadie cargando
-  // nada, y el polling fijo cada 2.5s (~1M requests/mes por Agente, solo
-  // uno) venía comiéndose el plan gratuito de Vercel (Function
-  // Invocations/Edge Requests) sin necesidad.
+  // Backoff (SOLO se usa sin Realtime): recién arrancado (o apenas terminó
+  // un pedido) consulta rápido por si hay otro pedido encolado enseguida;
+  // si se queda sin nada por un rato, va espaciando las consultas -- el
+  // Agente corre 24/7 en cada PC del depósito aunque de noche/fin de
+  // semana no haya nadie cargando nada, y el polling fijo cada 2.5s (~1M
+  // requests/mes por Agente, solo uno) venía comiéndose el plan gratuito
+  // de Vercel (Function Invocations/Edge Requests) sin necesidad.
   let ociosoDesde = null;
   for (;;) {
     try {
@@ -744,13 +822,15 @@ async function modoLoop() {
       if (ociosoDesde === null) ociosoDesde = Date.now();
     }
 
-    const esperaMs = (() => {
-      if (ociosoDesde === null) return INTERVALO_POLLING_MS;
-      const ociosoMs = Date.now() - ociosoDesde;
-      if (ociosoMs < MINUTOS_ANTES_DE_ESPACIAR_POLLING * 60_000) return INTERVALO_POLLING_MS;
-      return INTERVALO_POLLING_OCIOSO_MS;
-    })();
-    await new Promise((r) => setTimeout(r, esperaMs));
+    const esperaMs = eventosRealtime
+      ? INTERVALO_POLLING_SEGURIDAD_MS
+      : (() => {
+          if (ociosoDesde === null) return INTERVALO_POLLING_MS;
+          const ociosoMs = Date.now() - ociosoDesde;
+          if (ociosoMs < MINUTOS_ANTES_DE_ESPACIAR_POLLING * 60_000) return INTERVALO_POLLING_MS;
+          return INTERVALO_POLLING_OCIOSO_MS;
+        })();
+    await esperar(esperaMs, eventosRealtime);
   }
 }
 
