@@ -7,6 +7,7 @@ import {
   tienePermisoSeccion,
   usuarioDesdeSesion,
 } from "@/lib/actualizacionesWms";
+import { emitirNuevoPedido } from "@/lib/realtimeBroadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -91,6 +92,8 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) throw new Error(`Supabase (actualizaciones_wms): ${error.message}`);
+
+    await emitirNuevoPedido(auth.userId);
 
     return NextResponse.json({ success: true, id: nuevo.id, estado: nuevo.estado, reusado: false });
   } catch (err) {

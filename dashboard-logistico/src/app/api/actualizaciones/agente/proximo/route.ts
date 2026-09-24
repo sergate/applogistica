@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { esErrorAuth, usuarioDesdeTokenAgente } from "@/lib/actualizacionesWms";
+import { emitirCambioEstado } from "@/lib/realtimeBroadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,8 @@ export async function GET(request: Request) {
       .maybeSingle();
 
     if (error) throw new Error(`Supabase (actualizaciones_wms): ${error.message}`);
+
+    if (tomado) await emitirCambioEstado(tomado.id, { estado: "corriendo" });
 
     return NextResponse.json({ success: true, pedido: tomado || null });
   } catch (err) {

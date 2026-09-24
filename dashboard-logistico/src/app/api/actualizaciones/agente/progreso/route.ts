@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { esErrorAuth, usuarioDesdeTokenAgente } from "@/lib/actualizacionesWms";
+import { emitirCambioEstado } from "@/lib/realtimeBroadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,14 +26,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Body inválido (se espera id y progreso)." }, { status: 400 });
     }
 
+    const progresoAcotado = Math.max(0, Math.min(100, Math.round(progreso)));
+
     const { error } = await supabaseAdmin
       .from("actualizaciones_wms")
-      .update({ progreso: Math.max(0, Math.min(100, Math.round(progreso))), paso })
+      .update({ progreso: progresoAcotado, paso })
       .eq("id", id)
       .eq("usuario_id", auth.userId)
       .eq("estado", "corriendo"); // no pisar el progreso de un pedido que ya se cerró
 
     if (error) throw new Error(`Supabase (actualizaciones_wms): ${error.message}`);
+
+    await emitirCambioEstado(id, { progreso: progresoAcotado, paso });
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { esErrorAuth, usuarioDesdeTokenAgente } from "@/lib/actualizacionesWms";
+import { emitirCambioEstado } from "@/lib/realtimeBroadcast";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,10 +25,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Body inválido (se espera id y exito)." }, { status: 400 });
     }
 
+    const estado = exito ? "ok" : "error";
+
     const { error } = await supabaseAdmin
       .from("actualizaciones_wms")
       .update({
-        estado: exito ? "ok" : "error",
+        estado,
         mensaje,
         finished_at: new Date().toISOString(),
         ...(exito ? { progreso: 100, paso: null } : {}),
@@ -36,6 +39,8 @@ export async function POST(request: NextRequest) {
       .eq("usuario_id", auth.userId); // un agente solo puede cerrar pedidos de su propio usuario
 
     if (error) throw new Error(`Supabase (actualizaciones_wms): ${error.message}`);
+
+    await emitirCambioEstado(id, { estado, mensaje, ...(exito ? { progreso: 100, paso: null } : {}) });
 
     return NextResponse.json({ success: true });
   } catch (err) {
