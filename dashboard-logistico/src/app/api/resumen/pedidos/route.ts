@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseEnvOk } from "@/lib/supabaseClient";
+import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import {
   fetchAllGrupoPedidos,
   esContable,
@@ -10,6 +10,7 @@ import {
   resolverTiendaCliente,
   tipoPedido,
   fetchPedidosRemaManual,
+  fetchGruposClientesPorCodigo,
 } from "@/lib/resumenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
@@ -54,11 +55,13 @@ export async function GET() {
     }
 
     // tiendas_destino + clientes se usan SOLO para resolver código de tienda,
-    // nombre de cliente y canal -- no aportan unidades.
-    const [tiendasPorPedido, clientesInfo, pedidosRemaManual] = await Promise.all([
+    // nombre de cliente y canal -- no aportan unidades. gruposClientesPorCodigo
+    // es el mismo maestro de Despacho -> Grupos de Clientes.
+    const [tiendasPorPedido, clientesInfo, pedidosRemaManual, gruposClientesPorCodigo] = await Promise.all([
       fetchTiendasPorPedido(),
       fetchClientesInfo(),
       fetchPedidosRemaManual(),
+      fetchGruposClientesPorCodigo(),
     ]);
 
     // Agregamos por (pedido, grupo) -- mantenemos "grupo" para poder filtrar
@@ -84,12 +87,14 @@ export async function GET() {
     const filas = Array.from(porPedidoGrupo.values()).map((g) => {
       const meta = metaPorPedido.get(g.pedido)!;
       const { codigoTienda, nombre, canal } = resolverTiendaCliente(g.pedido, tiendasPorPedido, clientesInfo);
+      const gruposClientes = gruposClientesPorCodigo.get(codigoTienda) || [];
 
       return {
         pedido: g.pedido,
         grupo: g.grupo,
         codigoTienda,
         cliente: nombre,
+        gruposClientes,
         nombrePedido: meta.nombrePedido,
         tipoPedido: tipoPedido(g.pedido, meta.nombrePedido, pedidosRemaManual),
         marca: meta.marca,
@@ -105,7 +110,23 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({ success: true, filas, updatedAt: ultimaActualizacion(rows) });
+    // Lista completa de grupos (el filtro por Grupo de Clientes se aplica
+    // del lado del cliente, igual que el resto de los filtros de esta
+    // pestaña -- esta lista es para poblar el selector con todas las
+    // opciones, no solo las presentes en los pedidos actuales).
+    const { data: gruposClientesTodos, error: errorGruposClientes } = await supabaseAdmin
+      .from("despacho_grupos_clientes")
+      .select("nombre")
+      .order("nombre");
+    if (errorGruposClientes) throw new Error(`Supabase (despacho_grupos_clientes): ${errorGruposClientes.message}`);
+    const gruposClientesDisponibles = (gruposClientesTodos || []).map((g) => g.nombre);
+
+    return NextResponse.json({
+      success: true,
+      filas,
+      gruposClientesDisponibles,
+      updatedAt: ultimaActualizacion(rows),
+    });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

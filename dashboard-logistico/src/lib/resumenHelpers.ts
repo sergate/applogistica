@@ -195,6 +195,34 @@ export async function fetchCanalPorCodigoTienda(): Promise<Map<string, string>> 
 }
 
 /**
+ * Trae despacho_grupos_clientes_miembros + despacho_grupos_clientes(nombre)
+ * y arma un mapa código de tienda -> lista de nombres de grupo. Un cliente
+ * puede estar en varios grupos a la vez (ej. "Franquicias 1" y "Miércoles
+ * Propios"), por eso el valor es un array -- mismo join que ya usa
+ * /api/despacho/guias.
+ */
+export async function fetchGruposClientesPorCodigo(): Promise<Map<string, string[]>> {
+  return getCached("despacho_grupos_clientes:por_codigo", MAESTROS_TTL_MS, async () => {
+    const rows = await fetchAllPaginated<{
+      codigo_cliente: string;
+      despacho_grupos_clientes: { nombre: string } | { nombre: string }[] | null;
+    }>("despacho_grupos_clientes_miembros", "codigo_cliente, despacho_grupos_clientes(nombre)");
+
+    const map = new Map<string, string[]>();
+    for (const row of rows) {
+      const grupo = Array.isArray(row.despacho_grupos_clientes)
+        ? row.despacho_grupos_clientes[0]
+        : row.despacho_grupos_clientes;
+      const nombre = grupo?.nombre;
+      if (!nombre) continue;
+      if (!map.has(row.codigo_cliente)) map.set(row.codigo_cliente, []);
+      map.get(row.codigo_cliente)!.push(nombre);
+    }
+    return map;
+  });
+}
+
+/**
  * Dado un pedido, prueba todos sus códigos de tienda hasta encontrar uno
  * que exista en "clientes", y devuelve el código de tienda + nombre + canal
  * juntos. No asume que la primera fila devuelta por Supabase sea la

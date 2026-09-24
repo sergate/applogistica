@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonTable } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -11,6 +11,11 @@ interface PedidoResumen {
   grupo: string;
   codigoTienda: string;
   cliente: string;
+  // Grupos de Despacho -> Grupos de Clientes a los que pertenece el código
+  // de tienda de este pedido (puede estar en varios a la vez, ej.
+  // "Franquicias 1" y "Miércoles Propios") -- no confundir con "grupo" de
+  // arriba, que es el grupo de línea del pedido en el WMS.
+  gruposClientes: string[];
   nombrePedido: string;
   tipoPedido: "REMA" | "STD";
   marca: string;
@@ -32,7 +37,7 @@ export default function PorPedidos() {
     data: pedidosData,
     error: pedidosError,
     isLoading: pedidosLoading,
-  } = useTabData<{ filas: PedidoResumen[]; updatedAt: string | null }>(
+  } = useTabData<{ filas: PedidoResumen[]; gruposClientesDisponibles: string[]; updatedAt: string | null }>(
     activeTab,
     "Por pedidos",
     "/api/resumen/pedidos",
@@ -49,8 +54,27 @@ export default function PorPedidos() {
   const [filtroCanalPedidos, setFiltroCanalPedidos] = useState("TODAS");
   const [filtroGrupoPedidos, setFiltroGrupoPedidos] = useState("TODAS");
   const [filtroTipoPedidos, setFiltroTipoPedidos] = useState<"TODOS" | "REMA" | "STD">("TODOS");
+  // Selección múltiple: array vacío = sin filtrar (todos los grupos de clientes).
+  const [filtroGruposClientesPedidos, setFiltroGruposClientesPedidos] = useState<string[]>([]);
+  const [gruposClientesDropdownAbiertoPedidos, setGruposClientesDropdownAbiertoPedidos] = useState(false);
+  const gruposClientesDropdownRefPedidos = useRef<HTMLDivElement>(null);
   const [rangoFechaPedidos, setRangoFechaPedidos] = useState<7 | 14 | 30>(7);
   const [semanaPedidos, setSemanaPedidos] = useState<{ desde: string; hasta: string } | null>(null);
+
+  const toggleFiltroGrupoClientesPedidos = (grupo: string) => {
+    setFiltroGruposClientesPedidos((prev) => (prev.includes(grupo) ? prev.filter((g) => g !== grupo) : [...prev, grupo]));
+  };
+
+  useEffect(() => {
+    if (!gruposClientesDropdownAbiertoPedidos) return;
+    const onClickFuera = (e: MouseEvent) => {
+      if (gruposClientesDropdownRefPedidos.current && !gruposClientesDropdownRefPedidos.current.contains(e.target as Node)) {
+        setGruposClientesDropdownAbiertoPedidos(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickFuera);
+    return () => document.removeEventListener("mousedown", onClickFuera);
+  }, [gruposClientesDropdownAbiertoPedidos]);
 
   const [pedidoExpandido, setPedidoExpandido] = useState<string | null>(null);
   interface GrupoDetalle {
@@ -125,6 +149,9 @@ export default function PorPedidos() {
       if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
       if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
       if (filtroTipoPedidos !== "TODOS" && f.tipoPedido !== filtroTipoPedidos) return false;
+      if (filtroGruposClientesPedidos.length > 0 && !f.gruposClientes.some((g) => filtroGruposClientesPedidos.includes(g))) {
+        return false;
+      }
       if (busquedaNormalizada) {
         const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
         const matchCodigo = f.codigoTienda.toLowerCase().includes(busquedaNormalizada);
@@ -178,6 +205,7 @@ export default function PorPedidos() {
     filtroCanalPedidos,
     filtroGrupoPedidos,
     filtroTipoPedidos,
+    filtroGruposClientesPedidos,
     busquedaNormalizada,
   ]);
 
@@ -186,6 +214,7 @@ export default function PorPedidos() {
     const filasExport = filasFiltradasPedidos.map((f) => ({
       "Código Tienda": f.codigoTienda,
       Cliente: f.cliente,
+      "Grupo de Clientes": f.gruposClientes.join(", "),
       "N° Pedido": f.pedido,
       Marca: f.marca,
       Canal: f.canal,
@@ -263,6 +292,52 @@ export default function PorPedidos() {
                   ))}
                 </select>
 
+                <div className="relative" ref={gruposClientesDropdownRefPedidos}>
+                  <button
+                    type="button"
+                    onClick={() => setGruposClientesDropdownAbiertoPedidos((v) => !v)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-1.5"
+                  >
+                    {filtroGruposClientesPedidos.length === 0
+                      ? "Todos los grupos de clientes"
+                      : `${filtroGruposClientesPedidos.length} grupo${filtroGruposClientesPedidos.length === 1 ? "" : "s"} de clientes seleccionado${filtroGruposClientesPedidos.length === 1 ? "" : "s"}`}
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+                      <polyline points="6 9 12 15 18 9" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {gruposClientesDropdownAbiertoPedidos && (
+                    <div className="absolute z-20 mt-1 w-56 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg p-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setFiltroGruposClientesPedidos(
+                            filtroGruposClientesPedidos.length === (pedidosData?.gruposClientesDisponibles ?? []).length
+                              ? []
+                              : pedidosData?.gruposClientesDisponibles ?? []
+                          )
+                        }
+                        className="w-full text-left px-2 py-1.5 rounded text-xs font-medium text-blue-600 hover:bg-blue-50"
+                      >
+                        {filtroGruposClientesPedidos.length === (pedidosData?.gruposClientesDisponibles ?? []).length
+                          ? "Deseleccionar todos"
+                          : "Seleccionar todos"}
+                      </button>
+                      <div className="border-t border-slate-100 my-1" />
+                      {(pedidosData?.gruposClientesDisponibles ?? []).map((g) => (
+                        <label key={g} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={filtroGruposClientesPedidos.includes(g)}
+                            onChange={() => toggleFiltroGrupoClientesPedidos(g)}
+                            className="w-3.5 h-3.5"
+                          />
+                          {g}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 <select
                   value={filtroTipoPedidos}
                   onChange={(e) => setFiltroTipoPedidos(e.target.value as "TODOS" | "REMA" | "STD")}
@@ -337,6 +412,7 @@ export default function PorPedidos() {
                     setFiltroMarcaPedidos("TODAS");
                     setFiltroCanalPedidos("TODAS");
                     setFiltroGrupoPedidos("TODAS");
+                    setFiltroGruposClientesPedidos([]);
                     setBusquedaPedidos("");
                   }}
                   className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -379,6 +455,7 @@ export default function PorPedidos() {
                     <tr>
                       <th className="py-4 px-4 text-left">Código Tienda</th>
                       <th className="py-4 px-4 text-left">Cliente</th>
+                      <th className="py-4 px-4 text-left">Grupo de Clientes</th>
                       <th className="py-4 px-4 text-left">N° Pedido</th>
                       <th className="py-4 px-4 text-left">Unidades</th>
                       <th className="py-4 px-4 text-left">Pickeadas</th>
@@ -401,6 +478,9 @@ export default function PorPedidos() {
                         >
                           <td className="py-4 px-4 text-left font-semibold text-slate-800">{row.codigoTienda}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.cliente}</td>
+                          <td className="py-4 px-4 text-left text-slate-600">
+                            {row.gruposClientes.length > 0 ? row.gruposClientes.join(", ") : "—"}
+                          </td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.pedido}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.uni)}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.pick)}</td>
@@ -413,7 +493,7 @@ export default function PorPedidos() {
 
                         {pedidoExpandido === row.pedido && (
                           <tr>
-                            <td colSpan={10} className="bg-slate-50 px-4 py-4">
+                            <td colSpan={11} className="bg-slate-50 px-4 py-4">
                               <p className="text-xs font-semibold text-slate-500 mb-2">
                                 Detalle por grupo — pedido {row.pedido}
                               </p>
