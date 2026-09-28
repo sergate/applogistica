@@ -1,4 +1,4 @@
-import { supabaseAdmin } from "@/lib/supabaseClient";
+import { fetchAllPaginatedIn } from "@/lib/fetchAllPaginated";
 
 export interface BultoEsperado {
   codigo: string;
@@ -15,15 +15,16 @@ export async function bultosEsperadosPorHoja(hojaIds: number[]): Promise<Map<num
   if (hojaIds.length === 0) return resultado;
   for (const id of hojaIds) resultado.set(id, []);
 
-  const { data: items, error: errorItems } = await supabaseAdmin
-    .from("hoja_de_ruta_items")
-    .select("hoja_de_ruta_id, tipo, referencia_id")
-    .in("hoja_de_ruta_id", hojaIds);
-  if (errorItems) throw new Error(`Supabase (hoja_de_ruta_items): ${errorItems.message}`);
+  const items = await fetchAllPaginatedIn<{ hoja_de_ruta_id: number; tipo: string; referencia_id: number }>(
+    "hoja_de_ruta_items",
+    "hoja_de_ruta_id, tipo, referencia_id",
+    "hoja_de_ruta_id",
+    hojaIds
+  );
 
   const hojaPorDespachoId = new Map<number, number>();
   const hojaPorInterlocalId = new Map<number, number>();
-  for (const it of items || []) {
+  for (const it of items) {
     if (it.tipo === "despacho") hojaPorDespachoId.set(it.referencia_id, it.hoja_de_ruta_id);
     else hojaPorInterlocalId.set(it.referencia_id, it.hoja_de_ruta_id);
   }
@@ -32,19 +33,22 @@ export async function bultosEsperadosPorHoja(hojaIds: number[]): Promise<Map<num
   const interlocalIds = [...hojaPorInterlocalId.keys()];
 
   if (despachoIds.length > 0) {
-    const { data: bultos, error: errorBultos } = await supabaseAdmin
-      .from("despacho_guias_bultos")
-      .select("caja, despacho_cab_id")
-      .in("despacho_cab_id", despachoIds);
-    if (errorBultos) throw new Error(`Supabase (despacho_guias_bultos): ${errorBultos.message}`);
+    const bultos = await fetchAllPaginatedIn<{ caja: string | null; despacho_cab_id: number }>(
+      "despacho_guias_bultos",
+      "caja, despacho_cab_id",
+      "despacho_cab_id",
+      despachoIds
+    );
 
-    const { data: guias } = await supabaseAdmin
-      .from("despacho_guias")
-      .select("despacho_cab_id, numero_guia, guia")
-      .in("despacho_cab_id", despachoIds);
-    const guiaPorId = new Map((guias || []).map((g) => [g.despacho_cab_id, g.numero_guia || g.guia || String(g.despacho_cab_id)]));
+    const guias = await fetchAllPaginatedIn<{ despacho_cab_id: number; numero_guia: string | null; guia: string | null }>(
+      "despacho_guias",
+      "despacho_cab_id, numero_guia, guia",
+      "despacho_cab_id",
+      despachoIds
+    );
+    const guiaPorId = new Map(guias.map((g) => [g.despacho_cab_id, g.numero_guia || g.guia || String(g.despacho_cab_id)]));
 
-    for (const b of bultos || []) {
+    for (const b of bultos) {
       if (!b.caja) continue;
       const hojaId = hojaPorDespachoId.get(b.despacho_cab_id);
       if (!hojaId) continue;
@@ -57,30 +61,30 @@ export async function bultosEsperadosPorHoja(hojaIds: number[]): Promise<Map<num
   }
 
   if (interlocalIds.length > 0) {
-    const { data: interlocales, error: errorInterlocales } = await supabaseAdmin
-      .from("interlocales")
-      .select("id, numero_etiqueta, numero_movimiento")
-      .in("id", interlocalIds);
-    if (errorInterlocales) throw new Error(`Supabase (interlocales): ${errorInterlocales.message}`);
+    const interlocales = await fetchAllPaginatedIn<{ id: number; numero_etiqueta: string | null; numero_movimiento: string }>(
+      "interlocales",
+      "id, numero_etiqueta, numero_movimiento",
+      "id",
+      interlocalIds
+    );
 
     // Una etiqueta por bulto (form "Registrar Interlocal", cantidad_bultos
     // puede ser > 1) -- si un interlocal viejo (previo a esta tabla) no
     // tiene filas acá, caemos al numero_etiqueta único de antes como si
     // fuera su único bulto esperado.
-    const { data: etiquetasBultos, error: errorEtiquetasBultos } = await supabaseAdmin
-      .from("interlocales_bultos_etiquetas")
-      .select("interlocal_id, codigo")
-      .in("interlocal_id", interlocalIds);
-    if (errorEtiquetasBultos) {
-      throw new Error(`Supabase (interlocales_bultos_etiquetas): ${errorEtiquetasBultos.message}`);
-    }
+    const etiquetasBultos = await fetchAllPaginatedIn<{ interlocal_id: number; codigo: string }>(
+      "interlocales_bultos_etiquetas",
+      "interlocal_id, codigo",
+      "interlocal_id",
+      interlocalIds
+    );
     const etiquetasPorInterlocal = new Map<number, string[]>();
-    for (const e of etiquetasBultos || []) {
+    for (const e of etiquetasBultos) {
       if (!etiquetasPorInterlocal.has(e.interlocal_id)) etiquetasPorInterlocal.set(e.interlocal_id, []);
       etiquetasPorInterlocal.get(e.interlocal_id)!.push(e.codigo);
     }
 
-    for (const i of interlocales || []) {
+    for (const i of interlocales) {
       const hojaId = hojaPorInterlocalId.get(i.id);
       if (!hojaId) continue;
       const codigos = etiquetasPorInterlocal.get(i.id) || (i.numero_etiqueta ? [i.numero_etiqueta] : []);
