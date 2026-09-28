@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 import { bultosEsperadosPorHoja } from "@/lib/hojaDeRutaBultos";
+import { fetchAllPaginatedIn } from "@/lib/fetchAllPaginated";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,16 +39,19 @@ export async function GET() {
     const esperadosPorHoja = await bultosEsperadosPorHoja(hojaIds);
 
     const escaneoIds = (escaneos || []).map((e) => e.id);
-    const { data: eventosOk } =
-      escaneoIds.length > 0
-        ? await supabaseAdmin
-            .from("hoja_de_ruta_escaneo_eventos")
-            .select("escaneo_id, codigo, escaneado_en")
-            .in("escaneo_id", escaneoIds)
-            .eq("resultado", "ok_nuevo")
-        : { data: [] };
+    // Se trae resultado también (en vez de filtrar con .eq acá) porque
+    // fetchAllPaginatedIn solo soporta un filtro .in() -- se descarta
+    // ok_duplicado/no_pertenece del lado del cliente, es igual de correcto
+    // y evita duplicar el helper de paginado para este único caso.
+    const eventos = await fetchAllPaginatedIn<{
+      escaneo_id: number;
+      codigo: string;
+      resultado: string;
+      escaneado_en: string;
+    }>("hoja_de_ruta_escaneo_eventos", "escaneo_id, codigo, resultado, escaneado_en", "escaneo_id", escaneoIds);
     const escaneadoEnPorEscaneo = new Map<number, Map<string, string>>();
-    for (const ev of eventosOk || []) {
+    for (const ev of eventos) {
+      if (ev.resultado !== "ok_nuevo") continue;
       if (!escaneadoEnPorEscaneo.has(ev.escaneo_id)) escaneadoEnPorEscaneo.set(ev.escaneo_id, new Map());
       escaneadoEnPorEscaneo.get(ev.escaneo_id)!.set(ev.codigo, ev.escaneado_en);
     }
