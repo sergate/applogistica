@@ -135,9 +135,13 @@ export default function PorPedidos() {
   const gruposDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.grupo))).sort();
   // Solo los grupos de clientes que realmente aparecen en los pedidos
   // traídos (no la lista completa del maestro despacho_grupos_clientes).
-  const gruposClientesDisponiblesPedidos = Array.from(
-    new Set((pedidosData?.filas ?? []).flatMap((f) => f.gruposClientes))
-  ).sort();
+  // "Clientes" es el bucket para pedidos cuyo código de tienda no cruzó
+  // contra ningún grupo -- mismo texto que se muestra en la columna.
+  const hayPedidosSinGrupoCliente = (pedidosData?.filas ?? []).some((f) => f.gruposClientes.length === 0);
+  const gruposClientesDisponiblesPedidos = [
+    ...Array.from(new Set((pedidosData?.filas ?? []).flatMap((f) => f.gruposClientes))).sort(),
+    ...(hayPedidosSinGrupoCliente ? ["Clientes"] : []),
+  ];
 
   const busquedaNormalizada = busquedaPedidos.trim().toLowerCase();
 
@@ -154,8 +158,9 @@ export default function PorPedidos() {
       if (filtroCanalPedidos !== "TODAS" && f.canal !== filtroCanalPedidos) return false;
       if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
       if (filtroTipoPedidos !== "TODOS" && f.tipoPedido !== filtroTipoPedidos) return false;
-      if (filtroGruposClientesPedidos.length > 0 && !f.gruposClientes.some((g) => filtroGruposClientesPedidos.includes(g))) {
-        return false;
+      if (filtroGruposClientesPedidos.length > 0) {
+        const gruposEfectivos = f.gruposClientes.length > 0 ? f.gruposClientes : ["Clientes"];
+        if (!gruposEfectivos.some((g) => filtroGruposClientesPedidos.includes(g))) return false;
       }
       if (busquedaNormalizada) {
         const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
@@ -219,7 +224,7 @@ export default function PorPedidos() {
     const filasExport = filasFiltradasPedidos.map((f) => ({
       "Código Tienda": f.codigoTienda,
       Cliente: f.cliente,
-      "Grupo de Clientes": f.gruposClientes.join(", "),
+      "Grupo de Clientes": f.gruposClientes.length > 0 ? f.gruposClientes.join(", ") : "Clientes",
       "N° Pedido": f.pedido,
       Marca: f.marca,
       Canal: f.canal,
@@ -484,7 +489,7 @@ export default function PorPedidos() {
                           <td className="py-4 px-4 text-left font-semibold text-slate-800">{row.codigoTienda}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.cliente}</td>
                           <td className="py-4 px-4 text-left text-slate-600">
-                            {row.gruposClientes.length > 0 ? row.gruposClientes.join(", ") : "—"}
+                            {row.gruposClientes.length > 0 ? row.gruposClientes.join(", ") : "Clientes"}
                           </td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.pedido}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.uni)}</td>
