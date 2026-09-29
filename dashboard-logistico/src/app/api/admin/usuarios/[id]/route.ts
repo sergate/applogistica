@@ -23,15 +23,19 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (typeof body?.nombre === "string") updates.nombre = body.nombre.trim();
     if ("perfilId" in body) updates.perfil_id = body.perfilId || null;
 
-    if (Object.keys(updates).length === 0) {
+    const hayPassword = typeof body?.password === "string" && body.password.length > 0;
+
+    if (Object.keys(updates).length === 0 && !hayPassword) {
       return NextResponse.json({ success: false, error: "Nada para actualizar." }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin.from("usuarios").update(updates).eq("id", id);
-    if (error) throw new Error(`Supabase (usuarios): ${error.message}`);
+    if (Object.keys(updates).length > 0) {
+      const { error } = await supabaseAdmin.from("usuarios").update(updates).eq("id", id);
+      if (error) throw new Error(`Supabase (usuarios): ${error.message}`);
+    }
 
     // Si mandaron una contraseña nueva, la actualizamos en Auth también.
-    if (typeof body?.password === "string" && body.password.length > 0) {
+    if (hayPassword) {
       if (body.password.length < 6) {
         return NextResponse.json({ success: false, error: "La contraseña debe tener al menos 6 caracteres." }, { status: 400 });
       }
