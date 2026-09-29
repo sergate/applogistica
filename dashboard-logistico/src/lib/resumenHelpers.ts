@@ -222,6 +222,37 @@ export async function fetchGruposClientesPorCodigo(): Promise<Map<string, string
   });
 }
 
+// Día de la semana embebido en "Nombre pedido" (ej. "02-09 -JUE LOC PRO...")
+// -> nombres de Grupo de Clientes candidatos ese día. Un mismo código de
+// cliente puede estar en varios grupos a la vez (ej. "Jueves Propios" +
+// "Martes Propios"), pero cada pedido puntual es de un solo día -- se usa
+// el día del nombre para elegir, de los grupos que YA tiene ese código,
+// cuál corresponde a este pedido en particular. En Altatex las franquicias
+// van martes=1, miércoles=2, jueves=3, viernes=4.
+const DIA_A_GRUPOS_CANDIDATOS: { regex: RegExp; candidatos: string[] }[] = [
+  { regex: /\blun\b/i, candidatos: ["Lunes Propios"] },
+  { regex: /\bmar\b/i, candidatos: ["Martes Propios", "Franquicias 1"] },
+  { regex: /\bmi[eé]\b/i, candidatos: ["Miercoles Propios", "Franquicias 2"] },
+  { regex: /\bjue\b/i, candidatos: ["Jueves Propios", "Franquicias 3"] },
+  { regex: /\bvie\b/i, candidatos: ["Viernes Propios 1", "Franquicias 4"] },
+];
+
+/**
+ * Resuelve un único Grupo de Clientes para un pedido, aunque el código de
+ * cliente esté cargado en varios grupos a la vez. Si el código tiene 0 o 1
+ * grupo no hay nada que desambiguar; si tiene varios, se usa el día de la
+ * semana embebido en el nombre del pedido para elegir cuál de esos grupos
+ * corresponde. Si no se puede determinar (nombre sin día, o el día no
+ * matchea ninguno de los grupos del código), devuelve null -- el llamador
+ * lo trata como "Clientes" (sin grupo determinado), nunca se devuelven 2.
+ */
+export function resolverGrupoClienteUnico(nombrePedido: string | null, gruposDelCodigo: string[]): string | null {
+  if (gruposDelCodigo.length <= 1) return gruposDelCodigo[0] || null;
+  const dia = DIA_A_GRUPOS_CANDIDATOS.find((d) => d.regex.test(nombrePedido || ""));
+  if (!dia) return null;
+  return gruposDelCodigo.find((g) => dia.candidatos.includes(g)) || null;
+}
+
 /**
  * Dado un pedido, prueba todos sus códigos de tienda hasta encontrar uno
  * que exista en "clientes", y devuelve el código de tienda + nombre + canal

@@ -11,6 +11,7 @@ import {
   tipoPedido,
   fetchPedidosRemaManual,
   fetchGruposClientesPorCodigo,
+  resolverGrupoClienteUnico,
 } from "@/lib/resumenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
@@ -87,14 +88,14 @@ export async function GET() {
     const filas = Array.from(porPedidoGrupo.values()).map((g) => {
       const meta = metaPorPedido.get(g.pedido)!;
       const { codigoTienda, nombre, canal } = resolverTiendaCliente(g.pedido, tiendasPorPedido, clientesInfo);
-      const gruposClientes = gruposClientesPorCodigo.get(codigoTienda) || [];
+      const grupoCliente = resolverGrupoClienteUnico(meta.nombrePedido, gruposClientesPorCodigo.get(codigoTienda) || []);
 
       return {
         pedido: g.pedido,
         grupo: g.grupo,
         codigoTienda,
         cliente: nombre,
-        gruposClientes,
+        grupoCliente,
         nombrePedido: meta.nombrePedido,
         tipoPedido: tipoPedido(g.pedido, meta.nombrePedido, pedidosRemaManual),
         marca: meta.marca,

@@ -11,11 +11,12 @@ interface PedidoResumen {
   grupo: string;
   codigoTienda: string;
   cliente: string;
-  // Grupos de Despacho -> Grupos de Clientes a los que pertenece el código
-  // de tienda de este pedido (puede estar en varios a la vez, ej.
-  // "Franquicias 1" y "Miércoles Propios") -- no confundir con "grupo" de
-  // arriba, que es el grupo de línea del pedido en el WMS.
-  gruposClientes: string[];
+  // Grupo de Despacho -> Grupo de Clientes de este pedido, ya desambiguado
+  // por día de la semana si el código de tienda está en varios grupos a la
+  // vez (ver resolverGrupoClienteUnico en resumenHelpers.ts) -- null si no
+  // se pudo determinar. No confundir con "grupo" de arriba, que es el grupo
+  // de línea del pedido en el WMS.
+  grupoCliente: string | null;
   nombrePedido: string;
   tipoPedido: "REMA" | "STD";
   marca: string;
@@ -135,11 +136,12 @@ export default function PorPedidos() {
   const gruposDisponiblesPedidos = Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.grupo))).sort();
   // Solo los grupos de clientes que realmente aparecen en los pedidos
   // traídos (no la lista completa del maestro despacho_grupos_clientes).
-  // "Clientes" es el bucket para pedidos cuyo código de tienda no cruzó
-  // contra ningún grupo -- mismo texto que se muestra en la columna.
-  const hayPedidosSinGrupoCliente = (pedidosData?.filas ?? []).some((f) => f.gruposClientes.length === 0);
+  // "Clientes" es el bucket para pedidos cuyo grupo no se pudo determinar
+  // (sin cruce de tienda, o ambiguo y sin día reconocible en el nombre) --
+  // mismo texto que se muestra en la columna.
+  const hayPedidosSinGrupoCliente = (pedidosData?.filas ?? []).some((f) => !f.grupoCliente);
   const gruposClientesDisponiblesPedidos = [
-    ...Array.from(new Set((pedidosData?.filas ?? []).flatMap((f) => f.gruposClientes))).sort(),
+    ...Array.from(new Set((pedidosData?.filas ?? []).map((f) => f.grupoCliente).filter((g): g is string => !!g))).sort(),
     ...(hayPedidosSinGrupoCliente ? ["Clientes"] : []),
   ];
 
@@ -159,8 +161,8 @@ export default function PorPedidos() {
       if (filtroGrupoPedidos !== "TODAS" && f.grupo !== filtroGrupoPedidos) return false;
       if (filtroTipoPedidos !== "TODOS" && f.tipoPedido !== filtroTipoPedidos) return false;
       if (filtroGruposClientesPedidos.length > 0) {
-        const gruposEfectivos = f.gruposClientes.length > 0 ? f.gruposClientes : ["Clientes"];
-        if (!gruposEfectivos.some((g) => filtroGruposClientesPedidos.includes(g))) return false;
+        const grupoEfectivo = f.grupoCliente || "Clientes";
+        if (!filtroGruposClientesPedidos.includes(grupoEfectivo)) return false;
       }
       if (busquedaNormalizada) {
         const matchCliente = f.cliente.toLowerCase().includes(busquedaNormalizada);
@@ -224,7 +226,7 @@ export default function PorPedidos() {
     const filasExport = filasFiltradasPedidos.map((f) => ({
       "Código Tienda": f.codigoTienda,
       Cliente: f.cliente,
-      "Grupo de Clientes": f.gruposClientes.length > 0 ? f.gruposClientes.join(", ") : "Clientes",
+      "Grupo de Clientes": f.grupoCliente || "Clientes",
       "N° Pedido": f.pedido,
       Marca: f.marca,
       Canal: f.canal,
@@ -489,7 +491,7 @@ export default function PorPedidos() {
                           <td className="py-4 px-4 text-left font-semibold text-slate-800">{row.codigoTienda}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.cliente}</td>
                           <td className="py-4 px-4 text-left text-slate-600">
-                            {row.gruposClientes.length > 0 ? row.gruposClientes.join(", ") : "Clientes"}
+                            {row.grupoCliente || "Clientes"}
                           </td>
                           <td className="py-4 px-4 text-left text-slate-600">{row.pedido}</td>
                           <td className="py-4 px-4 text-left text-slate-600">{fmtNum(row.uni)}</td>
