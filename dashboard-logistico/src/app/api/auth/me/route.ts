@@ -30,6 +30,7 @@ export async function GET() {
       .single();
 
     if (usuarioError || !usuario) {
+      console.error("[auth/me] No se encontró usuario", { userId: user.id, usuarioError });
       return NextResponse.json(
         { success: false, error: "Tu cuenta no tiene un perfil asignado. Contactá a un administrador." },
         { status: 403 }
