@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { conReintentoSiJwtFuturo } from "@/lib/supabaseRetry";
 
 export { esErrorAuth };
 
@@ -78,7 +79,9 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */
 export async function tienePermisoSeccion(userId: string, seccion: SeccionActualizacion): Promise<boolean> {
-  const { data: usuario } = await supabaseAdmin.from("usuarios").select("perfil_id").eq("id", userId).single();
+  const { data: usuario } = await conReintentoSiJwtFuturo(() =>
+    supabaseAdmin.from("usuarios").select("perfil_id").eq("id", userId).single()
+  );
   if (!usuario?.perfil_id) return false;
 
   const { data: permiso } = await supabaseAdmin

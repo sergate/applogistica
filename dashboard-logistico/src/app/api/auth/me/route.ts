@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient as createServerAuthClient } from "@/lib/supabase/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
+import { conReintentoSiJwtFuturo } from "@/lib/supabaseRetry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,11 +24,13 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "No autenticado." }, { status: 401 });
     }
 
-    const { data: usuario, error: usuarioError } = await supabaseAdmin
-      .from("usuarios")
-      .select("id, email, nombre, perfil_id, perfiles(nombre)")
-      .eq("id", user.id)
-      .single();
+    const { data: usuario, error: usuarioError } = await conReintentoSiJwtFuturo(() =>
+      supabaseAdmin
+        .from("usuarios")
+        .select("id, email, nombre, perfil_id, perfiles(nombre)")
+        .eq("id", user.id)
+        .single()
+    );
 
     if (usuarioError || !usuario) {
       console.error("[auth/me] No se encontró usuario", { userId: user.id, usuarioError });

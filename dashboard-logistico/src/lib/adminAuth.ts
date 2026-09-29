@@ -1,5 +1,6 @@
 import { createClient as createServerAuthClient } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabaseClient";
+import { conReintentoSiJwtFuturo } from "@/lib/supabaseRetry";
 
 interface ResultadoAutorizacion {
   autorizado: boolean;
@@ -23,11 +24,9 @@ export async function requireAdminPermission(subseccionKey: string): Promise<Res
     return { autorizado: false, status: 401, error: "No autenticado." };
   }
 
-  const { data: usuario } = await supabaseAdmin
-    .from("usuarios")
-    .select("perfil_id")
-    .eq("id", user.id)
-    .single();
+  const { data: usuario } = await conReintentoSiJwtFuturo(() =>
+    supabaseAdmin.from("usuarios").select("perfil_id").eq("id", user.id).single()
+  );
 
   if (!usuario?.perfil_id) {
     return { autorizado: false, status: 403, error: "Tu cuenta no tiene un perfil asignado." };
