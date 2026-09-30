@@ -57,6 +57,9 @@ import DESPReimprimir from "@/components/sections/despacho/DESPReimprimir";
 import DESPGrupos from "@/components/sections/despacho/DESPGrupos";
 import DESPSkuInsumos from "@/components/sections/despacho/DESPSkuInsumos";
 import type { DespachoGuiaFila } from "@/components/sections/despacho/types";
+import Dotacion from "@/components/sections/personalCd/Dotacion";
+import Vacaciones from "@/components/sections/personalCd/Vacaciones";
+import Sectores from "@/components/sections/personalCd/Sectores";
 export default function DashboardLayout() {
   const router = useRouter();
 
@@ -202,6 +205,10 @@ export default function DashboardLayout() {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("ADMIN-");
   });
+  const [isPersonalCdOpen, setIsPersonalCdOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("PCD-");
+  });
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "Resumen";
     return sessionStorage.getItem("tabDespuesDeRefresh") || "Resumen";
@@ -301,6 +308,12 @@ export default function DashboardLayout() {
     { key: "ALM-Importar", label: "Importar Datos" },
     { key: "ALM-Resumen", label: "Resumen" },
     { key: "ALM-Configuracion", label: "Configuración" },
+  ];
+
+  const personalCdSubSections = [
+    { key: "PCD-Dotacion", label: "Dotación" },
+    { key: "PCD-Vacaciones", label: "Vacaciones" },
+    { key: "PCD-Sectores", label: "Sectores (Admin)" },
   ];
 
   const expedicionSubSections = [
@@ -1449,6 +1462,28 @@ export default function DashboardLayout() {
           </div>
           )}
 
+          {seccionVisible(personalCdSubSections.map((s) => s.key)) && (
+          <div className="pt-2">
+            <button onClick={() => setIsPersonalCdOpen(!isPersonalCdOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-4.13a4 4 0 10-4-4 4 4 0 004 4zm6 0a4 4 0 10-4-4" /></svg>
+                Personal CD
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isPersonalCdOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isPersonalCdOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {personalCdSubSections.filter((sub) => tienePermiso(sub.key)).map((sub) => (
+                  <button key={sub.key} onClick={() => irA(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
           {seccionVisible(adminSubSections.map((s) => s.key)) && (
           <div className="pt-2">
             <button onClick={() => setIsAdminOpen(!isAdminOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
@@ -1534,6 +1569,9 @@ export default function DashboardLayout() {
              activeTab === "EXP-Escaner" ? "Expedición - Control de Bultos (Escáner)" :
              activeTab === "EXP-EscanerCelular" ? "Expedición - Control de Bultos (Escáner Celular)" :
              activeTab === "EXP-EscaneoHistorico" ? "Expedición - Histórico de Escaneos" :
+             activeTab === "PCD-Dotacion" ? "Personal CD - Dotación" :
+             activeTab === "PCD-Vacaciones" ? "Personal CD - Vacaciones" :
+             activeTab === "PCD-Sectores" ? "Personal CD - Sectores" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -1586,6 +1624,15 @@ export default function DashboardLayout() {
 
           {/* ================= PESTAÑA: DESPACHO - SKU DE INSUMOS (ADMIN) ================= */}
           {activeTab === "DESP-SkuInsumos" && <DESPSkuInsumos />}
+          {/* ================= PESTAÑA: PERSONAL CD - DOTACIÓN ================= */}
+          {activeTab === "PCD-Dotacion" && <Dotacion />}
+
+          {/* ================= PESTAÑA: PERSONAL CD - VACACIONES ================= */}
+          {activeTab === "PCD-Vacaciones" && <Vacaciones />}
+
+          {/* ================= PESTAÑA: PERSONAL CD - SECTORES (ADMIN) ================= */}
+          {activeTab === "PCD-Sectores" && <Sectores />}
+
           {/* ================= PESTAÑA: INBOUND - IMPORTAR DATOS ================= */}
           {activeTab === "INB-Importar" && <INBImportar />}
 
