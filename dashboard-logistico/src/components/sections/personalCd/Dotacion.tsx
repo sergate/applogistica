@@ -121,6 +121,22 @@ export default function Dotacion() {
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cambiar el sector.");
       await cargarDotacion();
     } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado");
+    }
+  };
+
+  const cambiarEstado = async (empleadoId: number, estado: string) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/personal/dotacion/${empleadoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ estado }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cambiar el estado.");
+      await cargarDotacion();
+    } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
     }
   };
@@ -412,7 +428,13 @@ export default function Dotacion() {
                   <td className="py-2 px-3 text-slate-500">{e.turno || "—"}</td>
                   <td className="py-2 px-3 text-slate-500">{e.tipo_contrato || "—"}</td>
                   <td className="py-2 px-3">
-                    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${estadoEstilo(e.estado)}`}>{e.estado}</span>
+                    <select
+                      value={e.estado}
+                      onChange={(ev) => cambiarEstado(e.id, ev.target.value)}
+                      className={`px-2 py-1 rounded-full border-0 text-xs font-semibold ${estadoEstilo(e.estado)}`}
+                    >
+                      {ESTADOS.map((es) => <option key={es} value={es}>{es}</option>)}
+                    </select>
                   </td>
                 </tr>
               ))}

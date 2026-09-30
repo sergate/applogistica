@@ -5,7 +5,7 @@ import { requireAuth, esErrorAuth } from "@/lib/auth";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const TURNOS_VALIDOS = new Set(["Mañana", "Tarde", "Noche", "Rotativo"]);
+const TURNOS_VALIDOS = new Set(["Mañana", "Tarde", "Noche", "Central"]);
 const CONTRATOS_VALIDOS = new Set(["Efectivo", "Eventual", "Pasantía"]);
 
 interface RegistroImport {
