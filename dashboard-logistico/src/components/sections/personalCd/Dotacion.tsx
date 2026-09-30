@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import { parseExcelFileConFechas } from "@/lib/fileParsers";
 
 interface Sector {
   id: number;
@@ -31,6 +32,23 @@ const TURNOS = ["Mañana", "Tarde", "Noche", "Rotativo"];
 const CONTRATOS = ["Efectivo", "Eventual", "Pasantía"];
 const ESTADOS: Empleado["estado"][] = ["Activo", "Licencia", "Baja"];
 
+// Columnas esperadas del Excel de importación (headers ya normalizados por
+// parseExcelFileConFechas: minúsculas, sin acentos, "_" en vez de espacios)
+// -> nombre de campo que espera /api/personal/dotacion/import.
+const COLUMNAS_IMPORT_DOTACION: Record<string, string> = {
+  legajo: "legajo",
+  apellido_y_nombre: "apellidoNombre",
+  dni: "dni",
+  fecha_nacimiento: "fechaNacimiento",
+  fecha_ingreso: "fechaIngreso",
+  sector: "sector",
+  puesto: "puesto",
+  turno: "turno",
+  tipo_contrato: "tipoContrato",
+  telefono: "telefono",
+  email: "email",
+};
+
 const nuevoEmpleadoVacio = {
   legajo: "",
   apellidoNombre: "",
@@ -58,6 +76,16 @@ export default function Dotacion() {
   const [mostrarForm, setMostrarForm] = useState(false);
   const [nuevoEmpleado, setNuevoEmpleado] = useState(nuevoEmpleadoVacio);
   const [guardando, setGuardando] = useState(false);
+
+  const [mostrarImport, setMostrarImport] = useState(false);
+  const [archivoImport, setArchivoImport] = useState<File | null>(null);
+  const [procesandoImport, setProcesandoImport] = useState(false);
+  const [resultadoImport, setResultadoImport] = useState<{
+    procesados: number;
+    filasConError: { fila: number; motivo: string }[];
+    sectoresNoEncontrados: string[];
+  } | null>(null);
+  const inputImportRef = useRef<HTMLInputElement>(null);
 
   const cargarDotacion = async () => {
     setCargando(true);
@@ -122,6 +150,47 @@ export default function Dotacion() {
     }
   };
 
+  const handleImportar = async () => {
+    if (!archivoImport) return;
+    setProcesandoImport(true);
+    setError(null);
+    setResultadoImport(null);
+    try {
+      const registrosCrudos = await parseExcelFileConFechas(archivoImport, ["fecha_nacimiento", "fecha_ingreso"]);
+      if (registrosCrudos.length === 0) throw new Error("El archivo no tiene filas de datos.");
+
+      const registros = registrosCrudos.map((r) => {
+        const mapeado: Record<string, unknown> = {};
+        for (const key of Object.keys(r)) {
+          const campoFinal = COLUMNAS_IMPORT_DOTACION[key];
+          if (campoFinal) mapeado[campoFinal] = r[key];
+        }
+        return mapeado;
+      });
+
+      const res = await fetch("/api/personal/dotacion/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ registros }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo importar el archivo.");
+
+      setResultadoImport({
+        procesados: data.procesados,
+        filasConError: data.filasConError || [],
+        sectoresNoEncontrados: data.sectoresNoEncontrados || [],
+      });
+      setArchivoImport(null);
+      if (inputImportRef.current) inputImportRef.current.value = "";
+      await cargarDotacion();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setProcesandoImport(false);
+    }
+  };
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return (empleados || []).filter((e) => {
@@ -156,13 +225,72 @@ export default function Dotacion() {
           <h2 className="text-lg font-bold text-slate-800">Dotación</h2>
           <p className="text-sm text-slate-500">Padrón de personal del Centro de Distribución</p>
         </div>
-        <button
-          onClick={() => setMostrarForm((v) => !v)}
-          className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-        >
-          {mostrarForm ? "Cancelar" : "+ Nuevo Empleado"}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setMostrarImport((v) => !v);
+              setResultadoImport(null);
+            }}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            {mostrarImport ? "Cancelar" : "Importar Excel"}
+          </button>
+          <button
+            onClick={() => setMostrarForm((v) => !v)}
+            className="px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+            {mostrarForm ? "Cancelar" : "+ Nuevo Empleado"}
+          </button>
+        </div>
       </div>
+
+      {mostrarImport && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm space-y-3">
+          <h3 className="text-sm font-bold text-slate-700">Importar dotación (altas masivas)</h3>
+          <p className="text-sm text-slate-500">
+            Excel con columnas: <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">Legajo</span>,{" "}
+            <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">Apellido y Nombre</span>,{" "}
+            <span className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded">Fecha Ingreso</span> (obligatorias), y opcionalmente
+            DNI, Fecha Nacimiento, Sector, Puesto, Turno, Tipo Contrato, Teléfono, Email. Si el Legajo ya existe, actualiza esos datos en
+            vez de duplicarlo.
+          </p>
+          <div className="flex items-center gap-3">
+            <input
+              ref={inputImportRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={(e) => setArchivoImport(e.target.files?.[0] || null)}
+              className="text-sm"
+            />
+            <button
+              onClick={handleImportar}
+              disabled={!archivoImport || procesandoImport}
+              className={`px-5 py-2 rounded-lg text-sm font-semibold ${
+                !archivoImport || procesandoImport ? "bg-slate-200 text-slate-400 cursor-not-allowed" : "bg-blue-600 text-white hover:bg-blue-700"
+              }`}
+            >
+              {procesandoImport ? "Procesando..." : "Procesar"}
+            </button>
+          </div>
+          {resultadoImport && (
+            <div className="p-3 rounded-lg bg-green-50 border border-green-200 text-sm text-green-800 space-y-1">
+              <p>{resultadoImport.procesados} fila(s) importada(s) correctamente.</p>
+              {resultadoImport.sectoresNoEncontrados.length > 0 && (
+                <p className="text-amber-700">
+                  Sectores sin coincidencia (quedaron sin asignar, corregilos en Dotación o creá el sector en Sectores):{" "}
+                  {resultadoImport.sectoresNoEncontrados.join(", ")}
+                </p>
+              )}
+              {resultadoImport.filasConError.length > 0 && (
+                <p className="text-red-700">
+                  {resultadoImport.filasConError.length} fila(s) con error:{" "}
+                  {resultadoImport.filasConError.map((f) => `fila ${f.fila} (${f.motivo})`).join("; ")}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>}
 
