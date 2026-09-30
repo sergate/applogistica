@@ -70,7 +70,7 @@ Si el script empieza a fallar porque ya no está logueado, repetí el paso de
 
 `actualizar-tablero.js` toma los reportes ya descargados (usa
 `descargas/manifiesto.json`, que genera `descargar-reportes.js`) y los sube al
-Tablero Logístico (https://applogistica-alpha.vercel.app/), sección por
+Tablero Logístico (https://panellogistico.com.ar/), sección por
 sección, con los mismos botones "Importar/Procesar" que se usan a mano.
 
 **Importante:** cada import de estos ESCRIBE datos reales en Supabase

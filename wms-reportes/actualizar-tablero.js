@@ -1,5 +1,5 @@
 // Sube los reportes ya descargados (ver descargar-reportes.js) al Tablero
-// Logístico (https://applogistica-alpha.vercel.app/), sección por sección,
+// Logístico (https://panellogistico.com.ar/), sección por sección,
 // usando el manifiesto que genera esa descarga (descargas/manifiesto.json).
 //
 // IMPORTANTE: esto ESCRIBE datos reales en Supabase (cada import reemplaza
@@ -22,7 +22,7 @@ const { conLock } = require("./lock.js");
 // TABLERO_URL permite apuntar a un deploy preview (ej. de la rama test) en
 // vez de al de producción, sin tocar el código -- útil para probar cambios
 // antes de que lleguen a producción.
-const URL_BASE = process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app/";
+const URL_BASE = process.env.TABLERO_URL || "https://panellogistico.com.ar/";
 const PERFIL_DIR = path.join(__dirname, "perfil-chrome-tablero");
 const DESCARGAS_DIR = path.join(__dirname, "descargas");
 const MANIFIESTO_PATH = path.join(DESCARGAS_DIR, "manifiesto.json");

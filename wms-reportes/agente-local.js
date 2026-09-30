@@ -42,7 +42,7 @@ const { conLock } = require("./lock.js");
 const CONFIG_PATH = path.join(__dirname, "agente-config.json");
 // Mismo override que actualizar-tablero.js, para poder apuntar el agente a
 // un deploy preview en vez de a producción sin tocar código.
-const APP_BASE_URL = (process.env.TABLERO_URL || "https://applogistica-alpha.vercel.app").replace(/\/$/, "");
+const APP_BASE_URL = (process.env.TABLERO_URL || "https://panellogistico.com.ar").replace(/\/$/, "");
 // Desde que se agregó Despacho (Para Imprimir/Reimprimir), los pedidos son
 // mucho más frecuentes durante el día (cada guía que se imprime genera uno)
 // -- eso hacía que el Agente nunca llegara a los 5 minutos ociosos y se
