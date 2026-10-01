@@ -25,7 +25,7 @@ export async function GET() {
     const [{ data: dotacion, error: errorDotacion }, { data: sectores, error: errorSectores }] = await Promise.all([
       supabaseAdmin
         .from("personal_cd_dotacion")
-        .select("id, legajo, apellido_nombre, sector_id, fecha_ingreso, estado")
+        .select("id, legajo, apellido_nombre, sector_id, fecha_ingreso, estado, tipo_contrato")
         .in("estado", ["Activo", "Licencia"])
         .order("apellido_nombre"),
       supabaseAdmin.from("personal_cd_sectores").select("id, nombre"),
@@ -34,7 +34,11 @@ export async function GET() {
     if (errorSectores) throw new Error(`Supabase (personal_cd_sectores): ${errorSectores.message}`);
 
     const nombrePorSector = new Map((sectores || []).map((s) => [s.id, s.nombre]));
-    const dotacionIds = (dotacion || []).map((d) => d.id);
+    // Filtro en JS, no en la query: ".neq" con NULL en Postgres no matchea
+    // (NULL <> 'Eventual' da NULL, no TRUE), así que hubiera excluido
+    // también a los empleados sin tipo_contrato cargado.
+    const dotacionSinEventuales = (dotacion || []).filter((d) => d.tipo_contrato !== "Eventual");
+    const dotacionIds = dotacionSinEventuales.map((d) => d.id);
 
     const { data: vacaciones, error: errorVacaciones } =
       dotacionIds.length > 0
@@ -64,7 +68,7 @@ export async function GET() {
       cargasPorVacaciones.get(c.vacaciones_id)!.push({ semanaInicio: c.semana_inicio, dias: Number(c.dias) });
     }
 
-    const empleados = (dotacion || []).map((d) => {
+    const empleados = dotacionSinEventuales.map((d) => {
       const v = vacacionesPorDotacion.get(d.id);
       const actualesCalculado = calcularVacacionesPorAntiguedad(calcularAntiguedadAnios(d.fecha_ingreso, CICLO_INICIO));
       const actualesManual = v?.vacaciones_actuales_manual != null ? Number(v.vacaciones_actuales_manual) : null;
