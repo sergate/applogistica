@@ -73,6 +73,7 @@ export default function Dotacion() {
   const [filtroTurno, setFiltroTurno] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroPuesto, setFiltroPuesto] = useState("");
+  const [filtroContrato, setFiltroContrato] = useState("");
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [nuevoEmpleado, setNuevoEmpleado] = useState(nuevoEmpleadoVacio);
@@ -136,6 +137,22 @@ export default function Dotacion() {
       });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cambiar el estado.");
+      await cargarDotacion();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
+
+  const cambiarCampo = async (empleadoId: number, campo: "puesto" | "turno" | "tipoContrato", valor: string) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/personal/dotacion/${empleadoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [campo]: valor }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar el cambio.");
       await cargarDotacion();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
@@ -219,10 +236,11 @@ export default function Dotacion() {
       if (filtroTurno && e.turno !== filtroTurno) return false;
       if (filtroEstado && e.estado !== filtroEstado) return false;
       if (filtroPuesto && e.puesto !== filtroPuesto) return false;
+      if (filtroContrato && e.tipo_contrato !== filtroContrato) return false;
       if (q && !e.legajo.toLowerCase().includes(q) && !e.apellido_nombre.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [empleados, busqueda, filtroSector, filtroTurno, filtroEstado, filtroPuesto]);
+  }, [empleados, busqueda, filtroSector, filtroTurno, filtroEstado, filtroPuesto, filtroContrato]);
 
   const kpis = useMemo(() => {
     const lista = empleados || [];
@@ -391,6 +409,10 @@ export default function Dotacion() {
           <option value="">Todos los turnos</option>
           {TURNOS.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        <select value={filtroContrato} onChange={(e) => setFiltroContrato(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
+          <option value="">Todos los contratos</option>
+          {CONTRATOS.map((c) => <option key={c} value={c}>{c}</option>)}
+        </select>
         <select value={filtroEstado} onChange={(e) => setFiltroEstado(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
           <option value="">Todos los estados</option>
           {ESTADOS.map((es) => <option key={es} value={es}>{es}</option>)}
@@ -434,9 +456,36 @@ export default function Dotacion() {
                       {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                     </select>
                   </td>
-                  <td className="py-2 px-3 text-slate-700">{e.puesto || "—"}</td>
-                  <td className="py-2 px-3 text-slate-500">{e.turno || "—"}</td>
-                  <td className="py-2 px-3 text-slate-500">{e.tipo_contrato || "—"}</td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={e.puesto || ""}
+                      onChange={(ev) => cambiarCampo(e.id, "puesto", ev.target.value)}
+                      className="px-2 py-1 rounded border border-slate-300 text-xs bg-slate-50"
+                    >
+                      <option value="">Sin puesto</option>
+                      {puestos.map((p) => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={e.turno || ""}
+                      onChange={(ev) => cambiarCampo(e.id, "turno", ev.target.value)}
+                      className="px-2 py-1 rounded border border-slate-300 text-xs bg-slate-50"
+                    >
+                      <option value="">Sin turno</option>
+                      {TURNOS.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </td>
+                  <td className="py-2 px-3">
+                    <select
+                      value={e.tipo_contrato || ""}
+                      onChange={(ev) => cambiarCampo(e.id, "tipoContrato", ev.target.value)}
+                      className="px-2 py-1 rounded border border-slate-300 text-xs bg-slate-50"
+                    >
+                      <option value="">Sin contrato</option>
+                      {CONTRATOS.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </td>
                   <td className="py-2 px-3">
                     <select
                       value={e.estado}
