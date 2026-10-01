@@ -72,6 +72,7 @@ export default function Dotacion() {
   const [filtroSector, setFiltroSector] = useState("");
   const [filtroTurno, setFiltroTurno] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroPuesto, setFiltroPuesto] = useState("");
 
   const [mostrarForm, setMostrarForm] = useState(false);
   const [nuevoEmpleado, setNuevoEmpleado] = useState(nuevoEmpleadoVacio);
@@ -207,16 +208,21 @@ export default function Dotacion() {
     }
   };
 
+  const puestos = useMemo(() => {
+    return [...new Set((empleados || []).map((e) => e.puesto).filter((p): p is string => !!p))].sort();
+  }, [empleados]);
+
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     return (empleados || []).filter((e) => {
       if (filtroSector && String(e.sector_id || "") !== filtroSector) return false;
       if (filtroTurno && e.turno !== filtroTurno) return false;
       if (filtroEstado && e.estado !== filtroEstado) return false;
+      if (filtroPuesto && e.puesto !== filtroPuesto) return false;
       if (q && !e.legajo.toLowerCase().includes(q) && !e.apellido_nombre.toLowerCase().includes(q)) return false;
       return true;
     });
-  }, [empleados, busqueda, filtroSector, filtroTurno, filtroEstado]);
+  }, [empleados, busqueda, filtroSector, filtroTurno, filtroEstado, filtroPuesto]);
 
   const kpis = useMemo(() => {
     const lista = empleados || [];
@@ -376,6 +382,10 @@ export default function Dotacion() {
         <select value={filtroSector} onChange={(e) => setFiltroSector(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
           <option value="">Todos los sectores</option>
           {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
+        <select value={filtroPuesto} onChange={(e) => setFiltroPuesto(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
+          <option value="">Todos los puestos</option>
+          {puestos.map((p) => <option key={p} value={p}>{p}</option>)}
         </select>
         <select value={filtroTurno} onChange={(e) => setFiltroTurno(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
           <option value="">Todos los turnos</option>
