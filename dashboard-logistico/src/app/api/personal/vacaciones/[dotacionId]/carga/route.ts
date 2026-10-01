@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 import { obtenerOCrearVacacionesId } from "@/lib/personalVacacionesServer";
+import { registrarAuditoria } from "@/lib/personalAuditoria";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,20 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ success: false, error: "Faltan semanaInicio/dias válidos." }, { status: 400 });
     }
 
+    const { data: empleado } = await supabaseAdmin
+      .from("personal_cd_dotacion")
+      .select("legajo, apellido_nombre")
+      .eq("id", dotacionId)
+      .single();
+
     const vacacionesId = await obtenerOCrearVacacionesId(Number(dotacionId));
+
+    const { data: previa } = await supabaseAdmin
+      .from("personal_cd_vacaciones_cargas")
+      .select("dias")
+      .eq("vacaciones_id", vacacionesId)
+      .eq("semana_inicio", semanaInicio)
+      .maybeSingle();
 
     const { error } = await supabaseAdmin
       .from("personal_cd_vacaciones_cargas")
@@ -38,6 +52,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         { onConflict: "vacaciones_id,semana_inicio" }
       );
     if (error) throw new Error(`Supabase (personal_cd_vacaciones_cargas): ${error.message}`);
+
+    const diasPrevios = Number(previa?.dias ?? 0);
+    if (diasPrevios !== dias) {
+      const quien = empleado ? `${empleado.apellido_nombre} (legajo ${empleado.legajo})` : `empleado ${dotacionId}`;
+      await registrarAuditoria({
+        usuarioId: auth.userId,
+        dotacionId: Number(dotacionId),
+        legajo: empleado?.legajo,
+        accion: "carga_vacaciones",
+        detalle: `${quien}: días cargados semana del ${semanaInicio}: ${diasPrevios} -> ${dias}.`,
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

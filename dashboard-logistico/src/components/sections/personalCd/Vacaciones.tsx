@@ -31,6 +31,8 @@ export default function Vacaciones() {
   const [cargando, setCargando] = useState(false);
   const [trimIdx, setTrimIdx] = useState(trimestreVigenteIdx);
   const [guardandoKey, setGuardandoKey] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [filtroSector, setFiltroSector] = useState("");
 
   const cargarVacaciones = async () => {
     setCargando(true);
@@ -56,6 +58,21 @@ export default function Vacaciones() {
   const trimestre = TRIMESTRES[trimIdx];
   const semanas = useMemo(() => getSemanas(trimestre.inicio, trimestre.fin), [trimestre]);
 
+  const sectores = useMemo(() => {
+    if (!empleados) return [];
+    return [...new Set(empleados.map((e) => e.sector).filter((s): s is string => !!s))].sort();
+  }, [empleados]);
+
+  const filtrados = useMemo(() => {
+    if (!empleados) return [];
+    const q = busqueda.trim().toLowerCase();
+    return empleados.filter((e) => {
+      if (q && !e.legajo.toLowerCase().includes(q) && !e.apellidoNombre.toLowerCase().includes(q)) return false;
+      if (filtroSector && e.sector !== filtroSector) return false;
+      return true;
+    });
+  }, [empleados, busqueda, filtroSector]);
+
   const guardarCarga = async (empleadoId: number, semanaInicioISO: string, dias: number) => {
     const key = `${empleadoId}-${semanaInicioISO}`;
     setGuardandoKey(key);
@@ -73,6 +90,22 @@ export default function Vacaciones() {
       setError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
       setGuardandoKey(null);
+    }
+  };
+
+  const guardarAdeudadas = async (empleadoId: number, valor: number) => {
+    setError(null);
+    try {
+      const res = await fetch(`/api/personal/vacaciones/${empleadoId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ adeudadas: valor }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo guardar.");
+      await cargarVacaciones();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error inesperado.");
     }
   };
 
@@ -117,10 +150,25 @@ export default function Vacaciones() {
         ))}
       </div>
 
+      <div className="flex items-center gap-3 flex-wrap">
+        <input
+          type="text"
+          placeholder="Buscar por legajo o nombre..."
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          className="px-3 py-2 rounded-lg border border-slate-300 text-sm w-64 focus:ring-2 focus:ring-blue-500 outline-none"
+        />
+        <select value={filtroSector} onChange={(e) => setFiltroSector(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
+          <option value="">Todos los sectores</option>
+          {sectores.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
         {cargando && empleados === null && <p className="p-6 text-sm text-slate-400">Cargando...</p>}
+        {empleados !== null && empleados.length > 0 && filtrados.length === 0 && <p className="p-6 text-sm text-slate-400">Sin resultados.</p>}
         {empleados !== null && empleados.length === 0 && <p className="p-6 text-sm text-slate-400">Sin empleados activos.</p>}
-        {empleados !== null && empleados.length > 0 && (
+        {empleados !== null && filtrados.length > 0 && (
           <table className="border-collapse text-[12.5px]">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
@@ -138,14 +186,26 @@ export default function Vacaciones() {
               </tr>
             </thead>
             <tbody>
-              {empleados.map((e) => {
+              {filtrados.map((e) => {
                 const esManual = e.actualesManual !== null;
                 return (
                   <tr key={e.id} className="border-b border-slate-100">
                     <td className="sticky left-0 bg-white py-2 px-3 text-slate-500 whitespace-nowrap">{e.legajo}</td>
                     <td className="sticky left-[62px] bg-white py-2 px-3 font-semibold text-slate-800 whitespace-nowrap">{e.apellidoNombre}</td>
                     <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{e.sector || "—"}</td>
-                    <td className="py-2 px-3 text-right text-slate-500">{e.adeudadas}</td>
+                    <td className="py-1.5 px-3 text-right">
+                      <input
+                        type="number"
+                        min={0}
+                        defaultValue={e.adeudadas}
+                        key={`adeudadas-${e.id}-${e.adeudadas}`}
+                        onBlur={(ev) => {
+                          const n = Number(ev.target.value);
+                          if (!Number.isNaN(n) && n !== e.adeudadas) guardarAdeudadas(e.id, n);
+                        }}
+                        className="w-14 text-right border border-slate-200 bg-slate-50 rounded px-1.5 py-1 text-xs"
+                      />
+                    </td>
                     <td className="py-1.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <input

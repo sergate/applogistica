@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { registrarAuditoria } from "@/lib/personalAuditoria";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -97,6 +98,12 @@ export async function POST(request: NextRequest) {
       .from("personal_cd_dotacion")
       .upsert(filasValidas, { onConflict: "legajo" });
     if (errorUpsert) throw new Error(`Supabase (personal_cd_dotacion): ${errorUpsert.message}`);
+
+    await registrarAuditoria({
+      usuarioId: auth.userId,
+      accion: "import_masivo_dotacion",
+      detalle: `Importación masiva: ${filasValidas.length} legajo(s) cargados/actualizados (${filasError.length} fila(s) con error).`,
+    });
 
     return NextResponse.json({
       success: true,

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 import { obtenerOCrearVacacionesId } from "@/lib/personalVacacionesServer";
+import { registrarAuditoria } from "@/lib/personalAuditoria";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,9 +44,46 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     updates.updated_at = new Date().toISOString();
 
+    const { data: empleado } = await supabaseAdmin
+      .from("personal_cd_dotacion")
+      .select("legajo, apellido_nombre")
+      .eq("id", dotacionId)
+      .single();
+
     const vacacionesId = await obtenerOCrearVacacionesId(Number(dotacionId));
+
+    const { data: previo } = await supabaseAdmin
+      .from("personal_cd_vacaciones")
+      .select("vacaciones_adeudadas, vacaciones_actuales_manual")
+      .eq("id", vacacionesId)
+      .single();
+
     const { error } = await supabaseAdmin.from("personal_cd_vacaciones").update(updates).eq("id", vacacionesId);
     if (error) throw new Error(`Supabase (personal_cd_vacaciones): ${error.message}`);
+
+    const quien = empleado ? `${empleado.apellido_nombre} (legajo ${empleado.legajo})` : `empleado ${dotacionId}`;
+
+    if ("vacaciones_adeudadas" in updates && Number(previo?.vacaciones_adeudadas) !== updates.vacaciones_adeudadas) {
+      await registrarAuditoria({
+        usuarioId: auth.userId,
+        dotacionId: Number(dotacionId),
+        legajo: empleado?.legajo,
+        accion: "edicion_vacaciones_adeudadas",
+        detalle: `${quien}: Vac. Adeudadas ${previo?.vacaciones_adeudadas ?? 0} -> ${updates.vacaciones_adeudadas}.`,
+      });
+    }
+
+    if ("vacaciones_actuales_manual" in updates && (previo?.vacaciones_actuales_manual ?? null) !== updates.vacaciones_actuales_manual) {
+      const anteriorTxto = previo?.vacaciones_actuales_manual ?? "automático";
+      const nuevoTxto = updates.vacaciones_actuales_manual ?? "automático";
+      await registrarAuditoria({
+        usuarioId: auth.userId,
+        dotacionId: Number(dotacionId),
+        legajo: empleado?.legajo,
+        accion: "edicion_vacaciones_actuales",
+        detalle: `${quien}: Vac. Actuales ${anteriorTxto} -> ${nuevoTxto}.`,
+      });
+    }
 
     return NextResponse.json({ success: true });
   } catch (err) {

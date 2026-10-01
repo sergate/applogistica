@@ -60,6 +60,7 @@ import type { DespachoGuiaFila } from "@/components/sections/despacho/types";
 import Dotacion from "@/components/sections/personalCd/Dotacion";
 import Vacaciones from "@/components/sections/personalCd/Vacaciones";
 import Sectores from "@/components/sections/personalCd/Sectores";
+import Auditoria from "@/components/sections/personalCd/Auditoria";
 export default function DashboardLayout() {
   const router = useRouter();
 
@@ -314,6 +315,7 @@ export default function DashboardLayout() {
     { key: "PCD-Dotacion", label: "Dotación" },
     { key: "PCD-Vacaciones", label: "Vacaciones" },
     { key: "PCD-Sectores", label: "Sectores (Admin)" },
+    { key: "PCD-Auditoria", label: "Auditoría (Admin)" },
   ];
 
   const expedicionSubSections = [
@@ -1572,6 +1574,7 @@ export default function DashboardLayout() {
              activeTab === "PCD-Dotacion" ? "Personal CD - Dotación" :
              activeTab === "PCD-Vacaciones" ? "Personal CD - Vacaciones" :
              activeTab === "PCD-Sectores" ? "Personal CD - Sectores" :
+             activeTab === "PCD-Auditoria" ? "Personal CD - Auditoría" :
              activeTab === "ADMIN-Perfiles" ? "Administración - Perfiles" :
              activeTab === "ADMIN-Usuarios" ? "Administración - Usuarios" :
              activeTab === "ADMIN-Accesos" ? "Administración - Accesos" :
@@ -1632,6 +1635,9 @@ export default function DashboardLayout() {
 
           {/* ================= PESTAÑA: PERSONAL CD - SECTORES (ADMIN) ================= */}
           {activeTab === "PCD-Sectores" && <Sectores />}
+
+          {/* ================= PESTAÑA: PERSONAL CD - AUDITORÍA (ADMIN) ================= */}
+          {activeTab === "PCD-Auditoria" && <Auditoria />}
 
           {/* ================= PESTAÑA: INBOUND - IMPORTAR DATOS ================= */}
           {activeTab === "INB-Importar" && <INBImportar />}
@@ -2811,7 +2817,7 @@ export default function DashboardLayout() {
           {activeTab === "ADMIN-Configuracion" && <AdminConfiguracion />}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "DESP-SkuInsumos", "PCD-Dotacion", "PCD-Vacaciones", "PCD-Sectores", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "DESP-SkuInsumos", "PCD-Dotacion", "PCD-Vacaciones", "PCD-Sectores", "PCD-Auditoria", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

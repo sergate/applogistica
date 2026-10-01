@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 import { calcularAntiguedadAnios } from "@/lib/personalVacaciones";
+import { registrarAuditoria } from "@/lib/personalAuditoria";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -102,6 +103,14 @@ export async function POST(request: NextRequest) {
     if (error) {
       throw new Error(error.code === "23505" ? "Ya existe un empleado con ese legajo." : `Supabase (personal_cd_dotacion): ${error.message}`);
     }
+
+    await registrarAuditoria({
+      usuarioId: auth.userId,
+      dotacionId: data.id,
+      legajo,
+      accion: "alta_dotacion",
+      detalle: `Alta de ${apellidoNombre} (legajo ${legajo}).`,
+    });
 
     return NextResponse.json({ success: true, id: data.id });
   } catch (err) {

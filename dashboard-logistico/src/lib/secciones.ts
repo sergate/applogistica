@@ -118,6 +118,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "PCD-Dotacion", label: "Dotación" },
       { key: "PCD-Vacaciones", label: "Vacaciones" },
       { key: "PCD-Sectores", label: "Sectores (Admin)" },
+      { key: "PCD-Auditoria", label: "Auditoría (Admin)" },
     ],
   },
   {

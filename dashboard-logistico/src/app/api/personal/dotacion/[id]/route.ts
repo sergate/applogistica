@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
+import { registrarAuditoria } from "@/lib/personalAuditoria";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,9 +45,29 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     updates.updated_at = new Date().toISOString();
 
+    let previo: { legajo: string; apellido_nombre: string; estado: string } | null = null;
+    if ("estado" in updates) {
+      const { data } = await supabaseAdmin
+        .from("personal_cd_dotacion")
+        .select("legajo, apellido_nombre, estado")
+        .eq("id", id)
+        .single();
+      previo = data;
+    }
+
     const { error } = await supabaseAdmin.from("personal_cd_dotacion").update(updates).eq("id", id);
     if (error) {
       throw new Error(error.code === "23505" ? "Ya existe un empleado con ese legajo." : `Supabase (personal_cd_dotacion): ${error.message}`);
+    }
+
+    if (previo && previo.estado !== updates.estado) {
+      await registrarAuditoria({
+        usuarioId: auth.userId,
+        dotacionId: Number(id),
+        legajo: previo.legajo,
+        accion: "cambio_estado_dotacion",
+        detalle: `${previo.apellido_nombre} (legajo ${previo.legajo}): estado ${previo.estado} -> ${updates.estado}.`,
+      });
     }
 
     return NextResponse.json({ success: true });
