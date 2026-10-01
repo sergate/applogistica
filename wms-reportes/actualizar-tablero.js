@@ -26,6 +26,23 @@ const URL_BASE = process.env.TABLERO_URL || "https://panellogistico.com.ar/";
 const PERFIL_DIR = path.join(__dirname, "perfil-chrome-tablero");
 const DESCARGAS_DIR = path.join(__dirname, "descargas");
 const MANIFIESTO_PATH = path.join(DESCARGAS_DIR, "manifiesto.json");
+const CONFIG_PATH = path.join(__dirname, "agente-config.json");
+
+// Usuario/clave del Tablero, opcionales, en agente-config.json ("tableroEmail" /
+// "tableroClave") -- igual que wmsUsuario/wmsClave en descargar-reportes.js:
+// solo hace falta configurarlos si el gestor de contraseñas del Chromium
+// propio de Playwright no tiene (o perdió) el login guardado. Si no están,
+// el comportamiento es el de siempre: hay que re-loguearse a mano con
+// "--login" cuando vence la sesión.
+function leerCredencialesTablero() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    if (config.tableroEmail && config.tableroClave) {
+      return { email: config.tableroEmail, clave: config.tableroClave };
+    }
+  } catch {}
+  return null;
+}
 
 function leerManifiesto() {
   if (!fs.existsSync(MANIFIESTO_PATH)) {
@@ -120,16 +137,28 @@ async function chequearSesion(page) {
     .catch(() => false);
 
   if (!haySesion) {
-    // Igual que en descargar-reportes.js: si Edge ya autocompletó el
-    // login guardado, alcanza con apretar "Ingresar" -- nunca leemos ni
-    // tipeamos la contraseña acá.
+    // Igual que en descargar-reportes.js: si el gestor de contraseñas del
+    // Chromium propio ya autocompletó el login guardado, alcanza con
+    // apretar "Ingresar". Si no hay nada autocompletado pero el usuario
+    // configuró tableroEmail/tableroClave en agente-config.json, se tipean
+    // acá -- ver leerCredencialesTablero() más arriba.
     const email = page.locator('input[type="email"]').first();
     const clave = page.locator('input[type="password"]').first();
     const hayLogin = await clave.isVisible().catch(() => false);
 
     if (hayLogin) {
-      const emailLleno = ((await email.inputValue().catch(() => "")) || "").length > 0;
-      const claveLlena = ((await clave.inputValue().catch(() => "")) || "").length > 0;
+      let emailLleno = ((await email.inputValue().catch(() => "")) || "").length > 0;
+      let claveLlena = ((await clave.inputValue().catch(() => "")) || "").length > 0;
+
+      if (!(emailLleno && claveLlena)) {
+        const credenciales = leerCredencialesTablero();
+        if (credenciales) {
+          await email.fill(credenciales.email);
+          await clave.fill(credenciales.clave);
+          emailLleno = true;
+          claveLlena = true;
+        }
+      }
 
       if (emailLleno && claveLlena) {
         await page.getByRole("button", { name: "Ingresar", exact: true }).click();
