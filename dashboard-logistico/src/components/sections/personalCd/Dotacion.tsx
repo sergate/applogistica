@@ -28,7 +28,7 @@ interface Empleado {
   antiguedad: string;
 }
 
-const TURNOS = ["Mañana", "Tarde", "Noche", "Rotativo"];
+const TURNOS = ["Mañana", "Tarde", "Noche", "Central"];
 const CONTRATOS = ["Efectivo", "Eventual", "Pasantía"];
 const ESTADOS: Empleado["estado"][] = ["Activo", "Licencia", "Baja"];
 
