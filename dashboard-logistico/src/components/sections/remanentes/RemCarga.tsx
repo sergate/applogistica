@@ -2,11 +2,84 @@
 
 import { useEffect, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { fmtNum, fmtPct, fmtSoloFecha } from "@/components/dashboard/formatters";
+import { fmtFecha, fmtNum, fmtPct, fmtSoloFecha } from "@/components/dashboard/formatters";
 import type { PlanRemanentes } from "./types";
+
+interface ArchivoManual {
+  id: number;
+  archivo: string;
+  nota: string | null;
+  created_at: string;
+}
 
 export default function RemCarga() {
   const { activeTab, dataVersion, setDataVersion } = useDashboard();
+
+  const [archivosManuales, setArchivosManuales] = useState<ArchivoManual[]>([]);
+  const [archivosManualesLoading, setArchivosManualesLoading] = useState(false);
+  const [archivosManualesError, setArchivosManualesError] = useState<string | null>(null);
+  const [formArchivosTexto, setFormArchivosTexto] = useState("");
+  const [formArchivosNota, setFormArchivosNota] = useState("");
+  const [agregandoArchivos, setAgregandoArchivos] = useState(false);
+
+  const cargarArchivosManuales = async () => {
+    setArchivosManualesLoading(true);
+    setArchivosManualesError(null);
+    try {
+      const res = await fetch("/api/remanentes/archivos-manuales", { cache: "no-store" });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron cargar los archivos.");
+      setArchivosManuales(data.archivos);
+    } catch (err) {
+      setArchivosManualesError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setArchivosManualesLoading(false);
+    }
+  };
+
+  const agregarArchivosManuales = async () => {
+    // Los nombres de archivo llevan espacios ("CI- 1 CQ REMA VER ..."), así
+    // que se separan solo por salto de línea (a diferencia de los pedidos).
+    const archivos = Array.from(new Set(formArchivosTexto.split(/\r?\n/).map((a) => a.trim()).filter(Boolean)));
+    if (archivos.length === 0) return;
+    setAgregandoArchivos(true);
+    setArchivosManualesError(null);
+    try {
+      const res = await fetch("/api/remanentes/archivos-manuales", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivos, nota: formArchivosNota.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudieron agregar los archivos.");
+      setFormArchivosTexto("");
+      setFormArchivosNota("");
+      await cargarArchivosManuales();
+      setDataVersion((v) => v + 1); // refresca Resumen y Avance Plan
+    } catch (err) {
+      setArchivosManualesError(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setAgregandoArchivos(false);
+    }
+  };
+
+  const eliminarArchivoManual = async (id: number, archivo: string) => {
+    if (!confirm(`¿Seguro que querés sacar "${archivo}" de la lista? Ya no se va a descargar con Remanentes y, si no lleva REMA en el nombre, deja de contar como remanente. Los datos ya importados no se borran.`)) return;
+    setArchivosManualesError(null);
+    try {
+      const res = await fetch("/api/remanentes/archivos-manuales", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo eliminar el archivo.");
+      await cargarArchivosManuales();
+      setDataVersion((v) => v + 1);
+    } catch (err) {
+      setArchivosManualesError(err instanceof Error ? err.message : "Error inesperado.");
+    }
+  };
 
   const [planRemanentes, setPlanRemanentes] = useState<PlanRemanentes | null>(null);
   const [planRemanentesLoading, setPlanRemanentesLoading] = useState(false);
@@ -43,6 +116,7 @@ export default function RemCarga() {
     if (activeTab !== "REM-Carga") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     cargarPlanRemanentes();
+    cargarArchivosManuales();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, dataVersion]);
 
@@ -96,6 +170,7 @@ export default function RemCarga() {
   };
 
   return (
+    <div className="space-y-6">
     <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-sm max-w-2xl">
       <h2 className="text-xl font-bold text-slate-800 mb-1">Carga Datos — Plan de Remanentes</h2>
       <p className="text-sm text-slate-500 mb-6">
@@ -204,6 +279,77 @@ export default function RemCarga() {
           </button>
         </div>
       )}
+    </div>
+
+    <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm max-w-3xl">
+      <h2 className="text-lg font-bold text-slate-800 mb-1">Archivos de remanentes manuales</h2>
+      <p className="text-sm text-slate-500 mb-4">
+        Cargá acá los nombres de archivo (tal cual figuran en el WMS, en Carga inicial &gt; Resumen CI &gt; Pedido) que
+        quieras sumar a Remanentes aunque no lleven la palabra REMA. Al apretar &quot;Actualizar desde WMS&quot; en
+        Importar Datos, el Agente Local los busca en el WMS, los descarga junto con los REMA de siempre y los importa.
+        Mientras estén en esta lista cuentan como remanentes en Resumen y Avance Plan. Un nombre por línea.
+      </p>
+      {archivosManualesError && (
+        <div className="mb-3 p-3 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">{archivosManualesError}</div>
+      )}
+      <textarea
+        value={formArchivosTexto}
+        onChange={(e) => setFormArchivosTexto(e.target.value)}
+        placeholder={"Ej: CI- 1 CQ VER PRENDAS 29-05 - 1293\nCI- 2 CHK INV CALZADO 02-06 - 1301"}
+        rows={4}
+        className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none mb-3"
+      />
+      <input
+        type="text"
+        value={formArchivosNota}
+        onChange={(e) => setFormArchivosNota(e.target.value)}
+        placeholder="Nota (opcional, ej: motivo)"
+        className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-blue-500 outline-none mb-4"
+      />
+      <button
+        onClick={agregarArchivosManuales}
+        disabled={!formArchivosTexto.trim() || agregandoArchivos}
+        className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+          !formArchivosTexto.trim() || agregandoArchivos
+            ? "bg-slate-200 text-slate-400 cursor-not-allowed"
+            : "bg-blue-600 text-white hover:bg-blue-700"
+        }`}
+      >
+        {agregandoArchivos ? "Guardando..." : "Agregar archivos"}
+      </button>
+
+      <h3 className="text-sm font-bold text-slate-700 mt-8 mb-3">Archivos cargados</h3>
+      {archivosManualesLoading && archivosManuales.length === 0 && <p className="text-sm text-slate-400">Cargando...</p>}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm text-left whitespace-nowrap">
+          <thead className="text-slate-500 font-medium border-b border-slate-200">
+            <tr>
+              <th className="py-3 px-4 text-left">Archivo</th>
+              <th className="py-3 px-4 text-left">Nota</th>
+              <th className="py-3 px-4 text-left">Cargado</th>
+              <th className="py-3 px-4 text-left">Acciones</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {archivosManuales.map((a) => (
+              <tr key={a.id}>
+                <td className="py-3 px-4 text-left font-semibold text-slate-800">{a.archivo}</td>
+                <td className="py-3 px-4 text-left text-slate-600">{a.nota || "—"}</td>
+                <td className="py-3 px-4 text-left text-slate-600">{fmtFecha(a.created_at)}</td>
+                <td className="py-3 px-4 text-left">
+                  <button onClick={() => eliminarArchivoManual(a.id, a.archivo)} className="text-sm text-red-600 hover:underline">
+                    Eliminar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {archivosManuales.length === 0 && !archivosManualesLoading && (
+          <p className="text-sm text-slate-400 text-center py-8">No hay archivos cargados a mano todavía.</p>
+        )}
+      </div>
+    </div>
     </div>
   );
 }

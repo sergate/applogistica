@@ -294,9 +294,30 @@ async function reporteProductividad(page) {
   return descargarConBoton(page, "Excel", `productividad_${timestamp()}.xlsx`);
 }
 
+// Nombres de archivo cargados a mano en el Tablero (Status Remanentes ->
+// Carga Datos): además de las opciones con REMA, reporteCargaInicialRema baja
+// estas. Los carga el Agente Local (agente-local.js) antes de cada descarga;
+// vacío si se corre standalone desde descargar-reportes.js.
+let archivosRemaManuales = [];
+let remaManualesNoEncontrados = [];
+
+function setArchivosRemaManuales(lista) {
+  archivosRemaManuales = Array.isArray(lista) ? lista : [];
+  remaManualesNoEncontrados = [];
+}
+
+// Nombres manuales que no estaban en el combo del WMS en la última descarga.
+function getRemaManualesNoEncontrados() {
+  return remaManualesNoEncontrados.slice();
+}
+
+function normalizarNombreArchivo(nombre) {
+  return String(nombre).trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 // --- Reporte "Resumen carga inicial" para TODAS las opciones que contengan REMA ---
 async function reporteCargaInicialRema(page) {
-  console.log("> carga_inicial_rema (todas las opciones que contengan REMA)");
+  console.log("> carga_inicial_rema (todas las opciones que contengan REMA + los cargados a mano)");
   await abrirPantalla(page, "Carga inicial", "Resumen CI");
   await page.waitForTimeout(800);
 
@@ -309,8 +330,16 @@ async function reporteCargaInicialRema(page) {
     const cmp = Ext.ComponentQuery.query('combobox[emptyText=Pedido]')[0];
     return cmp.getStore().getRange().map((r) => r.get(cmp.displayField));
   });
-  const opcionesRema = opciones.filter((o) => /rema/i.test(o));
-  console.log(`  encontradas ${opcionesRema.length} opciones con REMA`);
+  const manualesNormalizados = new Set(archivosRemaManuales.map(normalizarNombreArchivo));
+  const opcionesRema = opciones.filter((o) => /rema/i.test(o) || manualesNormalizados.has(normalizarNombreArchivo(o)));
+  const opcionesNormalizadas = new Set(opciones.map(normalizarNombreArchivo));
+  remaManualesNoEncontrados = archivosRemaManuales.filter((a) => !opcionesNormalizadas.has(normalizarNombreArchivo(a)));
+  console.log(
+    `  encontradas ${opcionesRema.length} opciones (REMA + cargadas a mano)` +
+      (remaManualesNoEncontrados.length > 0
+        ? ` -- NO encontradas en el WMS: ${remaManualesNoEncontrados.join(" | ")}`
+        : "")
+  );
 
   const archivos = [];
   for (const opcion of opcionesRema) {
@@ -570,6 +599,8 @@ module.exports = {
   descargarUnReporte,
   chequearSesion,
   esCierreInesperado,
+  setArchivosRemaManuales,
+  getRemaManualesNoEncontrados,
 };
 
 // Solo corre el CLI si el archivo se ejecuta directamente (node

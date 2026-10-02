@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllRemanentes, parseNumeroRemanente, RemanenteRow } from "@/lib/remanentesHelpers";
+import {
+  esArchivoRemanente,
+  fetchAllRemanentes,
+  fetchArchivosRemanentesManuales,
+  normalizarNombreArchivo,
+  parseNumeroRemanente,
+  RemanenteRow,
+} from "@/lib/remanentesHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
 export const runtime = "nodejs";
@@ -49,7 +56,8 @@ export async function GET() {
   }
 
   try {
-    const rows = await fetchAllRemanentes();
+    const [rows, manuales] = await Promise.all([fetchAllRemanentes(), fetchArchivosRemanentesManuales()]);
+    const manualesNormalizados = new Set(manuales.map(normalizarNombreArchivo));
 
     // Agregamos por (marca, numero/archivo, grupo, temporada). Solo cuentan
     // las filas cuyo "numero" indica REMA -- si un archivo distinto se
@@ -57,7 +65,7 @@ export async function GET() {
     // dedup de stock por SKU se calcula solo sobre esas filas, para que un
     // archivo no-REMA con el mismo SKU no le "robe" el stock a una fila
     // REMA real.
-    const rowsRema = rows.filter((r) => parseNumeroRemanente(r.numero).esRemanente);
+    const rowsRema = rows.filter((r) => esArchivoRemanente(r.numero, manualesNormalizados));
     const stockPorSku = stockRealPorSku(rowsRema);
     const skusYaSumadosParaStock = new Set<string>();
 

@@ -2,7 +2,12 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAdminPermission } from "@/lib/adminAuth";
 import { fetchAllProductividad, mapearTipoProceso } from "@/lib/productividadHelpers";
-import { fetchAllRemanentes, parseNumeroRemanente } from "@/lib/remanentesHelpers";
+import {
+  esArchivoRemanente,
+  fetchAllRemanentes,
+  fetchArchivosRemanentesManuales,
+  normalizarNombreArchivo,
+} from "@/lib/remanentesHelpers";
 import { diasHabilesEntre, esDiaHabil } from "@/lib/diasHabiles";
 
 export const runtime = "nodejs";
@@ -71,11 +76,11 @@ export async function GET() {
     // se ve desglosado en la tabla de Resumen por Marca / Grupo. Sumar el
     // target de cada fila da lo mismo que sumar todas las "pedidas" que
     // cuentan como remanente y aplicar el target una sola vez al final.
-    const remanentesRows = await fetchAllRemanentes();
+    const [remanentesRows, manuales] = await Promise.all([fetchAllRemanentes(), fetchArchivosRemanentesManuales()]);
+    const manualesNormalizados = new Set(manuales.map(normalizarNombreArchivo));
     let totalPedidasRemanentes = 0;
     for (const r of remanentesRows) {
-      const { esRemanente } = parseNumeroRemanente(r.numero);
-      if (!esRemanente) continue;
+      if (!esArchivoRemanente(r.numero, manualesNormalizados)) continue;
       totalPedidasRemanentes += num(r.pedidas);
     }
     const totalAProcesar = totalPedidasRemanentes * (target / 100);

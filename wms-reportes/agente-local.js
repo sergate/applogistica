@@ -309,6 +309,19 @@ const NOMBRE_REPORTE = {
   ocupacion_almacen: "Existencia por ubicación (archivo grande, puede tardar varios minutos)",
 };
 
+// Nombres de archivo de remanentes cargados a mano en el Tablero (Status
+// Remanentes -> Carga Datos) -- se bajan además de las opciones con REMA.
+async function traerArchivosRemaManuales(token) {
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/remanentes-manuales`, {
+    headers: headersAgente(token),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+  return Array.isArray(data.archivos) ? data.archivos : [];
+}
+
 // Baja los reportes que necesita la sección y los sube al Tablero, avisando
 // el progreso real (paso a paso) a medida que avanza. Devuelve la lista de
 // archivos descargados (para poder borrarlos después si salió todo bien).
@@ -322,6 +335,7 @@ async function correrPedido(config, pedido, paginas) {
   let pasosHechos = 0;
 
   const manifiesto = {};
+  const avisos = [];
   for (const idReporte of idsReportes) {
     await avisarProgreso(
       config.token,
@@ -329,9 +343,28 @@ async function correrPedido(config, pedido, paginas) {
       Math.round((pasosHechos / totalPasos) * 100),
       `Descargando: ${NOMBRE_REPORTE[idReporte] || idReporte}...`
     );
+    if (idReporte === "ci_rema") {
+      // Además de los REMA de siempre, baja los nombres cargados a mano en
+      // Status Remanentes -> Carga Datos.
+      try {
+        descargador.setArchivosRemaManuales(await traerArchivosRemaManuales(config.token));
+      } catch (err) {
+        descargador.setArchivosRemaManuales([]);
+        const motivo = err instanceof Error ? err.message : String(err);
+        console.error(`  (no pude traer la lista de archivos manuales: ${motivo})`);
+        avisos.push(`No pude traer la lista de archivos cargados a mano (${motivo}); se bajaron solo los REMA.`);
+      }
+    }
     manifiesto[idReporte] = await descargador.descargarUnReporte(paginaWms, idReporte);
+    if (idReporte === "ci_rema") {
+      const noEncontrados = descargador.getRemaManualesNoEncontrados();
+      if (noEncontrados.length > 0) {
+        avisos.push(`No se encontraron en el WMS: ${noEncontrados.join(" | ")}.`);
+      }
+    }
     pasosHechos++;
   }
+  pedido.avisoResultado = avisos.length > 0 ? avisos.join(" ") : null;
 
   await avisarProgreso(config.token, pedido.id, Math.round((pasosHechos / totalPasos) * 100), "Subiendo al Tablero...");
   await subidor.subirUnaSeccion(paginaTablero, seccion, manifiesto);
@@ -722,7 +755,7 @@ async function atenderPedido(config, pedido) {
                 : pedido.seccion === "despacho_reimprimir"
                 ? await correrPedidoDespachoImprimir(config, pedido, contextos, "reimpresion")
                 : await correrPedido(config, pedido, contextos);
-            await avisarResultado(config.token, pedido.id, true, "OK");
+            await avisarResultado(config.token, pedido.id, true, pedido.avisoResultado || "OK");
             borrarArchivos(archivos);
             console.log(`  -> #${pedido.id} listo.`);
             break;

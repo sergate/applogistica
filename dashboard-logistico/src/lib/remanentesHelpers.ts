@@ -1,5 +1,6 @@
 import { getCached } from "@/lib/queryCache";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
+import { supabaseAdmin } from "@/lib/supabaseClient";
 
 // Ver el mismo comentario en resumenHelpers.ts (MAESTROS_TTL_MS).
 const REMANENTES_TTL_MS = 120_000;
@@ -44,6 +45,28 @@ export function parseNumeroRemanente(numero: string): { marca: string; temporada
   }
 
   return { marca, temporada, esRemanente };
+}
+
+// Mismo nombre aunque cambien mayúsculas o los espacios (el combo del WMS y
+// el texto que se pega a mano no siempre coinciden al carácter).
+export function normalizarNombreArchivo(nombre: string): string {
+  return nombre.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+// Nombres de archivo cargados a mano en Remanentes -> Carga Datos (ver
+// sql/remanentes_archivos_manuales.sql). Se cuentan como remanentes aunque su
+// nombre no lleve la palabra REMA, igual que pedidos_rema_manual en Status de
+// Preparación.
+export async function fetchArchivosRemanentesManuales(): Promise<string[]> {
+  return getCached("remanentes_manuales:all", REMANENTES_TTL_MS, async () => {
+    const { data, error } = await supabaseAdmin.from("remanentes_archivos_manuales").select("archivo");
+    if (error) throw new Error(`Supabase (remanentes_archivos_manuales): ${error.message}`);
+    return (data || []).map((r) => r.archivo as string);
+  });
+}
+
+export function esArchivoRemanente(numero: string, manualesNormalizados: Set<string>): boolean {
+  return parseNumeroRemanente(numero).esRemanente || manualesNormalizados.has(normalizarNombreArchivo(numero));
 }
 
 export async function fetchAllRemanentes(): Promise<RemanenteRow[]> {

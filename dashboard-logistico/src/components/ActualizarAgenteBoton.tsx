@@ -213,6 +213,9 @@ export default function ActualizarAgenteBoton({
       {pedido?.estado === "ok" && (
         <p className="text-xs text-emerald-600 font-medium mt-2">Actualizado correctamente.</p>
       )}
+      {pedido?.estado === "ok" && pedido.mensaje && pedido.mensaje !== "OK" && (
+        <p className="text-xs text-amber-600 mt-1">Aviso: {pedido.mensaje}</p>
+      )}
 
       {pedido?.estado === "error" && (
         <p className="text-xs text-red-600 mt-2">Error: {pedido.mensaje || "Falló la actualización."}</p>
