@@ -30,6 +30,10 @@ export async function DELETE(request: NextRequest) {
     const { error } = await supabaseAdmin.from("remanentes").delete().eq("numero", numero);
     if (error) throw new Error(`Supabase (remanentes): ${error.message}`);
 
+    // Si estaba oculto, la marca ya no tiene sentido (y si se reimporta con
+    // el mismo nombre no tiene que quedar oculto de arranque). Best-effort.
+    await supabaseAdmin.from("remanentes_archivos_ocultos").delete().eq("archivo", numero);
+
     invalidateCache("remanentes:all");
     return NextResponse.json({ success: true });
   } catch (err) {

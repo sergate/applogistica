@@ -50,6 +50,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "REM-Avance", label: "Avance Plan" },
       { key: "REM-Carga", label: "Carga Datos" },
       { key: "REM-EliminarArchivo", label: "Eliminar Archivo (en Resumen)" },
+      { key: "REM-OcultarArchivo", label: "Ocultar Archivo de la vista (en Resumen)" },
     ],
   },
   {

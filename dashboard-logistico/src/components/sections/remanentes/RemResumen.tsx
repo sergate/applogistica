@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonTable } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -49,14 +49,66 @@ export default function RemResumen() {
     }
   };
 
-  const marcasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.marca))).sort();
-  const temporadasDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.temporada))).sort();
-  const gruposDisponiblesREM = Array.from(new Set((remDetalleData?.filas ?? []).map((f) => f.grupo))).sort();
+  // Archivos sacados de la vista (siguen en la base, solo no se muestran).
+  const [archivosOcultos, setArchivosOcultos] = useState<string[]>([]);
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  const [cambiandoOcultoREM, setCambiandoOcultoREM] = useState<string | null>(null);
+  const puedeOcultarREM = tienePermiso("REM-OcultarArchivo");
+  const mostrarColumnaAccionREM = tienePermiso("REM-EliminarArchivo") || puedeOcultarREM;
+
+  useEffect(() => {
+    if (activeTab !== "REM-Resumen") return;
+    let cancelado = false;
+    fetch("/api/remanentes/archivos-ocultos")
+      .then((res) => res.json())
+      .then((data) => {
+        if (!cancelado && data.success) setArchivosOcultos(data.archivos);
+      })
+      .catch(() => {});
+    return () => {
+      cancelado = true;
+    };
+  }, [activeTab, dataVersion]);
+
+  const ocultosSet = useMemo(() => new Set(archivosOcultos), [archivosOcultos]);
+
+  const cambiarOcultoREM = async (archivo: string, ocultar: boolean) => {
+    setCambiandoOcultoREM(archivo);
+    setEliminarArchivoErrorREM(null);
+    try {
+      const res = await fetch("/api/remanentes/archivos-ocultos", {
+        method: ocultar ? "POST" : "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archivo }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "No se pudo actualizar la vista.");
+      setArchivosOcultos((prev) => (ocultar ? [...prev, archivo] : prev.filter((a) => a !== archivo)));
+      if (ocultar && filaExpandidaREM?.archivo === archivo) setFilaExpandidaREM(null);
+    } catch (err) {
+      setEliminarArchivoErrorREM(err instanceof Error ? err.message : "Error inesperado.");
+    } finally {
+      setCambiandoOcultoREM(null);
+    }
+  };
+
+  const filasBaseREM = useMemo(
+    () => (remDetalleData?.filas ?? []).filter((f) => mostrarOcultos || !ocultosSet.has(f.archivo)),
+    [remDetalleData, mostrarOcultos, ocultosSet]
+  );
+  const cantidadOcultosEnDatos = useMemo(
+    () => new Set((remDetalleData?.filas ?? []).filter((f) => ocultosSet.has(f.archivo)).map((f) => f.archivo)).size,
+    [remDetalleData, ocultosSet]
+  );
+
+  const marcasDisponiblesREM = Array.from(new Set(filasBaseREM.map((f) => f.marca))).sort();
+  const temporadasDisponiblesREM = Array.from(new Set(filasBaseREM.map((f) => f.temporada))).sort();
+  const gruposDisponiblesREM = Array.from(new Set(filasBaseREM.map((f) => f.grupo))).sort();
 
   // Filtrado + consolidación por (marca, archivo) + subtotal, todo junto en
   // un useMemo para no recalcularlo en cada render del componente.
   const { filasFiltradasREM, filasTablaREM, subtotalREMCalculado } = useMemo(() => {
-    const filasFiltradasREM = (remDetalleData?.filas ?? []).filter(
+    const filasFiltradasREM = filasBaseREM.filter(
       (f) =>
         (filtroMarcaREM === "TODAS" || f.marca === filtroMarcaREM) &&
         (filtroTemporadaREM === "TODAS" || f.temporada === filtroTemporadaREM) &&
@@ -111,8 +163,7 @@ export default function RemResumen() {
     };
 
     return { filasFiltradasREM, filasTablaREM, subtotalREMCalculado };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [remDetalleData, filtroMarcaREM, filtroTemporadaREM, filtroGrupoREM]);
+  }, [filasBaseREM, filtroMarcaREM, filtroTemporadaREM, filtroGrupoREM]);
 
   // Desglose por grupo de la fila (marca + archivo) expandida -- se calcula
   // sobre los mismos datos ya filtrados por temporada/grupo/marca.
@@ -204,6 +255,17 @@ export default function RemResumen() {
           >
             Limpiar filtros
           </button>
+
+          {puedeOcultarREM && cantidadOcultosEnDatos > 0 && (
+            <button
+              onClick={() => setMostrarOcultos((v) => !v)}
+              className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                mostrarOcultos ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              {mostrarOcultos ? "Volver a ocultarlos" : `Ver ocultos (${cantidadOcultosEnDatos})`}
+            </button>
+          )}
         </div>
 
         {remDetalleError && (
@@ -238,7 +300,7 @@ export default function RemResumen() {
                   <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotalREMCalculado.aRepartir)}</td>
                   <td className="py-3 px-4 text-left">{fmtNum(subtotalREMCalculado.stock)}</td>
                   <td className="py-3 px-4 text-left">{fmtPct(subtotalREMCalculado.completitud)}</td>
-                  {tienePermiso("REM-EliminarArchivo") && <td className="py-3 px-4 text-left"></td>}
+                  {mostrarColumnaAccionREM && <td className="py-3 px-4 text-left"></td>}
                 </tr>
               )}
               <tr className="text-slate-500 font-medium border-b border-slate-200">
@@ -249,7 +311,7 @@ export default function RemResumen() {
                 <th className="py-3 px-4 text-left">Unidades a Repartir</th>
                 <th className="py-3 px-4 text-left">Unidades en Stock</th>
                 <th className="py-3 px-4 text-left">% Completitud</th>
-                {tienePermiso("REM-EliminarArchivo") && <th className="py-3 px-4 text-left">Acción</th>}
+                {mostrarColumnaAccionREM && <th className="py-3 px-4 text-left">Acción</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -263,7 +325,7 @@ export default function RemResumen() {
                     onClick={() => handleFilaClickREM(row.marca, row.archivo)}
                     className={`cursor-pointer transition-colors ${
                       estaExpandida ? "bg-slate-100" : "hover:bg-slate-50"
-                    }`}
+                    } ${ocultosSet.has(row.archivo) ? "opacity-50" : ""}`}
                   >
                     <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
                     <td className="py-3 px-4 text-left text-slate-600">{row.archivo}</td>
@@ -272,22 +334,35 @@ export default function RemResumen() {
                     <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
                     <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.stock)}</td>
                     <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
-                    {tienePermiso("REM-EliminarArchivo") && (
+                    {mostrarColumnaAccionREM && (
                       <td className="py-3 px-4 text-left" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => eliminarArchivoREM(row.archivo)}
-                          disabled={eliminandoArchivoREM === row.archivo}
-                          className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
-                        >
-                          {eliminandoArchivoREM === row.archivo ? "Borrando..." : "Borrar archivo"}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {puedeOcultarREM && (
+                            <button
+                              onClick={() => cambiarOcultoREM(row.archivo, !ocultosSet.has(row.archivo))}
+                              disabled={cambiandoOcultoREM === row.archivo}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                            >
+                              {cambiandoOcultoREM === row.archivo ? "..." : ocultosSet.has(row.archivo) ? "Mostrar" : "Ocultar"}
+                            </button>
+                          )}
+                          {tienePermiso("REM-EliminarArchivo") && (
+                            <button
+                              onClick={() => eliminarArchivoREM(row.archivo)}
+                              disabled={eliminandoArchivoREM === row.archivo}
+                              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-700 hover:bg-red-100 transition-colors disabled:opacity-50"
+                            >
+                              {eliminandoArchivoREM === row.archivo ? "Borrando..." : "Borrar archivo"}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     )}
                   </tr>
 
                   {estaExpandida && (
                       <tr>
-                        <td colSpan={tienePermiso("REM-EliminarArchivo") ? 8 : 7} className="bg-slate-50 px-4 py-4">
+                        <td colSpan={mostrarColumnaAccionREM ? 8 : 7} className="bg-slate-50 px-4 py-4">
                           <p className="text-xs font-semibold text-slate-500 mb-2">
                             Desglose por grupo — {row.marca} / {row.archivo}
                           </p>
