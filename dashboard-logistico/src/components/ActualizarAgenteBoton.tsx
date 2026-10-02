@@ -15,7 +15,8 @@ type Seccion =
   | "productividad"
   | "despacho_importar"
   | "despacho_imprimir"
-  | "despacho_reimprimir";
+  | "despacho_reimprimir"
+  | "contenedores_wms";
 
 interface PedidoEstado {
   id: number;

@@ -8,6 +8,7 @@ import { fmtNum, fmtFecha } from "@/components/dashboard/formatters";
 
 interface PDPropiosFila {
   numero: string;
+  marca: string;
   codigoCliente: string;
   cliente: string;
   canal: string;
@@ -33,6 +34,7 @@ export default function PDPropios() {
 
   const [filtroCanalPDP, setFiltroCanalPDP] = useState("TODAS");
   const [filtroTipoPDP, setFiltroTipoPDP] = useState("TODAS");
+  const [filtroMarcaPDP, setFiltroMarcaPDP] = useState("TODAS");
   // Selección múltiple: array vacío = sin filtrar (todas las curvas).
   const [filtroCurvaPDP, setFiltroCurvaPDP] = useState<string[]>([]);
   const [curvaDropdownAbiertoPDP, setCurvaDropdownAbiertoPDP] = useState(false);
@@ -44,6 +46,7 @@ export default function PDPropios() {
   const canalesDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.canal))).sort();
   const tiposDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.curva))).sort();
+  const marcasDisponiblesPDP = Array.from(new Set((pdPropiosData?.filas ?? []).map((f) => f.marca))).sort();
   const gruposDisponiblesPDP = Array.from(
     new Set((pdPropiosData?.filas ?? []).flatMap((f) => (f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"])))
   ).sort();
@@ -68,6 +71,7 @@ export default function PDPropios() {
       (f) =>
         (filtroCanalPDP === "TODAS" || f.canal === filtroCanalPDP) &&
         (filtroTipoPDP === "TODAS" || f.tipo === filtroTipoPDP) &&
+        (filtroMarcaPDP === "TODAS" || f.marca === filtroMarcaPDP) &&
         (filtroCurvaPDP.length === 0 || filtroCurvaPDP.includes(f.curva)) &&
         (filtroGrupoPDP === "TODOS" || (f.grupos.length > 0 ? f.grupos : ["SIN GRUPO"]).includes(filtroGrupoPDP)) &&
         (!filtroClientePDP.trim() || f.cliente.toLowerCase().includes(filtroClientePDP.trim().toLowerCase()))
@@ -104,7 +108,7 @@ export default function PDPropios() {
 
     return { filasFiltradasPDP, filasTablaPDP, subtotalPDP };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdPropiosData, filtroCanalPDP, filtroTipoPDP, filtroCurvaPDP, filtroGrupoPDP, filtroClientePDP]);
+  }, [pdPropiosData, filtroCanalPDP, filtroTipoPDP, filtroMarcaPDP, filtroCurvaPDP, filtroGrupoPDP, filtroClientePDP]);
 
   const detalleClienteExpandidoPDP = useMemo(
     () => (clienteExpandidoPDP ? filasFiltradasPDP.filter((f) => f.codigoCliente === clienteExpandidoPDP) : []),
@@ -126,6 +130,7 @@ export default function PDPropios() {
     }));
     const filasDetalle = filasFiltradasPDP.map((f) => ({
       Número: f.numero,
+      Marca: f.marca,
       Canal: f.canal,
       Cliente: f.cliente,
       Grupo: f.grupos.join(", "),
@@ -180,6 +185,17 @@ export default function PDPropios() {
           <option value="TODAS">Todos los tipos</option>
           {tiposDisponiblesPDP.map((t) => (
             <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+
+        <select
+          value={filtroMarcaPDP}
+          onChange={(e) => setFiltroMarcaPDP(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        >
+          <option value="TODAS">Todas las marcas</option>
+          {marcasDisponiblesPDP.map((m) => (
+            <option key={m} value={m}>{m}</option>
           ))}
         </select>
 
@@ -244,6 +260,7 @@ export default function PDPropios() {
           onClick={() => {
             setFiltroCanalPDP("TODAS");
             setFiltroTipoPDP("TODAS");
+            setFiltroMarcaPDP("TODAS");
             setFiltroCurvaPDP([]);
             setFiltroGrupoPDP("TODOS");
             setFiltroClientePDP("");
@@ -324,6 +341,7 @@ export default function PDPropios() {
                         <thead className="text-slate-500 font-medium border-b border-slate-200">
                           <tr>
                             <th className="py-2 px-3 text-left">Número</th>
+                            <th className="py-2 px-3 text-left">Marca</th>
                             <th className="py-2 px-3 text-left">Tipo</th>
                             <th className="py-2 px-3 text-left">Curva</th>
                             <th className="py-2 px-3 text-left">Canal</th>
@@ -335,6 +353,7 @@ export default function PDPropios() {
                           {detalleClienteExpandidoPDP.map((d) => (
                             <tr key={d.numero}>
                               <td className="py-2 px-3 text-left font-medium text-slate-700">{d.numero}</td>
+                              <td className="py-2 px-3 text-left text-slate-600">{d.marca}</td>
                               <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
                               <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
                               <td className="py-2 px-3 text-left text-slate-600">{d.canal}</td>

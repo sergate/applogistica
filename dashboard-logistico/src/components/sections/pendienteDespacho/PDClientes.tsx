@@ -8,6 +8,7 @@ import { fmtNum, fmtFecha } from "@/components/dashboard/formatters";
 
 interface PDClienteFila {
   numero: string;
+  marca: string;
   codigoCliente: string;
   cliente: string;
   canal: string;
@@ -34,12 +35,14 @@ export default function PDClientes() {
   const [filtroCanalPD, setFiltroCanalPD] = useState("TODAS");
   const [filtroTipoPD, setFiltroTipoPD] = useState("TODAS");
   const [filtroCurvaPD, setFiltroCurvaPD] = useState("TODAS");
+  const [filtroMarcaPD, setFiltroMarcaPD] = useState("TODAS");
   const [filtroClientePD, setFiltroClientePD] = useState("");
   const [clienteExpandidoPD, setClienteExpandidoPD] = useState<string | null>(null);
 
   const canalesDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.canal))).sort();
   const tiposDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.curva))).sort();
+  const marcasDisponiblesPD = Array.from(new Set((pdClientesData?.filas ?? []).map((f) => f.marca))).sort();
 
   const { filasFiltradasPD, filasTablaPD, subtotalPD } = useMemo(() => {
     const filasFiltradasPD = (pdClientesData?.filas ?? []).filter(
@@ -47,6 +50,7 @@ export default function PDClientes() {
         (filtroCanalPD === "TODAS" || f.canal === filtroCanalPD) &&
         (filtroTipoPD === "TODAS" || f.tipo === filtroTipoPD) &&
         (filtroCurvaPD === "TODAS" || f.curva === filtroCurvaPD) &&
+        (filtroMarcaPD === "TODAS" || f.marca === filtroMarcaPD) &&
         (!filtroClientePD.trim() || f.cliente.toLowerCase().includes(filtroClientePD.trim().toLowerCase()))
     );
 
@@ -82,7 +86,7 @@ export default function PDClientes() {
 
     return { filasFiltradasPD, filasTablaPD, subtotalPD };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pdClientesData, filtroCanalPD, filtroTipoPD, filtroCurvaPD, filtroClientePD]);
+  }, [pdClientesData, filtroCanalPD, filtroTipoPD, filtroCurvaPD, filtroMarcaPD, filtroClientePD]);
 
   const detalleClienteExpandidoPD = useMemo(
     () => (clienteExpandidoPD ? filasFiltradasPD.filter((f) => f.codigoCliente === clienteExpandidoPD) : []),
@@ -105,6 +109,7 @@ export default function PDClientes() {
     }));
     const filasDetalle = filasFiltradasPD.map((f) => ({
       Número: f.numero,
+      Marca: f.marca,
       Canal: f.canal,
       Cliente: f.cliente,
       Tipo: f.tipo,
@@ -174,6 +179,17 @@ export default function PDClientes() {
           ))}
         </select>
 
+        <select
+          value={filtroMarcaPD}
+          onChange={(e) => setFiltroMarcaPD(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        >
+          <option value="TODAS">Todas las marcas</option>
+          {marcasDisponiblesPD.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+
         <input
           type="text"
           value={filtroClientePD}
@@ -187,6 +203,7 @@ export default function PDClientes() {
             setFiltroCanalPD("TODAS");
             setFiltroTipoPD("TODAS");
             setFiltroCurvaPD("TODAS");
+            setFiltroMarcaPD("TODAS");
             setFiltroClientePD("");
           }}
           className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -263,6 +280,7 @@ export default function PDClientes() {
                         <thead className="text-slate-500 font-medium border-b border-slate-200">
                           <tr>
                             <th className="py-2 px-3 text-left">Número</th>
+                            <th className="py-2 px-3 text-left">Marca</th>
                             <th className="py-2 px-3 text-left">Tipo</th>
                             <th className="py-2 px-3 text-left">Curva</th>
                             <th className="py-2 px-3 text-left">Temporada</th>
@@ -275,6 +293,7 @@ export default function PDClientes() {
                           {detalleClienteExpandidoPD.map((d) => (
                             <tr key={d.numero}>
                               <td className="py-2 px-3 text-left font-medium text-slate-700">{d.numero}</td>
+                              <td className="py-2 px-3 text-left text-slate-600">{d.marca}</td>
                               <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
                               <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
                               <td className="py-2 px-3 text-left text-slate-600">{d.temporada}</td>

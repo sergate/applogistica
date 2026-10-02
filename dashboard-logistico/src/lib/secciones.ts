@@ -68,6 +68,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "PD-Importar", label: "Importar Datos" },
       { key: "PD-Clientes-ActualizarWMS", label: "Actualizar Clientes desde WMS (en Importar Datos)" },
       { key: "PD-Propios-ActualizarWMS", label: "Actualizar Propios desde WMS (en Importar Datos)" },
+      { key: "PD-Contenedores-ActualizarWMS", label: "Actualizar contenedores (marcas) desde WMS (en Importar Datos)" },
       { key: "PD-Clientes", label: "Clientes" },
       { key: "PD-Propios", label: "Propios" },
       { key: "PD-Urgencias", label: "Seguimiento Urgencias" },

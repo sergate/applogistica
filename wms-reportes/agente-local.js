@@ -307,6 +307,7 @@ const NOMBRE_REPORTE = {
   bandeja_comercial: "Bandeja comercial",
   pre_despacho: "Pre despacho",
   ocupacion_almacen: "Existencia por ubicación (archivo grande, puede tardar varios minutos)",
+  contenedores_ci: "Contenedores CI",
 };
 
 // Nombres de archivo de remanentes cargados a mano en el Tablero (Status
@@ -320,6 +321,80 @@ async function traerArchivosRemaManuales(token) {
     throw new Error(data?.error || `HTTP ${res.status}`);
   }
   return Array.isArray(data.archivos) ? data.archivos : [];
+}
+
+// Baja el reporte de Contenedores (Tipo = CI) del WMS y sube contenedor ->
+// marca al Tablero (POST directo con el token del agente, sin pasar por la UI
+// del Tablero). Devuelve la ruta del CSV (para borrarlo después) y cuántos
+// contenedores se subieron.
+const LOTE_CONTENEDORES = 2000;
+async function descargarYSubirContenedores(config, paginaWms) {
+  const [archivo] = await descargador.descargarUnReporte(paginaWms, "contenedores_ci");
+  const filas = descargador.parsearContenedoresCsv(archivo);
+  if (filas.length === 0) throw new Error("El reporte de Contenedores del WMS vino vacío.");
+
+  for (let i = 0; i < filas.length; i += LOTE_CONTENEDORES) {
+    const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/contenedores/importar`, {
+      method: "POST",
+      headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ filas: filas.slice(i, i + LOTE_CONTENEDORES) }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Error subiendo contenedores al Tablero (HTTP ${res.status}).`);
+    }
+  }
+  return { archivo, cantidad: filas.length };
+}
+
+// Pedido manual "Actualizar contenedores desde WMS" (botón en Pendiente de
+// Despacho -> Importar Datos).
+async function correrPedidoContenedores(config, pedido, paginas) {
+  const { paginaWms } = paginas;
+  await avisarProgreso(config.token, pedido.id, 10, "Descargando: Contenedores CI del WMS...");
+  const { archivo, cantidad } = await descargarYSubirContenedores(config, paginaWms);
+  console.log(`  -> ${cantidad} contenedores subidos al Tablero.`);
+  return [archivo];
+}
+
+// Cuánto esperar como mínimo entre dos descargas del reporte de Contenedores
+// cuando el motivo es "faltan marcas": si faltan contenedores que el WMS no
+// trae como CI, igual no se vuelve a bajar en cada import.
+const MINUTOS_ENTRE_ACTUALIZACIONES_CONTENEDORES = 60;
+
+// Después de importar Pendiente de Despacho (Clientes o Propios): si en esas
+// tablas hay contenedores CI sin marca en el Tablero, baja el reporte de
+// Contenedores y completa el mapeo. Si no falta ninguno, no descarga nada.
+// Nunca hace fallar el import: ante un error devuelve un aviso.
+async function completarMarcasSiFaltan(config, pedido, paginaWms) {
+  try {
+    const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/contenedores/faltantes`, {
+      headers: headersAgente(config.token),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) throw new Error(data?.error || `HTTP ${res.status}`);
+
+    if (data.faltantes === 0) return { archivos: [], aviso: null };
+
+    const minutos = data.ultimaActualizacion
+      ? (Date.now() - new Date(data.ultimaActualizacion).getTime()) / 60_000
+      : Infinity;
+    if (minutos < MINUTOS_ENTRE_ACTUALIZACIONES_CONTENEDORES) {
+      console.log(
+        `  (${data.faltantes} contenedores sin marca, pero el mapeo se actualizó hace ${Math.round(minutos)} min -- no vuelvo a bajarlo.)`
+      );
+      return { archivos: [], aviso: null };
+    }
+
+    await avisarProgreso(config.token, pedido.id, 90, `Actualizando marcas: ${data.faltantes} contenedores nuevos...`);
+    const { archivo, cantidad } = await descargarYSubirContenedores(config, paginaWms);
+    console.log(`  -> ${data.faltantes} contenedores sin marca: mapeo actualizado (${cantidad} contenedores).`);
+    return { archivos: [archivo], aviso: null };
+  } catch (err) {
+    const motivo = err instanceof Error ? err.message : String(err);
+    console.error(`  (no pude actualizar las marcas de los contenedores: ${motivo})`);
+    return { archivos: [], aviso: `No pude actualizar las marcas de los contenedores (${motivo}).` };
+  }
 }
 
 // Baja los reportes que necesita la sección y los sube al Tablero, avisando
@@ -369,7 +444,20 @@ async function correrPedido(config, pedido, paginas) {
   await avisarProgreso(config.token, pedido.id, Math.round((pasosHechos / totalPasos) * 100), "Subiendo al Tablero...");
   await subidor.subirUnaSeccion(paginaTablero, seccion, manifiesto);
 
-  return Object.values(manifiesto).flat();
+  const archivos = Object.values(manifiesto).flat();
+
+  // Pendiente de Despacho: completa la marca de los contenedores nuevos (solo
+  // baja el reporte de Contenedores si hace falta).
+  if (seccion === "pd_clientes" || seccion === "pd_propios") {
+    const marcas = await completarMarcasSiFaltan(config, pedido, paginaWms);
+    archivos.push(...marcas.archivos);
+    if (marcas.aviso) {
+      avisos.push(marcas.aviso);
+      pedido.avisoResultado = avisos.join(" ");
+    }
+  }
+
+  return archivos;
 }
 
 // Trae las guías de despacho de HOY directo del WMS (JSON, sin descargar
@@ -754,6 +842,8 @@ async function atenderPedido(config, pedido) {
                 ? await correrPedidoDespachoImprimir(config, pedido, contextos, "impresion")
                 : pedido.seccion === "despacho_reimprimir"
                 ? await correrPedidoDespachoImprimir(config, pedido, contextos, "reimpresion")
+                : pedido.seccion === "contenedores_wms"
+                ? await correrPedidoContenedores(config, pedido, contextos)
                 : await correrPedido(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, pedido.avisoResultado || "OK");
             borrarArchivos(archivos);

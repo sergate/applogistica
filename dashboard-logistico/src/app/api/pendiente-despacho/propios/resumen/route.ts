@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllPendienteDespachoPropios, parseCodigoCliente } from "@/lib/pendienteDespachoHelpers";
+import {
+  fetchAllPendienteDespachoPropios,
+  fetchMarcasContenedores,
+  marcaDeContenedor,
+  parseCodigoCliente,
+} from "@/lib/pendienteDespachoHelpers";
 import { fetchClientesInfo } from "@/lib/resumenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
@@ -25,7 +30,11 @@ export async function GET() {
   }
 
   try {
-    const [rows, clientesInfo] = await Promise.all([fetchAllPendienteDespachoPropios(), fetchClientesInfo()]);
+    const [rows, clientesInfo, marcas] = await Promise.all([
+      fetchAllPendienteDespachoPropios(),
+      fetchClientesInfo(),
+      fetchMarcasContenedores(),
+    ]);
 
     // Si "Remito" tiene algún dato, no se considera.
     const pendientes = rows.filter((r) => vacio(r.remito));
@@ -40,6 +49,7 @@ export async function GET() {
 
       return {
         numero: r.numero,
+        marca: marcaDeContenedor(marcas, r.numero),
         codigoCliente: codigo || "SIN CODIGO",
         cliente: info?.nombre || (r.cliente || "SIN CLIENTE").trim(),
         canal: info?.canal || "SIN CANAL",

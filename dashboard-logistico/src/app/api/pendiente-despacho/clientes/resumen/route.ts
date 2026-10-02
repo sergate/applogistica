@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { supabaseEnvOk } from "@/lib/supabaseClient";
-import { fetchAllPendienteDespacho, parseCodigoCliente } from "@/lib/pendienteDespachoHelpers";
+import {
+  fetchAllPendienteDespacho,
+  fetchMarcasContenedores,
+  marcaDeContenedor,
+  parseCodigoCliente,
+} from "@/lib/pendienteDespachoHelpers";
 import { fetchClientesInfo } from "@/lib/resumenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
@@ -25,9 +30,10 @@ export async function GET() {
   }
 
   try {
-    const [rows, clientesInfo] = await Promise.all([
+    const [rows, clientesInfo, marcas] = await Promise.all([
       fetchAllPendienteDespacho("pendiente_despacho_clientes"),
       fetchClientesInfo(),
+      fetchMarcasContenedores(),
     ]);
 
     // Filtro 1: si "Pedido gaci." está vacío, no se considera.
@@ -44,6 +50,7 @@ export async function GET() {
 
       return {
         numero: r.numero,
+        marca: marcaDeContenedor(marcas, r.numero),
         codigoCliente: codigo || "SIN CODIGO",
         cliente: info?.nombre || (r.cliente || "SIN CLIENTE").trim(),
         canal: info?.canal || "SIN CANAL",

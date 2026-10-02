@@ -37,6 +37,42 @@ export async function fetchAllPendienteDespacho(table: string): Promise<Pendient
   );
 }
 
+const SIN_MARCA = "SIN MARCA";
+
+/** Número de contenedor limpio: sin tags HTML residuales, sin espacios y en mayúsculas. */
+export function normalizarNumeroContenedor(v: string | null | undefined): string {
+  return String(v ?? "").replace(/<[^>]*>/g, "").trim().toUpperCase();
+}
+
+/** Los contenedores de Carga Inicial se numeran "CI" + dígitos (ej. CI12683). */
+export function esContenedorCI(numero: string): boolean {
+  return /^CI\d+$/.test(numero);
+}
+
+/**
+ * Marca de cada contenedor (tabla wms_contenedores, que carga el Agente Local
+ * desde WMS -> Contenedores, Tipo = CI). Devuelve numero normalizado -> marca.
+ */
+export async function fetchMarcasContenedores(): Promise<Map<string, string>> {
+  return getCached("pendiente_despacho:wms_contenedores", PENDIENTE_DESPACHO_TTL_MS, async () => {
+    const filas = await fetchAllPaginated<{ contenedor: string; marca: string | null }>(
+      "wms_contenedores",
+      "contenedor, marca"
+    );
+    const mapa = new Map<string, string>();
+    for (const f of filas) {
+      const marca = (f.marca || "").trim();
+      if (marca) mapa.set(normalizarNumeroContenedor(f.contenedor), marca);
+    }
+    return mapa;
+  });
+}
+
+/** Marca de un contenedor para mostrar en pantalla ("SIN MARCA" si no está en el mapeo). */
+export function marcaDeContenedor(marcas: Map<string, string>, numero: string | null | undefined): string {
+  return marcas.get(normalizarNumeroContenedor(numero)) || SIN_MARCA;
+}
+
 /**
  * El campo "Cliente" trae el código y el nombre juntos, ej:
  * "250150 - MUNIZ HENRIQUEZ CINTYAN (CHK V. REGINA)" -> código = "250150", o

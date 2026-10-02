@@ -17,6 +17,7 @@ export const SECCIONES_VALIDAS = [
   "despacho_imprimir",
   "despacho_reimprimir",
   "exp_etiquetas",
+  "contenedores_wms",
 ] as const;
 export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 
@@ -75,6 +76,7 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
   despacho_imprimir: "DESP-Imprimir",
   despacho_reimprimir: "DESP-Reimprimir",
   exp_etiquetas: "EXP-Etiquetas",
+  contenedores_wms: "PD-Contenedores-ActualizarWMS",
 };
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */

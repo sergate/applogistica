@@ -226,7 +226,16 @@ export default function PDImportar() {
         {tienePermiso("PD-Clientes-ActualizarWMS") && (
           <>
             <AgenteTokenPanel />
-            <ActualizarAgenteBoton seccion="pd_clientes" onExito={() => setDataVersion((v) => v + 1)} />
+            <div className="flex flex-wrap items-start gap-x-3">
+              <ActualizarAgenteBoton seccion="pd_clientes" onExito={() => setDataVersion((v) => v + 1)} />
+              {tienePermiso("PD-Contenedores-ActualizarWMS") && (
+                <ActualizarAgenteBoton
+                  seccion="contenedores_wms"
+                  label="Actualizar contenedores desde WMS"
+                  onExito={() => setDataVersion((v) => v + 1)}
+                />
+              )}
+            </div>
           </>
         )}
 
@@ -308,7 +317,16 @@ export default function PDImportar() {
         {tienePermiso("PD-Propios-ActualizarWMS") && (
           <>
             <AgenteTokenPanel />
-            <ActualizarAgenteBoton seccion="pd_propios" onExito={() => setDataVersion((v) => v + 1)} />
+            <div className="flex flex-wrap items-start gap-x-3">
+              <ActualizarAgenteBoton seccion="pd_propios" onExito={() => setDataVersion((v) => v + 1)} />
+              {tienePermiso("PD-Contenedores-ActualizarWMS") && (
+                <ActualizarAgenteBoton
+                  seccion="contenedores_wms"
+                  label="Actualizar contenedores desde WMS"
+                  onExito={() => setDataVersion((v) => v + 1)}
+                />
+              )}
+            </div>
           </>
         )}
 

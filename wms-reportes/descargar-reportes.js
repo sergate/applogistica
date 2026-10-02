@@ -385,6 +385,69 @@ async function reporteOcupacionAlmacen(page) {
   return destino;
 }
 
+// --- Reporte "Contenedores" (Tipo = CI) -> marca de cada contenedor ---
+// Alimenta la columna Marca de Pendiente de Despacho (Clientes y Propios):
+// menú lateral "Contenedores", campo Tipo = CI, Buscar y "CSV Completo".
+// Son ~8.000 contenedores (~2 MB, menos de 1 minuto).
+async function reporteContenedoresCI(page) {
+  console.log("> contenedores_ci (Contenedores, Tipo = CI)");
+  await clickMenuItem(page, "Contenedores");
+  await page.waitForTimeout(1500);
+
+  // El combo de Tipo se completa tipeando el valor y Enter, igual que en
+  // reporteListadoPedidosEcom -- y se verifica que haya quedado en "CI", si no
+  // el CSV traería contenedores de todos los tipos.
+  const tipoCombo = page.locator('input[placeholder="Tipo"]:visible').first();
+  await tipoCombo.click();
+  await tipoCombo.fill("CI");
+  await page.waitForTimeout(500);
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  if ((await tipoCombo.inputValue()).trim() !== "CI") {
+    throw new Error('No pude seleccionar Tipo = "CI" en la pantalla Contenedores del WMS.');
+  }
+
+  await clickBotonExt(page, "Buscar");
+  await esperarGridCargado(page);
+
+  const [download] = await Promise.all([
+    page.waitForEvent("download", { timeout: 180000 }),
+    clickBotonExt(page, "CSV Completo"),
+  ]);
+  const destino = path.join(DESCARGAS_DIR, `contenedores_ci_${timestamp()}.csv`);
+  await download.saveAs(destino);
+  console.log(`  -> descargado: ${destino}`);
+  return destino;
+}
+
+// Lee el CSV de contenedores (separador ";", encabezado en la primera línea)
+// y devuelve [{ contenedor, marca, temporada }]. La marca a veces trae un
+// sufijo después de "|" (ej. "CHEEKY | ORDEN 2233") -- se queda con lo anterior.
+function parsearContenedoresCsv(ruta) {
+  const texto = fs.readFileSync(ruta, "utf8").replace(/^﻿/, "");
+  const lineas = texto.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lineas.length < 2) return [];
+
+  const encabezado = lineas[0].split(";").map((h) => h.trim().toLowerCase());
+  const iNumero = encabezado.indexOf("numero");
+  const iMarca = encabezado.indexOf("marca");
+  const iTemporada = encabezado.indexOf("temporada");
+  if (iNumero === -1 || iMarca === -1) {
+    throw new Error('El CSV de contenedores no tiene las columnas "Numero" y "Marca".');
+  }
+
+  const filas = [];
+  for (const linea of lineas.slice(1)) {
+    const c = linea.split(";");
+    const contenedor = (c[iNumero] || "").trim();
+    if (!contenedor) continue;
+    const marca = (c[iMarca] || "").split("|")[0].trim().toUpperCase();
+    const temporada = iTemporada === -1 ? "" : (c[iTemporada] || "").trim();
+    filas.push({ contenedor, marca: marca || null, temporada: temporada || null });
+  }
+  return filas;
+}
+
 const REPORTES = {
   grupo: (page) =>
     reportePedidosResumen(page, {
@@ -407,6 +470,7 @@ const REPORTES = {
   pre_despacho: reportePreDespacho,
   ocupacion_almacen: reporteOcupacionAlmacen,
   productividad: reporteProductividad,
+  contenedores_ci: reporteContenedoresCI,
 };
 
 // Corre UN reporte por su id (navega, chequea sesión, ejecuta, devuelve el
@@ -598,6 +662,7 @@ module.exports = {
   REPORTES,
   descargarUnReporte,
   chequearSesion,
+  parsearContenedoresCsv,
   esCierreInesperado,
   setArchivosRemaManuales,
   getRemaManualesNoEncontrados,
