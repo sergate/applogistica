@@ -52,13 +52,15 @@ function parseNumero(numero: string): { marca: string; temporada: string } {
 const normalizarArticulo = (v: string): string => v.trim().toUpperCase();
 
 // Un artículo master puede venir como el SKU completo o como el prefijo de un
-// SKU con variantes (ej. "MST-48213" para "MST-48213-NEG-M"): se prueba el SKU
-// entero y cada prefijo cortado en un separador (-, _, espacio, punto, /).
+// SKU con variantes. Los SKU de Carga Inicial tienen la forma BASE%COLORTALLE
+// (ej. "V2704701%15S"): el artículo "V2704701" matchea todas sus variantes. Se
+// prueba el SKU entero y cada prefijo cortado en un separador (%, -, _,
+// espacio, punto, /).
 function prefijosDeSku(sku: string): string[] {
   const s = normalizarArticulo(sku);
   const prefijos = [s];
   for (let i = 1; i < s.length; i++) {
-    if (/[-_ ./]/.test(s[i])) prefijos.push(s.slice(0, i));
+    if (/[%\-_ ./]/.test(s[i])) prefijos.push(s.slice(0, i));
   }
   return prefijos;
 }
@@ -98,6 +100,10 @@ export async function GET() {
       articulosPorColeccion.set(m.observacion, (articulosPorColeccion.get(m.observacion) ?? 0) + 1);
     }
 
+    // Códigos que ya traen el "%" (ej. "V2704701%15", artículo + color): el
+    // talle va pegado sin separador, así que se matchean por prefijo simple.
+    const codigosConPorcentaje = Array.from(coleccionesPorArticulo.keys()).filter((k) => k.includes("%"));
+
     const grupos = new Map<
       string,
       {
@@ -121,6 +127,12 @@ export async function GET() {
       const colecciones = new Set<string>();
       for (const prefijo of prefijosDeSku(r.sku)) {
         for (const c of coleccionesPorArticulo.get(prefijo) ?? []) colecciones.add(c);
+      }
+      const skuNormalizado = normalizarArticulo(r.sku);
+      for (const codigo of codigosConPorcentaje) {
+        if (skuNormalizado.startsWith(codigo)) {
+          for (const c of coleccionesPorArticulo.get(codigo) ?? []) colecciones.add(c);
+        }
       }
       if (colecciones.size === 0) continue;
 
