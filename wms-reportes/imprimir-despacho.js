@@ -236,7 +236,25 @@ async function irADespacho(page) {
 // (no solo una vez al principio) porque el WMS parece refrescar la grilla
 // después de imprimir la guía y perder la selección: el botón "Imprimir
 // remito" quedaba sin efecto (nunca aparecía su modal) si no se reseleccionaba.
+// La pantalla Despacho del WMS arranca con "Fecha desde" = hoy (y "Fecha
+// hasta" vacío), así que una guía de ayer o de días anteriores daba "No se
+// encontró ninguna guía" aunque estuviera en el menú. Se amplía hacia atrás
+// antes de cada búsqueda -- por número de guía el resultado sigue siendo uno
+// solo, el rango no trae más filas.
+const DIAS_ATRAS_BUSQUEDA_GUIA = 60;
+
+async function ampliarFechaDesde(page) {
+  const d = new Date(Date.now() - DIAS_ATRAS_BUSQUEDA_GUIA * 86400000);
+  const desde = `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const campoDesde = page.locator('input[placeholder="Fecha desde"]:visible').first();
+  await campoDesde.click();
+  await page.keyboard.press("Control+A");
+  await page.keyboard.type(desde);
+}
+
 async function buscarYSeleccionarFila(page, numeroGuia) {
+  await ampliarFechaDesde(page);
+
   const campoGuia = page.locator('input[placeholder="Guia"]:visible').first();
   await campoGuia.click();
   await page.keyboard.press("Control+A");
