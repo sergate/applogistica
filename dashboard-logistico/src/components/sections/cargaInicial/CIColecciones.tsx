@@ -24,6 +24,25 @@ interface ColeccionesData {
   updatedAt: string | null;
 }
 
+interface FilaTabla {
+  coleccion: string;
+  marca: string;
+  curva: string;
+  pedidas: number;
+  distribuidas: number;
+  aRepartir: number;
+  stock: number;
+  completitud: number;
+}
+
+interface TarjetaColeccion {
+  coleccion: string;
+  filas: FilaTabla[];
+  marcas: string[];
+  curvas: string[];
+  total: { pedidas: number; distribuidas: number; aRepartir: number; stock: number; completitud: number };
+}
+
 // Mismo orden fijo de curvas que Resumen.
 const ORDEN_CURVAS = ["ADELANTO", "1RA ETAPA", "SEGUNDA ETAPA"];
 const rankCurva = (curva: string) => {
@@ -31,7 +50,23 @@ const rankCurva = (curva: string) => {
   return idx === -1 ? 100 : idx;
 };
 
-const COLUMNAS = 8;
+const COLUMNAS = 7;
+
+// Mismos anchos en todas las tarjetas para que las columnas queden alineadas
+// de una colección a la siguiente.
+function ColGroup() {
+  return (
+    <colgroup>
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "19%" }} />
+      <col style={{ width: "14%" }} />
+      <col style={{ width: "15%" }} />
+      <col style={{ width: "14%" }} />
+      <col style={{ width: "12%" }} />
+      <col style={{ width: "11%" }} />
+    </colgroup>
+  );
+}
 
 export default function CIColecciones() {
   const { activeTab, dataVersion } = useDashboard();
@@ -55,8 +90,8 @@ export default function CIColecciones() {
   const temporadasDisponibles = Array.from(new Set(todas.map((f) => f.temporada))).sort();
   const gruposDisponibles = Array.from(new Set(todas.map((f) => f.grupo))).sort();
 
-  // Filtrado + consolidación por (colección, marca, curva) + subtotal.
-  const { filasFiltradas, filasTabla, subtotal } = useMemo(() => {
+  // Filtrado + consolidación por (colección, marca, curva) + una tarjeta por colección.
+  const { filasFiltradas, tarjetas, subtotal } = useMemo(() => {
     const filasFiltradas = (data?.filas ?? []).filter(
       (f) =>
         (filtroColeccion === "TODAS" || f.coleccion === filtroColeccion) &&
@@ -91,7 +126,7 @@ export default function CIColecciones() {
       totalPorColeccionMarca.set(km, (totalPorColeccionMarca.get(km) || 0) + acc.pedidas);
     }
 
-    const filasTabla = Array.from(consolidado.values())
+    const filasTabla: FilaTabla[] = Array.from(consolidado.values())
       .map((acc) => ({ ...acc, completitud: acc.pedidas > 0 ? (acc.distribuidas / acc.pedidas) * 100 : 0 }))
       .sort((a, b) => {
         if (a.coleccion !== b.coleccion) {
@@ -102,6 +137,33 @@ export default function CIColecciones() {
         }
         return rankCurva(a.curva) - rankCurva(b.curva);
       });
+
+    // Una tarjeta por colección, con sus marcas y curvas y su total.
+    const porColeccion = new Map<string, TarjetaColeccion>();
+    for (const fila of filasTabla) {
+      if (!porColeccion.has(fila.coleccion)) {
+        porColeccion.set(fila.coleccion, {
+          coleccion: fila.coleccion,
+          filas: [],
+          marcas: [],
+          curvas: [],
+          total: { pedidas: 0, distribuidas: 0, aRepartir: 0, stock: 0, completitud: 0 },
+        });
+      }
+      const t = porColeccion.get(fila.coleccion)!;
+      t.filas.push(fila);
+      if (!t.marcas.includes(fila.marca)) t.marcas.push(fila.marca);
+      if (!t.curvas.includes(fila.curva)) t.curvas.push(fila.curva);
+      t.total.pedidas += fila.pedidas;
+      t.total.distribuidas += fila.distribuidas;
+      t.total.aRepartir += fila.aRepartir;
+      t.total.stock += fila.stock;
+    }
+    const tarjetas = Array.from(porColeccion.values()).map((t) => ({
+      ...t,
+      curvas: [...t.curvas].sort((a, b) => rankCurva(a) - rankCurva(b) || a.localeCompare(b)),
+      total: { ...t.total, completitud: t.total.pedidas > 0 ? (t.total.distribuidas / t.total.pedidas) * 100 : 0 },
+    }));
 
     const sub = filasFiltradas.reduce(
       (acc, f) => ({
@@ -114,7 +176,7 @@ export default function CIColecciones() {
     );
     const subtotal = { ...sub, completitud: sub.pedidas > 0 ? (sub.distribuidas / sub.pedidas) * 100 : 0 };
 
-    return { filasFiltradas, filasTabla, subtotal };
+    return { filasFiltradas, tarjetas, subtotal };
   }, [data, filtroColeccion, filtroMarca, filtroTemporada, filtroGrupo]);
 
   // Desglose por grupo de la fila (colección + marca + curva) expandida.
@@ -165,8 +227,8 @@ export default function CIColecciones() {
           )}
         </div>
         <p className="text-sm text-slate-500 mb-4">
-          Pedidos de Carga Inicial agrupados por la colección (observación) de sus artículos master. Hacé click en una curva
-          para ver el desglose por grupo.
+          Pedidos de Carga Inicial agrupados por la colección (observación) de sus artículos master. Cada colección tiene
+          su recuadro con las marcas y curvas que contiene. Hacé click en una curva para ver el desglose por grupo.
         </p>
 
         {/* FILTROS */}
@@ -223,109 +285,149 @@ export default function CIColecciones() {
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left whitespace-nowrap">
-            <thead>
-              {filasTabla.length > 0 && (
-                <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                  <td className="py-3 px-4 text-left" colSpan={3}>
-                    Subtotal
-                    {filtroColeccion !== "TODAS" ? ` — ${filtroColeccion}` : " — Todas las colecciones"}
-                    {filtroMarca !== "TODAS" ? ` — ${filtroMarca}` : ""}
-                    {filtroTemporada !== "TODAS" ? ` — ${filtroTemporada}` : ""}
-                    {filtroGrupo !== "TODAS" ? ` — ${filtroGrupo}` : ""}
-                  </td>
-                  <td className="py-3 px-4 text-left">{fmtNum(subtotal.pedidas)}</td>
-                  <td className="py-3 px-4 text-left">{fmtNum(subtotal.distribuidas)}</td>
-                  <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(subtotal.aRepartir)}</td>
-                  <td className="py-3 px-4 text-left">{fmtNum(subtotal.stock)}</td>
-                  <td className="py-3 px-4 text-left">{fmtPct(subtotal.completitud)}</td>
-                </tr>
-              )}
-              <tr className="text-slate-500 font-medium border-b border-slate-200">
-                <th className="py-3 px-4 text-left">Colección</th>
-                <th className="py-3 px-4 text-left">Marca</th>
-                <th className="py-3 px-4 text-left">Curva</th>
-                <th className="py-3 px-4 text-left">Unidades Pedidas</th>
-                <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
-                <th className="py-3 px-4 text-left">Unidades a Repartir</th>
-                <th className="py-3 px-4 text-left">Unidades en Stock</th>
-                <th className="py-3 px-4 text-left">% Completitud</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {filasTabla.map((row, i) => {
-                const estaExpandida =
-                  filaExpandida?.coleccion === row.coleccion &&
-                  filaExpandida?.marca === row.marca &&
-                  filaExpandida?.curva === row.curva;
-                const esPrimeraDeColeccion = i === 0 || filasTabla[i - 1].coleccion !== row.coleccion;
-                return (
-                  <Fragment key={`${row.coleccion}-${row.marca}-${row.curva}`}>
-                    <tr
-                      onClick={() => handleFilaClick(row.coleccion, row.marca, row.curva)}
-                      className={`cursor-pointer transition-colors ${estaExpandida ? "bg-slate-100" : "hover:bg-slate-50"} ${
-                        esPrimeraDeColeccion && i > 0 ? "border-t-2 border-slate-200" : ""
-                      }`}
-                    >
-                      <td className="py-3 px-4 text-left">
-                        {esPrimeraDeColeccion && (
-                          <>
-                            <div className="font-bold text-slate-900">{row.coleccion}</div>
-                            <div className="text-xs text-slate-500 mt-0.5">
-                              {data?.articulosPorColeccion[row.coleccion] ?? 0} artículos master
-                            </div>
-                          </>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
-                      <td className="py-3 px-4 text-left text-slate-600">{row.curva}</td>
-                      <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
-                      <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
-                      <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
-                      <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.stock)}</td>
-                      <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
-                    </tr>
+        {/* SUBTOTAL GENERAL */}
+        {tarjetas.length > 0 && (
+          <div className="mb-5 rounded-xl bg-blue-50 border border-blue-200 px-5 py-3.5 flex items-center justify-between flex-wrap gap-x-8 gap-y-2">
+            <div className="font-bold text-blue-900 text-sm">
+              Subtotal
+              {filtroColeccion !== "TODAS" ? ` — ${filtroColeccion}` : " — Todas las colecciones"}
+              {filtroMarca !== "TODAS" ? ` — ${filtroMarca}` : ""}
+              {filtroTemporada !== "TODAS" ? ` — ${filtroTemporada}` : ""}
+              {filtroGrupo !== "TODAS" ? ` — ${filtroGrupo}` : ""}
+            </div>
+            <div className="flex items-center gap-x-8 gap-y-1 flex-wrap text-sm">
+              <span className="text-blue-900/70">Pedidas <span className="font-bold text-blue-900">{fmtNum(subtotal.pedidas)}</span></span>
+              <span className="text-blue-900/70">Distribuidas <span className="font-bold text-blue-900">{fmtNum(subtotal.distribuidas)}</span></span>
+              <span className="text-blue-900/70">A Repartir <span className="font-bold text-orange-500">{fmtNum(subtotal.aRepartir)}</span></span>
+              <span className="text-blue-900/70">En Stock <span className="font-bold text-blue-900">{fmtNum(subtotal.stock)}</span></span>
+              <span className="text-blue-900/70">Completitud <span className="font-bold text-blue-900">{fmtPct(subtotal.completitud)}</span></span>
+            </div>
+          </div>
+        )}
 
-                    {estaExpandida && (
-                      <tr>
-                        <td colSpan={COLUMNAS} className="bg-slate-50 px-4 py-4">
-                          <p className="text-xs font-semibold text-slate-500 mb-2">
-                            Desglose por grupo — {row.coleccion} / {row.marca} / {row.curva}
-                          </p>
-                          <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
-                            <thead className="text-slate-500 font-medium border-b border-slate-200">
-                              <tr>
-                                <th className="py-2 px-3 text-left">Grupo</th>
-                                <th className="py-2 px-3 text-left">Unidades Pedidas</th>
-                                <th className="py-2 px-3 text-left">Unidades Distribuidas</th>
-                                <th className="py-2 px-3 text-left">Unidades a Repartir</th>
-                                <th className="py-2 px-3 text-left">Unidades en Stock</th>
-                                <th className="py-2 px-3 text-left">% Completitud</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                              {desgloseGrupo.map((g) => (
-                                <tr key={g.grupo}>
-                                  <td className="py-2 px-3 text-left font-medium text-slate-700">{g.grupo}</td>
-                                  <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.pedidas)}</td>
-                                  <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.distribuidas)}</td>
-                                  <td className="py-2 px-3 text-left font-semibold text-orange-500">{fmtNum(g.aRepartir)}</td>
-                                  <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.stock)}</td>
-                                  <td className="py-2 px-3 text-left text-slate-600">{fmtPct(g.completitud)}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-          {filasTabla.length === 0 && !isLoading && (
+        {/* UNA TARJETA POR COLECCIÓN */}
+        <div className="space-y-5">
+          {tarjetas.map((t) => (
+            <div key={t.coleccion} className="border border-slate-300 rounded-xl overflow-hidden shadow-sm">
+              <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex items-center justify-between flex-wrap gap-x-8 gap-y-3">
+                <div>
+                  <div className="font-bold text-slate-900 text-base">{t.coleccion}</div>
+                  <div className="text-xs text-slate-500 mt-0.5">
+                    {data?.articulosPorColeccion[t.coleccion] ?? 0} artículos master
+                  </div>
+                </div>
+                <div className="flex items-start gap-x-8 gap-y-2 flex-wrap">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-semibold text-slate-500 mr-1">Marcas</span>
+                    {t.marcas.map((m) => (
+                      <span key={m} className="px-2.5 py-1 rounded-md bg-slate-900 text-white text-xs font-bold">
+                        {m}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-semibold text-slate-500 mr-1">Curvas</span>
+                    {t.curvas.map((c) => (
+                      <span key={c} className="px-2.5 py-1 rounded-md bg-white border border-slate-300 text-slate-700 text-xs font-semibold">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full table-fixed text-sm text-left whitespace-nowrap">
+                  <ColGroup />
+                  <thead>
+                    <tr className="text-slate-500 font-medium border-b border-slate-200">
+                      <th className="py-3 px-4 text-left">Marca</th>
+                      <th className="py-3 px-4 text-left">Curva</th>
+                      <th className="py-3 px-4 text-left">Unidades Pedidas</th>
+                      <th className="py-3 px-4 text-left">Unidades Distribuidas</th>
+                      <th className="py-3 px-4 text-left">Unidades a Repartir</th>
+                      <th className="py-3 px-4 text-left">Unidades en Stock</th>
+                      <th className="py-3 px-4 text-left">% Completitud</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {t.filas.map((row, i) => {
+                      const estaExpandida =
+                        filaExpandida?.coleccion === row.coleccion &&
+                        filaExpandida?.marca === row.marca &&
+                        filaExpandida?.curva === row.curva;
+                      const esPrimeraDeMarca = i === 0 || t.filas[i - 1].marca !== row.marca;
+                      return (
+                        <Fragment key={`${row.coleccion}-${row.marca}-${row.curva}`}>
+                          <tr
+                            onClick={() => handleFilaClick(row.coleccion, row.marca, row.curva)}
+                            className={`cursor-pointer transition-colors ${estaExpandida ? "bg-slate-100" : "hover:bg-slate-50"} ${
+                              esPrimeraDeMarca && i > 0 ? "border-t-2 border-slate-200" : ""
+                            }`}
+                          >
+                            <td className="py-3 px-4 text-left font-bold text-slate-900">{row.marca}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{row.curva}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.pedidas)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.distribuidas)}</td>
+                            <td className="py-3 px-4 text-left font-semibold text-orange-500">{fmtNum(row.aRepartir)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.stock)}</td>
+                            <td className="py-3 px-4 text-left text-slate-600">{fmtPct(row.completitud)}</td>
+                          </tr>
+
+                          {estaExpandida && (
+                            <tr>
+                              <td colSpan={COLUMNAS} className="bg-slate-50 px-4 py-4">
+                                <p className="text-xs font-semibold text-slate-500 mb-2">
+                                  Desglose por grupo — {row.coleccion} / {row.marca} / {row.curva}
+                                </p>
+                                <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
+                                  <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                    <tr>
+                                      <th className="py-2 px-3 text-left">Grupo</th>
+                                      <th className="py-2 px-3 text-left">Unidades Pedidas</th>
+                                      <th className="py-2 px-3 text-left">Unidades Distribuidas</th>
+                                      <th className="py-2 px-3 text-left">Unidades a Repartir</th>
+                                      <th className="py-2 px-3 text-left">Unidades en Stock</th>
+                                      <th className="py-2 px-3 text-left">% Completitud</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {desgloseGrupo.map((g) => (
+                                      <tr key={g.grupo}>
+                                        <td className="py-2 px-3 text-left font-medium text-slate-700">{g.grupo}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.pedidas)}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.distribuidas)}</td>
+                                        <td className="py-2 px-3 text-left font-semibold text-orange-500">{fmtNum(g.aRepartir)}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{fmtNum(g.stock)}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{fmtPct(g.completitud)}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="bg-slate-50 border-t-2 border-slate-300 font-bold text-slate-900">
+                      <td className="py-3 px-4 text-left" colSpan={2}>
+                        Total {t.coleccion}
+                      </td>
+                      <td className="py-3 px-4 text-left">{fmtNum(t.total.pedidas)}</td>
+                      <td className="py-3 px-4 text-left">{fmtNum(t.total.distribuidas)}</td>
+                      <td className="py-3 px-4 text-left text-orange-500">{fmtNum(t.total.aRepartir)}</td>
+                      <td className="py-3 px-4 text-left">{fmtNum(t.total.stock)}</td>
+                      <td className="py-3 px-4 text-left">{fmtPct(t.total.completitud)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          ))}
+          {tarjetas.length === 0 && !isLoading && (
             <p className="text-sm text-slate-400 text-center py-8">
               {hayFiltros
                 ? "No hay datos que coincidan con los filtros aplicados."
