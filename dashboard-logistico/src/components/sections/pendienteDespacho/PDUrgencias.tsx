@@ -170,7 +170,7 @@ export default function PDUrgencias() {
         Canal: f.canal,
         Cliente: f.cliente,
         Cajas: f.cajas,
-        "Con Remito": f.conRemito,
+        "Con Predespacho": f.conRemito,
         Despachados: f.despachados,
       }))
     );
@@ -184,7 +184,7 @@ export default function PDUrgencias() {
         Tipo: f.tipo,
         Curva: f.curva,
         Posición: f.posicion || "SIN POSICIÓN",
-        "Con Remito": f.conRemito ? "Sí" : "No",
+        "Con Predespacho": f.conRemito ? "Sí" : "No",
         Despachado: f.despachado === null ? "Sin dato" : f.despachado ? "Sí" : "No",
         "Estado WMS": f.estadoWms || "",
       }));
@@ -340,7 +340,7 @@ export default function PDUrgencias() {
                   Cajas <span className="font-bold text-slate-800">{fmtNum(b.cajas)}</span>
                 </span>
                 <span className="text-slate-500">
-                  Con Remito <span className="font-bold text-emerald-700">{fmtNum(b.conRemito)}</span>
+                  Con Predespacho <span className="font-bold text-emerald-700">{fmtNum(b.conRemito)}</span>
                 </span>
                 <span className="text-slate-500">
                   Despachados <span className="font-bold text-emerald-700">{fmtNum(b.despachados)}</span>
@@ -363,7 +363,7 @@ export default function PDUrgencias() {
                     <th className="py-3 px-4 text-left">Canal</th>
                     <th className="py-3 px-4 text-left">Cliente</th>
                     <th className="py-3 px-4 text-left">Cajas</th>
-                    <th className="py-3 px-4 text-left">Con Remito</th>
+                    <th className="py-3 px-4 text-left">Con Predespacho</th>
                     <th className="py-3 px-4 text-left">Despachados</th>
                   </tr>
                 </thead>
@@ -397,7 +397,7 @@ export default function PDUrgencias() {
                                     <th className="py-2 px-3 text-left">Tipo</th>
                                     <th className="py-2 px-3 text-left">Curva</th>
                                     <th className="py-2 px-3 text-left">Posición</th>
-                                    <th className="py-2 px-3 text-left">Con Remito</th>
+                                    <th className="py-2 px-3 text-left">Con Predespacho</th>
                                     <th className="py-2 px-3 text-left">Despachado</th>
                                   </tr>
                                 </thead>
