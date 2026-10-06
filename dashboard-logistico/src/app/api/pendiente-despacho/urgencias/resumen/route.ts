@@ -7,7 +7,7 @@ import {
   PendienteDespachoRow,
   PendienteDespachoPropiosRow,
 } from "@/lib/pendienteDespachoHelpers";
-import { fetchClientesInfo } from "@/lib/resumenHelpers";
+import { fetchClientesInfo, fetchGruposClientesPorCodigo, resolverGrupoClienteUnico } from "@/lib/resumenHelpers";
 import { fetchPosicionesPorContenedor } from "@/lib/almacenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
@@ -103,7 +103,7 @@ export async function GET() {
     let updatedAt: string | null = null;
     let estadosActualizadosEn: string | null = null;
 
-    const filas = ((contenedores ?? []) as UrgenciaContenedorRow[]).map((c) => {
+    const filasSinGrupo = ((contenedores ?? []) as UrgenciaContenedorRow[]).map((c) => {
       if (!updatedAt || c.created_at > updatedAt) updatedAt = c.created_at;
       if (c.estado_wms_en && (!estadosActualizadosEn || c.estado_wms_en > estadosActualizadosEn)) {
         estadosActualizadosEn = c.estado_wms_en;
@@ -150,6 +150,17 @@ export async function GET() {
           !c.estado_wms || c.estado_wms === "NO ENCONTRADO" ? null : ESTADOS_DESPACHADO.has(c.estado_wms),
       };
     });
+
+    // Grupo de Clientes (Despacho -> Grupos de Clientes), con la misma lógica
+    // que Status de Preparación - Por Pedidos: un único grupo por fila. Si el
+    // cliente está en varios grupos a la vez, esa lógica los desambigua por el
+    // día del nombre del pedido -- un contenedor no tiene nombre de pedido, así
+    // que en ese caso (y si no tiene grupo) queda null = "Clientes".
+    const gruposClientesPorCodigo = await fetchGruposClientesPorCodigo();
+    const filas = filasSinGrupo.map((f) => ({
+      ...f,
+      grupoCliente: resolverGrupoClienteUnico(null, gruposClientesPorCodigo.get(f.codigoCliente) || []),
+    }));
 
     return NextResponse.json({ success: true, filas, updatedAt, estadosActualizadosEn });
   } catch (err) {

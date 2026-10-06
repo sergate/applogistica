@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonTable } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
@@ -16,6 +16,8 @@ interface UrgenciaFila {
   codigoCliente: string;
   cliente: string;
   canal: string;
+  /** Grupo de Clientes (Despacho -> Grupos de Clientes); null = sin grupo determinado ("Clientes"). */
+  grupoCliente: string | null;
   tipo: string;
   curva: string;
   posicion: string | null;
@@ -30,6 +32,7 @@ interface ClienteConsolidado {
   codigoCliente: string;
   cliente: string;
   canal: string;
+  grupoCliente: string | null;
   cajas: number;
   conRemito: number;
   despachados: number;
@@ -87,6 +90,30 @@ export default function PDUrgencias() {
   const [filtroCanalUrgencias, setFiltroCanalUrgencias] = useState("TODAS");
   const [filtroTipoUrgencias, setFiltroTipoUrgencias] = useState("TODAS");
   const [filtroCurvaUrgencias, setFiltroCurvaUrgencias] = useState("TODAS");
+  // Selección múltiple (igual que Por Pedidos): array vacío = sin filtrar.
+  const [filtroGruposClientesUrgencias, setFiltroGruposClientesUrgencias] = useState<string[]>([]);
+  const [gruposClientesDropdownAbiertoUrgencias, setGruposClientesDropdownAbiertoUrgencias] = useState(false);
+  const gruposClientesDropdownRefUrgencias = useRef<HTMLDivElement>(null);
+
+  const toggleFiltroGrupoClientesUrgencias = (grupo: string) => {
+    setFiltroGruposClientesUrgencias((prev) =>
+      prev.includes(grupo) ? prev.filter((g) => g !== grupo) : [...prev, grupo]
+    );
+  };
+
+  useEffect(() => {
+    if (!gruposClientesDropdownAbiertoUrgencias) return;
+    const onClickFuera = (e: MouseEvent) => {
+      if (
+        gruposClientesDropdownRefUrgencias.current &&
+        !gruposClientesDropdownRefUrgencias.current.contains(e.target as Node)
+      ) {
+        setGruposClientesDropdownAbiertoUrgencias(false);
+      }
+    };
+    document.addEventListener("mousedown", onClickFuera);
+    return () => document.removeEventListener("mousedown", onClickFuera);
+  }, [gruposClientesDropdownAbiertoUrgencias]);
   const [filtroClienteUrgencias, setFiltroClienteUrgencias] = useState("");
   // Cliente expandido dentro de un bloque: "bloque|codigoCliente".
   const [expandidoUrgencias, setExpandidoUrgencias] = useState<string | null>(null);
@@ -95,6 +122,16 @@ export default function PDUrgencias() {
   const canalesDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.canal))).sort();
   const tiposDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.curva))).sort();
+  // Solo los grupos de clientes que aparecen en los contenedores cargados.
+  // "Clientes" es el bucket de los que no tienen grupo determinado (igual que
+  // en Por Pedidos).
+  const hayContenedoresSinGrupoCliente = (urgenciasData?.filas ?? []).some((f) => !f.grupoCliente);
+  const gruposClientesDisponiblesUrgencias = [
+    ...Array.from(
+      new Set((urgenciasData?.filas ?? []).map((f) => f.grupoCliente).filter((g): g is string => !!g))
+    ).sort(),
+    ...(hayContenedoresSinGrupoCliente ? ["Clientes"] : []),
+  ];
 
   const { filasFiltradasUrgencias, bloquesUrgencias } = useMemo(() => {
     const filasFiltradasUrgencias = (urgenciasData?.filas ?? []).filter(
@@ -103,6 +140,8 @@ export default function PDUrgencias() {
         (filtroCanalUrgencias === "TODAS" || f.canal === filtroCanalUrgencias) &&
         (filtroTipoUrgencias === "TODAS" || f.tipo === filtroTipoUrgencias) &&
         (filtroCurvaUrgencias === "TODAS" || f.curva === filtroCurvaUrgencias) &&
+        (filtroGruposClientesUrgencias.length === 0 ||
+          filtroGruposClientesUrgencias.includes(f.grupoCliente || "Clientes")) &&
         (!filtroClienteUrgencias.trim() || f.cliente.toLowerCase().includes(filtroClienteUrgencias.trim().toLowerCase()))
     );
 
@@ -136,6 +175,7 @@ export default function PDUrgencias() {
             codigoCliente: f.codigoCliente,
             cliente: f.cliente,
             canal: f.canal,
+            grupoCliente: f.grupoCliente,
             cajas: 0,
             conRemito: 0,
             despachados: 0,
@@ -156,7 +196,7 @@ export default function PDUrgencias() {
     );
 
     return { filasFiltradasUrgencias, bloquesUrgencias };
-  }, [urgenciasData, filtroBloqueUrgencias, filtroCanalUrgencias, filtroTipoUrgencias, filtroCurvaUrgencias, filtroClienteUrgencias]);
+  }, [urgenciasData, filtroBloqueUrgencias, filtroCanalUrgencias, filtroTipoUrgencias, filtroCurvaUrgencias, filtroGruposClientesUrgencias, filtroClienteUrgencias]);
 
   const handleClienteClickUrgencias = (clave: string) => {
     setExpandidoUrgencias(expandidoUrgencias === clave ? null : clave);
@@ -169,6 +209,7 @@ export default function PDUrgencias() {
         Bloque: b.bloque,
         Canal: f.canal,
         Cliente: f.cliente,
+        "Grupo de Clientes": f.grupoCliente || "Clientes",
         Cajas: f.cajas,
         "Con Predespacho": f.conRemito,
         Despachados: f.despachados,
@@ -181,6 +222,7 @@ export default function PDUrgencias() {
         Contenedor: f.contenedor,
         Cliente: f.cliente,
         Canal: f.canal,
+        "Grupo de Clientes": f.grupoCliente || "Clientes",
         Tipo: f.tipo,
         Curva: f.curva,
         Posición: f.posicion || "SIN POSICIÓN",
@@ -257,6 +299,52 @@ export default function PDUrgencias() {
           ))}
         </select>
 
+        <div className="relative" ref={gruposClientesDropdownRefUrgencias}>
+          <button
+            type="button"
+            onClick={() => setGruposClientesDropdownAbiertoUrgencias((v) => !v)}
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            {filtroGruposClientesUrgencias.length === 0
+              ? "Todos los grupos de clientes"
+              : `${filtroGruposClientesUrgencias.length} grupo${filtroGruposClientesUrgencias.length === 1 ? "" : "s"} de clientes seleccionado${filtroGruposClientesUrgencias.length === 1 ? "" : "s"}`}
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <polyline points="6 9 12 15 18 9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+          {gruposClientesDropdownAbiertoUrgencias && (
+            <div className="absolute z-20 mt-1 w-56 max-h-72 overflow-y-auto bg-white rounded-lg border border-slate-200 shadow-lg p-2">
+              <button
+                type="button"
+                onClick={() =>
+                  setFiltroGruposClientesUrgencias(
+                    filtroGruposClientesUrgencias.length === gruposClientesDisponiblesUrgencias.length
+                      ? []
+                      : gruposClientesDisponiblesUrgencias
+                  )
+                }
+                className="w-full text-left px-2 py-1.5 rounded text-xs font-medium text-blue-600 hover:bg-blue-50"
+              >
+                {filtroGruposClientesUrgencias.length === gruposClientesDisponiblesUrgencias.length
+                  ? "Deseleccionar todos"
+                  : "Seleccionar todos"}
+              </button>
+              <div className="border-t border-slate-100 my-1" />
+              {gruposClientesDisponiblesUrgencias.map((g) => (
+                <label key={g} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={filtroGruposClientesUrgencias.includes(g)}
+                    onChange={() => toggleFiltroGrupoClientesUrgencias(g)}
+                    className="w-3.5 h-3.5"
+                  />
+                  {g}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
         <select
           value={filtroTipoUrgencias}
           onChange={(e) => setFiltroTipoUrgencias(e.target.value)}
@@ -293,6 +381,7 @@ export default function PDUrgencias() {
             setFiltroCanalUrgencias("TODAS");
             setFiltroTipoUrgencias("TODAS");
             setFiltroCurvaUrgencias("TODAS");
+            setFiltroGruposClientesUrgencias([]);
             setFiltroClienteUrgencias("");
           }}
           className="px-4 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -352,7 +441,7 @@ export default function PDUrgencias() {
               <table className="w-full text-sm text-left whitespace-nowrap">
                 <thead>
                   <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                    <td className="py-3 px-4 text-left" colSpan={2}>
+                    <td className="py-3 px-4 text-left" colSpan={3}>
                       Subtotal — {b.clientes.length} cliente{b.clientes.length === 1 ? "" : "s"}
                     </td>
                     <td className="py-3 px-4 text-left">{fmtNum(b.cajas)}</td>
@@ -362,6 +451,7 @@ export default function PDUrgencias() {
                   <tr className="text-slate-500 font-medium border-b border-slate-200">
                     <th className="py-3 px-4 text-left">Canal</th>
                     <th className="py-3 px-4 text-left">Cliente</th>
+                    <th className="py-3 px-4 text-left">Grupo de Clientes</th>
                     <th className="py-3 px-4 text-left">Cajas</th>
                     <th className="py-3 px-4 text-left">Con Predespacho</th>
                     <th className="py-3 px-4 text-left">Despachados</th>
@@ -379,6 +469,7 @@ export default function PDUrgencias() {
                         >
                           <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.grupoCliente || "Clientes"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.conRemito)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.despachados)}</td>
@@ -386,7 +477,7 @@ export default function PDUrgencias() {
 
                         {estaExpandido && (
                           <tr>
-                            <td colSpan={5} className="bg-slate-50 px-4 py-4">
+                            <td colSpan={6} className="bg-slate-50 px-4 py-4">
                               <p className="text-xs font-semibold text-slate-500 mb-2">
                                 Detalle por contenedor — {row.cliente}
                               </p>
