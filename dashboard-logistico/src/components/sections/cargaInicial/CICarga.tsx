@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { fmtNum, fmtSoloFecha } from "@/components/dashboard/formatters";
 import type { PlanCargaInicial } from "./types";
@@ -35,6 +35,23 @@ export default function CICarga() {
   const [mensajeArticulos, setMensajeArticulos] = useState<string | null>(null);
   const [observacionAbierta, setObservacionAbierta] = useState<string | null>(null);
   const [observacionPorEliminar, setObservacionPorEliminar] = useState<string | null>(null);
+  const articulosTextareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // "Agregar artículos" de una colección ya cargada: precarga su nombre y su
+  // fecha en el formulario y deja el cursor listo para pegar los artículos
+  // nuevos (el POST ya suma a la observación si existe).
+  const prepararAgregarArticulos = (o: ObservacionArticulos) => {
+    setFormObservacion(o.observacion);
+    setFormFechaArticulos(String(o.fecha).slice(0, 10));
+    setFormArticulosTexto("");
+    setMensajeArticulos(null);
+    setObservacionesError(null);
+    const textarea = articulosTextareaRef.current;
+    if (textarea) {
+      textarea.scrollIntoView({ behavior: "smooth", block: "center" });
+      textarea.focus({ preventScroll: true });
+    }
+  };
 
   const cargarObservaciones = async () => {
     setObservacionesLoading(true);
@@ -311,6 +328,7 @@ export default function CICarga() {
         <div>
           <label className="block text-sm font-medium text-slate-600 mb-1">Artículos master (uno por línea)</label>
           <textarea
+            ref={articulosTextareaRef}
             value={formArticulosTexto}
             onChange={(e) => setFormArticulosTexto(e.target.value)}
             placeholder={"Ej: MST-48213\nMST-48214"}
@@ -340,7 +358,21 @@ export default function CICarga() {
           </div>
         </div>
       </div>
-      <p className="text-xs text-slate-500 mb-4">Si la observación ya existe, los artículos se suman a esa colección.</p>
+      {(() => {
+        const existente = observaciones.find(
+          (o) => o.observacion.trim().toLowerCase() === formObservacion.trim().toLowerCase()
+        );
+        return existente ? (
+          <p className="text-xs text-blue-700 font-medium mb-4">
+            Se suman a la colección «{existente.observacion}», que ya tiene {existente.articulos.length} artículo
+            {existente.articulos.length === 1 ? "" : "s"}.
+          </p>
+        ) : (
+          <p className="text-xs text-slate-500 mb-4">
+            Si la observación ya existe, los artículos se suman a esa colección; si no, se crea una colección nueva.
+          </p>
+        );
+      })()}
       <button
         onClick={agregarArticulosMaster}
         disabled={!articulosFormValido || agregandoArticulos}
@@ -379,6 +411,12 @@ export default function CICarga() {
                       {o.articulos.length} artículo{o.articulos.length === 1 ? "" : "s"} · fecha {fmtSoloFecha(o.fecha)}
                     </div>
                   </div>
+                  <button
+                    onClick={() => prepararAgregarArticulos(o)}
+                    className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors"
+                  >
+                    Agregar artículos
+                  </button>
                   <button
                     onClick={() => setObservacionAbierta(abierta ? null : o.observacion)}
                     className="px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors"
