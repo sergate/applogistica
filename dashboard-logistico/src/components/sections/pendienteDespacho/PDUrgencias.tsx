@@ -4,6 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonTable } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import ActualizarAgenteBoton from "@/components/ActualizarAgenteBoton";
 import { fmtNum, fmtFecha, fmtSoloFecha } from "@/components/dashboard/formatters";
 
 interface UrgenciaFila {
@@ -19,6 +20,10 @@ interface UrgenciaFila {
   curva: string;
   posicion: string | null;
   conRemito: boolean;
+  /** Estado del contenedor en el WMS (ej. PA_CARGA_CAMION), null si todavía no se consultó. */
+  estadoWms: string | null;
+  /** true = ya salió del depósito, false = sigue en el depósito, null = sin dato. */
+  despachado: boolean | null;
 }
 
 interface ClienteConsolidado {
@@ -27,6 +32,7 @@ interface ClienteConsolidado {
   canal: string;
   cajas: number;
   conRemito: number;
+  despachados: number;
 }
 
 interface BloqueResumen {
@@ -36,16 +42,41 @@ interface BloqueResumen {
   clientes: ClienteConsolidado[];
   cajas: number;
   conRemito: number;
+  despachados: number;
+}
+
+// Celda "Despachado": Sí / No / "—" (sin dato del WMS, con el motivo en el tooltip).
+function BadgeDespachado({ despachado, estadoWms }: { despachado: boolean | null; estadoWms: string | null }) {
+  if (despachado === null) {
+    return (
+      <span
+        title={estadoWms === "NO ENCONTRADO" ? "El WMS no devolvió este contenedor" : "Todavía no se consultó el estado en el WMS"}
+        className="px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700"
+      >
+        —
+      </span>
+    );
+  }
+  return (
+    <span
+      title={estadoWms ? `Estado en el WMS: ${estadoWms}` : undefined}
+      className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+        despachado ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+      }`}
+    >
+      {despachado ? "Sí" : "No"}
+    </span>
+  );
 }
 
 export default function PDUrgencias() {
-  const { activeTab, dataVersion } = useDashboard();
+  const { activeTab, dataVersion, setDataVersion, tienePermiso } = useDashboard();
 
   const {
     data: urgenciasData,
     error: urgenciasError,
     isLoading: urgenciasLoading,
-  } = useTabData<{ filas: UrgenciaFila[]; updatedAt: string | null }>(
+  } = useTabData<{ filas: UrgenciaFila[]; updatedAt: string | null; estadosActualizadosEn: string | null }>(
     activeTab,
     "PD-Urgencias",
     "/api/pendiente-despacho/urgencias/resumen",
@@ -79,12 +110,21 @@ export default function PDUrgencias() {
     const porBloque = new Map<string, BloqueResumen>();
     for (const f of filasFiltradasUrgencias) {
       if (!porBloque.has(f.bloque)) {
-        porBloque.set(f.bloque, { bloque: f.bloque, fecha: f.fecha, filas: [], clientes: [], cajas: 0, conRemito: 0 });
+        porBloque.set(f.bloque, {
+          bloque: f.bloque,
+          fecha: f.fecha,
+          filas: [],
+          clientes: [],
+          cajas: 0,
+          conRemito: 0,
+          despachados: 0,
+        });
       }
       const b = porBloque.get(f.bloque)!;
       b.filas.push(f);
       b.cajas += 1;
       if (f.conRemito) b.conRemito += 1;
+      if (f.despachado) b.despachados += 1;
       if (f.fecha && (!b.fecha || f.fecha < b.fecha)) b.fecha = f.fecha;
     }
 
@@ -98,11 +138,13 @@ export default function PDUrgencias() {
             canal: f.canal,
             cajas: 0,
             conRemito: 0,
+            despachados: 0,
           });
         }
         const acc = consolidado.get(f.codigoCliente)!;
         acc.cajas += 1;
         if (f.conRemito) acc.conRemito += 1;
+        if (f.despachado) acc.despachados += 1;
       }
       b.clientes = Array.from(consolidado.values()).sort((a, c) =>
         a.canal !== c.canal ? a.canal.localeCompare(c.canal) : a.cliente.localeCompare(c.cliente)
@@ -129,6 +171,7 @@ export default function PDUrgencias() {
         Cliente: f.cliente,
         Cajas: f.cajas,
         "Con Remito": f.conRemito,
+        Despachados: f.despachados,
       }))
     );
     const filasDetalle = [...filasFiltradasUrgencias]
@@ -142,6 +185,8 @@ export default function PDUrgencias() {
         Curva: f.curva,
         Posición: f.posicion || "SIN POSICIÓN",
         "Con Remito": f.conRemito ? "Sí" : "No",
+        Despachado: f.despachado === null ? "Sin dato" : f.despachado ? "Sí" : "No",
+        "Estado WMS": f.estadoWms || "",
       }));
 
     const libro = XLSX.utils.book_new();
@@ -167,8 +212,26 @@ export default function PDUrgencias() {
       </div>
       <p className="text-sm text-slate-500 mb-4">
         Contenedores cargados por bloque en &quot;Carga de Datos&quot;, cruzados con Pendiente de Despacho y Ocupación
-        Almacén. Hacé click en un cliente para ver el detalle por contenedor.
+        Almacén. &quot;Despachado&quot; sale del estado real del contenedor en el WMS (PA_CARGA_CAMION). Hacé click en
+        un cliente para ver el detalle por contenedor.
       </p>
+
+      {tienePermiso("PD-Urgencias-ActualizarWMS") && (
+        <div className="mb-4 flex items-start gap-4 flex-wrap">
+          <ActualizarAgenteBoton
+            seccion="urgencias_estados_wms"
+            label="Actualizar estados desde WMS"
+            onExito={() => setDataVersion((v) => v + 1)}
+          />
+          <p className="text-xs text-slate-500 mt-4">
+            Estados del WMS al:{" "}
+            <span className="font-medium text-slate-700">
+              {urgenciasData?.estadosActualizadosEn ? fmtFecha(urgenciasData.estadosActualizadosEn) : "todavía sin consultar"}
+            </span>
+            . Se refrescan solos cada 15-20 minutos si el Agente está corriendo.
+          </p>
+        </div>
+      )}
 
       {/* FILTROS */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
@@ -279,6 +342,9 @@ export default function PDUrgencias() {
                 <span className="text-slate-500">
                   Con Remito <span className="font-bold text-emerald-700">{fmtNum(b.conRemito)}</span>
                 </span>
+                <span className="text-slate-500">
+                  Despachados <span className="font-bold text-emerald-700">{fmtNum(b.despachados)}</span>
+                </span>
               </div>
             </div>
 
@@ -291,12 +357,14 @@ export default function PDUrgencias() {
                     </td>
                     <td className="py-3 px-4 text-left">{fmtNum(b.cajas)}</td>
                     <td className="py-3 px-4 text-left">{fmtNum(b.conRemito)}</td>
+                    <td className="py-3 px-4 text-left">{fmtNum(b.despachados)}</td>
                   </tr>
                   <tr className="text-slate-500 font-medium border-b border-slate-200">
                     <th className="py-3 px-4 text-left">Canal</th>
                     <th className="py-3 px-4 text-left">Cliente</th>
                     <th className="py-3 px-4 text-left">Cajas</th>
                     <th className="py-3 px-4 text-left">Con Remito</th>
+                    <th className="py-3 px-4 text-left">Despachados</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -313,11 +381,12 @@ export default function PDUrgencias() {
                           <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.conRemito)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.despachados)}</td>
                         </tr>
 
                         {estaExpandido && (
                           <tr>
-                            <td colSpan={4} className="bg-slate-50 px-4 py-4">
+                            <td colSpan={5} className="bg-slate-50 px-4 py-4">
                               <p className="text-xs font-semibold text-slate-500 mb-2">
                                 Detalle por contenedor — {row.cliente}
                               </p>
@@ -329,6 +398,7 @@ export default function PDUrgencias() {
                                     <th className="py-2 px-3 text-left">Curva</th>
                                     <th className="py-2 px-3 text-left">Posición</th>
                                     <th className="py-2 px-3 text-left">Con Remito</th>
+                                    <th className="py-2 px-3 text-left">Despachado</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -348,6 +418,9 @@ export default function PDUrgencias() {
                                           >
                                             {d.conRemito ? "Sí" : "No"}
                                           </span>
+                                        </td>
+                                        <td className="py-2 px-3 text-left">
+                                          <BadgeDespachado despachado={d.despachado} estadoWms={d.estadoWms} />
                                         </td>
                                       </tr>
                                     ))}

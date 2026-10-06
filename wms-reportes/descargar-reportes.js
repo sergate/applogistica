@@ -448,6 +448,66 @@ function parsearContenedoresCsv(ruta) {
   return filas;
 }
 
+// Consulta el estado real (estadoValor, ej. "PA_CARGA_CAMION") de cada
+// contenedor directo al endpoint JSON que usa la grilla de Contenedores
+// (pallet/find_by_paginated). La búsqueda por "numero" es EXACTA y tarda
+// ~150 ms, así que no hace falta bajar el reporte completo (los CI son más de
+// 300.000 con los despachados). "page" tiene que estar ya logueada en el WMS.
+// Devuelve [{ contenedor, estado }] -- estado null si el WMS no lo encontró.
+async function consultarEstadosContenedores(page, numeros, onProgreso) {
+  const resultados = [];
+  const LOTE = 40;
+  for (let i = 0; i < numeros.length; i += LOTE) {
+    const lote = numeros.slice(i, i + LOTE);
+    const filas = await page.evaluate(
+      async ({ urlBase, lote }) => {
+        const consultar = async (numero) => {
+          const qs = new URLSearchParams({
+            _dc: String(Date.now()),
+            numero,
+            numero_master: "",
+            numero_ingreso: "",
+            tipo: "",
+            codigo: "",
+            estadoId: "",
+            sku: "",
+            sku_master: "",
+            curva: "",
+            grupo: "",
+            plan: "",
+            pedido: "",
+            clienteId: "",
+            agrupador: "",
+            no_despachados: "0",
+            no_ubicados: "0",
+            vacio: "0",
+            page: "1",
+            start: "0",
+            limit: "5",
+          });
+          const r = await fetch(`${urlBase}pallet/find_by_paginated?${qs}`, { credentials: "include" });
+          if (!r.ok) throw new Error(`find_by_paginated: HTTP ${r.status}`);
+          const json = await r.json();
+          const exacta = (json.content || []).find((f) => String(f.numero).trim().toUpperCase() === numero.toUpperCase());
+          // Encontrado pero sin estado cargado en el WMS -> "SIN ESTADO" (no se
+          // confunde con un contenedor que el WMS no devolvió: ese va null).
+          return { contenedor: numero, estado: exacta ? exacta.estadoValor || "SIN ESTADO" : null };
+        };
+        // 5 consultas en paralelo dentro del lote.
+        const salida = [];
+        for (let j = 0; j < lote.length; j += 5) {
+          salida.push(...(await Promise.all(lote.slice(j, j + 5).map(consultar))));
+        }
+        return salida;
+      },
+      { urlBase: URL_BASE, lote }
+    );
+    resultados.push(...filas);
+    if (onProgreso) await onProgreso(resultados.length, numeros.length);
+  }
+  return resultados;
+}
+
 const REPORTES = {
   grupo: (page) =>
     reportePedidosResumen(page, {
@@ -663,6 +723,7 @@ module.exports = {
   descargarUnReporte,
   chequearSesion,
   parsearContenedoresCsv,
+  consultarEstadosContenedores,
   esCierreInesperado,
   setArchivosRemaManuales,
   getRemaManualesNoEncontrados,

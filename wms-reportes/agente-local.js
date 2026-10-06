@@ -357,6 +357,93 @@ async function correrPedidoContenedores(config, pedido, paginas) {
   return [archivo];
 }
 
+// --- Seguimiento Urgencias: estado real de cada contenedor en el WMS ---
+// Consulta (JSON, sin descargar ningún archivo) el estado de cada contenedor
+// cargado en los bloques y lo guarda en el Tablero; la pantalla marca como
+// "Despachado" los que están en PA_CARGA_CAMION.
+const LOTE_ESTADOS_URGENCIAS = 500;
+
+async function traerContenedoresUrgencias(config) {
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/urgencias/contenedores`, {
+    headers: headersAgente(config.token),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) throw new Error(data?.error || `HTTP ${res.status}`);
+  return Array.isArray(data.contenedores) ? data.contenedores : [];
+}
+
+async function actualizarEstadosUrgencias(config, paginaWms, contenedores, onProgreso) {
+  await paginaWms.goto(descargador.URL_BASE, { waitUntil: "networkidle" });
+  await paginaWms.waitForTimeout(1000);
+  await descargador.chequearSesion(paginaWms);
+
+  const estados = await descargador.consultarEstadosContenedores(paginaWms, contenedores, onProgreso);
+
+  for (let i = 0; i < estados.length; i += LOTE_ESTADOS_URGENCIAS) {
+    const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/urgencias/estados`, {
+      method: "POST",
+      headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+      body: JSON.stringify({ estados: estados.slice(i, i + LOTE_ESTADOS_URGENCIAS) }),
+    });
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Error subiendo estados de contenedores al Tablero (HTTP ${res.status}).`);
+    }
+  }
+  return estados;
+}
+
+// Pedido manual "Actualizar estados desde WMS" (botón en Seguimiento Urgencias).
+async function correrPedidoUrgenciasEstados(config, pedido, paginas) {
+  const { paginaWms } = paginas;
+  await avisarProgreso(config.token, pedido.id, 5, "Leyendo los contenedores cargados...");
+  const contenedores = await traerContenedoresUrgencias(config);
+  if (contenedores.length === 0) {
+    pedido.avisoResultado = "No hay contenedores cargados en Seguimiento Urgencias.";
+    return [];
+  }
+
+  const estados = await actualizarEstadosUrgencias(config, paginaWms, contenedores, (hechos, total) =>
+    avisarProgreso(
+      config.token,
+      pedido.id,
+      10 + Math.round((hechos / total) * 80),
+      `Consultando el WMS: contenedor ${hechos}/${total}...`
+    )
+  );
+  const noEncontrados = estados.filter((e) => !e.estado).length;
+  console.log(`  -> ${estados.length} contenedores consultados (${noEncontrados} sin respuesta del WMS).`);
+  if (noEncontrados > 0) {
+    pedido.avisoResultado = `${noEncontrados} contenedor(es) no figuran en el WMS (quedan como "sin dato").`;
+  }
+  return [];
+}
+
+// Refresco automático y liviano (sin que nadie apriete el botón), solo desde
+// modoLoop() cuando el Agente está ocioso: si no hay contenedores cargados,
+// ni siquiera abre el navegador.
+const INTERVALO_REFRESCO_URGENCIAS_MS = 15 * 60 * 1000;
+
+async function refrescarEstadosUrgenciasAutomatico(config) {
+  const contenedores = await traerContenedoresUrgencias(config);
+  if (contenedores.length === 0) return;
+
+  await conLock(
+    async () => {
+      const contextos = await abrirContextos({ headless: true });
+      try {
+        const estados = await actualizarEstadosUrgencias(config, contextos.paginaWms, contenedores);
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Refresco automático de estados de urgencias: ${estados.length} contenedores.`
+        );
+      } finally {
+        await cerrarContextos(contextos);
+      }
+    },
+    { maxEsperaMs: 5_000, silencioso: true }
+  );
+}
+
 // Cuánto esperar como mínimo entre dos descargas del reporte de Contenedores
 // cuando el motivo es "faltan marcas": si faltan contenedores que el WMS no
 // trae como CI, igual no se vuelve a bajar en cada import.
@@ -844,6 +931,8 @@ async function atenderPedido(config, pedido) {
                 ? await correrPedidoDespachoImprimir(config, pedido, contextos, "reimpresion")
                 : pedido.seccion === "contenedores_wms"
                 ? await correrPedidoContenedores(config, pedido, contextos)
+                : pedido.seccion === "urgencias_estados_wms"
+                ? await correrPedidoUrgenciasEstados(config, pedido, contextos)
                 : await correrPedido(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, pedido.avisoResultado || "OK");
             borrarArchivos(archivos);
@@ -907,6 +996,7 @@ async function modoLoop() {
   // INTERVALO_REFRESCO_ESTADOS_MS -- ver refrescarEstadosDespachoAutomatico.
   let proximoRefrescoEstados = Date.now();
   let proximoCompletarPacking = Date.now();
+  let proximoRefrescoUrgencias = Date.now();
   // Backoff (SOLO se usa sin Realtime): recién arrancado (o apenas terminó
   // un pedido) consulta rápido por si hay otro pedido encolado enseguida;
   // si se queda sin nada por un rato, va espaciando las consultas -- el
@@ -929,6 +1019,14 @@ async function modoLoop() {
             await refrescarEstadosDespachoAutomatico(config);
           } catch (err) {
             console.error("Error en el refresco automático de estados WMS:", err instanceof Error ? err.message : err);
+          }
+        }
+        if (Date.now() >= proximoRefrescoUrgencias) {
+          proximoRefrescoUrgencias = Date.now() + INTERVALO_REFRESCO_URGENCIAS_MS;
+          try {
+            await refrescarEstadosUrgenciasAutomatico(config);
+          } catch (err) {
+            console.error("Error en el refresco automático de estados de urgencias:", err instanceof Error ? err.message : err);
           }
         }
         if (Date.now() >= proximoCompletarPacking) {

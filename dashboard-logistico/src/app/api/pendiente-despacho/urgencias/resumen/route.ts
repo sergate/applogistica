@@ -17,7 +17,14 @@ export const revalidate = 0;
 
 const vacio = (v: string | null): boolean => !v || v.trim() === "";
 
+// Estados del contenedor en el WMS que significan "ya salió del depósito":
+// PA_CARGA_CAMION (cargado en el camión, el criterio que usa el negocio) y
+// PA_DESPACHADO (estado posterior que figura en contenedores viejos).
+const ESTADOS_DESPACHADO = new Set(["PA_CARGA_CAMION", "PA_DESPACHADO"]);
+
 interface UrgenciaContenedorRow {
+  estado_wms: string | null;
+  estado_wms_en: string | null;
   id: string;
   contenedor: string;
   nota: string | null;
@@ -43,7 +50,7 @@ async function fetchTodosLosContenedores(): Promise<UrgenciaContenedorRow[]> {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("urgencias_contenedores")
-      .select("id, contenedor, nota, bloque, fecha, created_at")
+      .select("id, contenedor, nota, bloque, fecha, estado_wms, estado_wms_en, created_at")
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -94,9 +101,13 @@ export async function GET() {
     for (const r of lineasPropios) propiosPorNumero.set(r.numero, r);
 
     let updatedAt: string | null = null;
+    let estadosActualizadosEn: string | null = null;
 
     const filas = ((contenedores ?? []) as UrgenciaContenedorRow[]).map((c) => {
       if (!updatedAt || c.created_at > updatedAt) updatedAt = c.created_at;
+      if (c.estado_wms_en && (!estadosActualizadosEn || c.estado_wms_en > estadosActualizadosEn)) {
+        estadosActualizadosEn = c.estado_wms_en;
+      }
 
       const lineaClientes = clientesPorNumero.get(c.contenedor);
       const lineaPropios = !lineaClientes ? propiosPorNumero.get(c.contenedor) : undefined;
@@ -132,10 +143,15 @@ export async function GET() {
         curva: linea?.curva || "SIN CURVA",
         posicion: posicionesPorContenedor.get(c.contenedor) || null,
         conRemito,
+        // Estado real en el WMS: null = todavía no se consultó o no se
+        // encontró (ver "NO ENCONTRADO"), true/false = despachado o no.
+        estadoWms: c.estado_wms,
+        despachado:
+          !c.estado_wms || c.estado_wms === "NO ENCONTRADO" ? null : ESTADOS_DESPACHADO.has(c.estado_wms),
       };
     });
 
-    return NextResponse.json({ success: true, filas, updatedAt });
+    return NextResponse.json({ success: true, filas, updatedAt, estadosActualizadosEn });
   } catch (err) {
     return NextResponse.json(
       { success: false, error: err instanceof Error ? err.message : "Error inesperado en el servidor" },

@@ -72,6 +72,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "PD-Clientes", label: "Clientes" },
       { key: "PD-Propios", label: "Propios" },
       { key: "PD-Urgencias", label: "Seguimiento Urgencias" },
+      { key: "PD-Urgencias-ActualizarWMS", label: "Actualizar estados de contenedores desde WMS (en Seguimiento Urgencias)" },
       { key: "PD-CargaDatos", label: "Carga de Datos" },
     ],
   },

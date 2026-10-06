@@ -16,7 +16,8 @@ type Seccion =
   | "despacho_importar"
   | "despacho_imprimir"
   | "despacho_reimprimir"
-  | "contenedores_wms";
+  | "contenedores_wms"
+  | "urgencias_estados_wms";
 
 interface PedidoEstado {
   id: number;
