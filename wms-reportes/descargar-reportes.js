@@ -213,6 +213,25 @@ async function vaciarCampoTexto(page, placeholder) {
   await page.keyboard.press("Delete");
 }
 
+// Vacía un combo de ExtJS por su emptyText y VERIFICA que haya quedado vacío:
+// borrar el texto con el teclado no siempre alcanza (el combo puede volver a su
+// valor por defecto al perder el foco) y un filtro que queda puesto cambia en
+// silencio qué trae el reporte. Si el combo no se puede vaciar, corta con error
+// en vez de seguir y descargar un archivo incompleto.
+async function vaciarComboExt(page, emptyText) {
+  await vaciarCampoTexto(page, emptyText);
+  const estado = await page.evaluate((emptyText) => {
+    const cmps = Ext.ComponentQuery.query(`combobox[emptyText="${emptyText}"]`);
+    const cmp = cmps.find((c) => c.isVisible && c.isVisible(true)) || cmps[0];
+    if (!cmp) return "sin-combo";
+    cmp.clearValue();
+    return cmp.getValue() ? "con-valor" : "vacio";
+  }, emptyText);
+  if (estado === "con-valor") {
+    throw new Error(`No pude vaciar el filtro "${emptyText}" del WMS: el reporte saldría incompleto.`);
+  }
+}
+
 // --- Reporte "Bandeja comercial" (Pendiente de Despacho - Clientes) ---
 async function reporteBandejaComercial(page) {
   console.log("> bandeja_comercial");
@@ -234,7 +253,7 @@ async function reportePreDespacho(page) {
   await completarCampoTexto(page, "Fecha desde", fechaDosAniosAtras());
   // El campo "Estado remito" trae "Pendiente" tildado por defecto -- hay que
   // vaciarlo para traer todos los estados.
-  await vaciarCampoTexto(page, "Estado remito");
+  await vaciarComboExt(page, "Estado remito");
   await clickBotonExt(page, "Buscar");
   await esperarGridCargado(page);
   return descargarConBoton(page, "Excel", `pre_despacho_${timestamp()}.xlsx`);
