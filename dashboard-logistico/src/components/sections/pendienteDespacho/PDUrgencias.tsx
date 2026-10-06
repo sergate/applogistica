@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { useTabData } from "@/hooks/useTabData";
 import { SkeletonTable } from "@/components/Skeleton";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { fmtNum, fmtFecha } from "@/components/dashboard/formatters";
+import { fmtNum, fmtFecha, fmtSoloFecha } from "@/components/dashboard/formatters";
 
 interface UrgenciaFila {
   contenedor: string;
   nota: string | null;
+  bloque: string;
+  fecha: string | null;
   cargadoEn: string;
   codigoCliente: string;
   cliente: string;
@@ -17,6 +19,23 @@ interface UrgenciaFila {
   curva: string;
   posicion: string | null;
   conRemito: boolean;
+}
+
+interface ClienteConsolidado {
+  codigoCliente: string;
+  cliente: string;
+  canal: string;
+  cajas: number;
+  conRemito: number;
+}
+
+interface BloqueResumen {
+  bloque: string;
+  fecha: string | null;
+  filas: UrgenciaFila[];
+  clientes: ClienteConsolidado[];
+  cajas: number;
+  conRemito: number;
 }
 
 export default function PDUrgencias() {
@@ -33,80 +52,89 @@ export default function PDUrgencias() {
     dataVersion
   );
 
+  const [filtroBloqueUrgencias, setFiltroBloqueUrgencias] = useState("TODOS");
   const [filtroCanalUrgencias, setFiltroCanalUrgencias] = useState("TODAS");
   const [filtroTipoUrgencias, setFiltroTipoUrgencias] = useState("TODAS");
   const [filtroCurvaUrgencias, setFiltroCurvaUrgencias] = useState("TODAS");
   const [filtroClienteUrgencias, setFiltroClienteUrgencias] = useState("");
-  const [clienteExpandidoUrgencias, setClienteExpandidoUrgencias] = useState<string | null>(null);
+  // Cliente expandido dentro de un bloque: "bloque|codigoCliente".
+  const [expandidoUrgencias, setExpandidoUrgencias] = useState<string | null>(null);
 
+  const bloquesDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.bloque))).sort();
   const canalesDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.canal))).sort();
   const tiposDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.curva))).sort();
 
-  const { filasFiltradasUrgencias, filasTablaUrgencias, subtotalUrgencias } = useMemo(() => {
+  const { filasFiltradasUrgencias, bloquesUrgencias } = useMemo(() => {
     const filasFiltradasUrgencias = (urgenciasData?.filas ?? []).filter(
       (f) =>
+        (filtroBloqueUrgencias === "TODOS" || f.bloque === filtroBloqueUrgencias) &&
         (filtroCanalUrgencias === "TODAS" || f.canal === filtroCanalUrgencias) &&
         (filtroTipoUrgencias === "TODAS" || f.tipo === filtroTipoUrgencias) &&
         (filtroCurvaUrgencias === "TODAS" || f.curva === filtroCurvaUrgencias) &&
         (!filtroClienteUrgencias.trim() || f.cliente.toLowerCase().includes(filtroClienteUrgencias.trim().toLowerCase()))
     );
 
-    const consolidadoClientesUrgencias = new Map<
-      string,
-      { codigoCliente: string; cliente: string; canal: string; cajas: number; conRemito: number }
-    >();
+    // Un bloque por cada nombre de bloque; dentro, una fila por cliente.
+    const porBloque = new Map<string, BloqueResumen>();
     for (const f of filasFiltradasUrgencias) {
-      if (!consolidadoClientesUrgencias.has(f.codigoCliente)) {
-        consolidadoClientesUrgencias.set(f.codigoCliente, {
-          codigoCliente: f.codigoCliente,
-          cliente: f.cliente,
-          canal: f.canal,
-          cajas: 0,
-          conRemito: 0,
-        });
+      if (!porBloque.has(f.bloque)) {
+        porBloque.set(f.bloque, { bloque: f.bloque, fecha: f.fecha, filas: [], clientes: [], cajas: 0, conRemito: 0 });
       }
-      const acc = consolidadoClientesUrgencias.get(f.codigoCliente)!;
-      acc.cajas += 1;
-      if (f.conRemito) acc.conRemito += 1;
+      const b = porBloque.get(f.bloque)!;
+      b.filas.push(f);
+      b.cajas += 1;
+      if (f.conRemito) b.conRemito += 1;
+      if (f.fecha && (!b.fecha || f.fecha < b.fecha)) b.fecha = f.fecha;
     }
 
-    const filasTablaUrgencias = Array.from(consolidadoClientesUrgencias.values()).sort((a, b) =>
-      a.canal !== b.canal ? a.canal.localeCompare(b.canal) : a.cliente.localeCompare(b.cliente)
+    for (const b of porBloque.values()) {
+      const consolidado = new Map<string, ClienteConsolidado>();
+      for (const f of b.filas) {
+        if (!consolidado.has(f.codigoCliente)) {
+          consolidado.set(f.codigoCliente, {
+            codigoCliente: f.codigoCliente,
+            cliente: f.cliente,
+            canal: f.canal,
+            cajas: 0,
+            conRemito: 0,
+          });
+        }
+        const acc = consolidado.get(f.codigoCliente)!;
+        acc.cajas += 1;
+        if (f.conRemito) acc.conRemito += 1;
+      }
+      b.clientes = Array.from(consolidado.values()).sort((a, c) =>
+        a.canal !== c.canal ? a.canal.localeCompare(c.canal) : a.cliente.localeCompare(c.cliente)
+      );
+    }
+
+    const bloquesUrgencias = Array.from(porBloque.values()).sort((a, b) =>
+      (b.fecha || "").localeCompare(a.fecha || "") || a.bloque.localeCompare(b.bloque)
     );
 
-    const subtotalUrgencias = filasTablaUrgencias.reduce(
-      (acc, f) => ({ cajas: acc.cajas + f.cajas, conRemito: acc.conRemito + f.conRemito }),
-      { cajas: 0, conRemito: 0 }
-    );
+    return { filasFiltradasUrgencias, bloquesUrgencias };
+  }, [urgenciasData, filtroBloqueUrgencias, filtroCanalUrgencias, filtroTipoUrgencias, filtroCurvaUrgencias, filtroClienteUrgencias]);
 
-    return { filasFiltradasUrgencias, filasTablaUrgencias, subtotalUrgencias };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [urgenciasData, filtroCanalUrgencias, filtroTipoUrgencias, filtroCurvaUrgencias, filtroClienteUrgencias]);
-
-  const detalleClienteExpandidoUrgencias = useMemo(
-    () =>
-      clienteExpandidoUrgencias
-        ? filasFiltradasUrgencias.filter((f) => f.codigoCliente === clienteExpandidoUrgencias)
-        : [],
-    [filasFiltradasUrgencias, clienteExpandidoUrgencias]
-  );
-
-  const handleClienteClickUrgencias = (codigoCliente: string) => {
-    setClienteExpandidoUrgencias(clienteExpandidoUrgencias === codigoCliente ? null : codigoCliente);
+  const handleClienteClickUrgencias = (clave: string) => {
+    setExpandidoUrgencias(expandidoUrgencias === clave ? null : clave);
   };
 
   const exportarUrgenciasExcel = async () => {
     const XLSX = await import("xlsx");
-    const filasResumen = filasTablaUrgencias.map((f) => ({
-      Canal: f.canal,
-      Cliente: f.cliente,
-      Cajas: f.cajas,
-      "Con Remito": f.conRemito,
-    }));
+    const filasResumen = bloquesUrgencias.flatMap((b) =>
+      b.clientes.map((f) => ({
+        Bloque: b.bloque,
+        Canal: f.canal,
+        Cliente: f.cliente,
+        Cajas: f.cajas,
+        "Con Remito": f.conRemito,
+      }))
+    );
     const filasDetalle = [...filasFiltradasUrgencias]
-      .sort((a, b) => a.cliente.localeCompare(b.cliente))
+      .sort((a, b) => a.bloque.localeCompare(b.bloque) || a.cliente.localeCompare(b.cliente))
       .map((f) => ({
+        Bloque: f.bloque,
         Contenedor: f.contenedor,
         Cliente: f.cliente,
         Canal: f.canal,
@@ -138,12 +166,23 @@ export default function PDUrgencias() {
         )}
       </div>
       <p className="text-sm text-slate-500 mb-4">
-        Contenedores cargados en &quot;Carga de Datos&quot;, cruzados con Pendiente de Despacho y Ocupación
+        Contenedores cargados por bloque en &quot;Carga de Datos&quot;, cruzados con Pendiente de Despacho y Ocupación
         Almacén. Hacé click en un cliente para ver el detalle por contenedor.
       </p>
 
       {/* FILTROS */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
+        <select
+          value={filtroBloqueUrgencias}
+          onChange={(e) => setFiltroBloqueUrgencias(e.target.value)}
+          className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        >
+          <option value="TODOS">Todos los bloques</option>
+          {bloquesDisponiblesUrgencias.map((b) => (
+            <option key={b} value={b}>{b}</option>
+          ))}
+        </select>
+
         <select
           value={filtroCanalUrgencias}
           onChange={(e) => setFiltroCanalUrgencias(e.target.value)}
@@ -187,6 +226,7 @@ export default function PDUrgencias() {
 
         <button
           onClick={() => {
+            setFiltroBloqueUrgencias("TODOS");
             setFiltroCanalUrgencias("TODAS");
             setFiltroTipoUrgencias("TODAS");
             setFiltroCurvaUrgencias("TODAS");
@@ -221,86 +261,110 @@ export default function PDUrgencias() {
         </div>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left whitespace-nowrap">
-          <thead>
-            {filasTablaUrgencias.length > 0 && (
-              <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
-                <td className="py-3 px-4 text-left" colSpan={2}>
-                  Subtotal — {filasTablaUrgencias.length} cliente{filasTablaUrgencias.length === 1 ? "" : "s"}
-                </td>
-                <td className="py-3 px-4 text-left">{fmtNum(subtotalUrgencias.cajas)}</td>
-                <td className="py-3 px-4 text-left">{fmtNum(subtotalUrgencias.conRemito)}</td>
-              </tr>
-            )}
-            <tr className="text-slate-500 font-medium border-b border-slate-200">
-              <th className="py-3 px-4 text-left">Canal</th>
-              <th className="py-3 px-4 text-left">Cliente</th>
-              <th className="py-3 px-4 text-left">Cajas</th>
-              <th className="py-3 px-4 text-left">Con Remito</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filasTablaUrgencias.map((row) => {
-              const estaExpandido = clienteExpandidoUrgencias === row.codigoCliente;
-              return (
-                <>
-                <tr
-                  key={row.codigoCliente}
-                  onClick={() => handleClienteClickUrgencias(row.codigoCliente)}
-                  className={`cursor-pointer transition-colors ${estaExpandido ? "bg-slate-100" : "hover:bg-slate-50"}`}
-                >
-                  <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
-                  <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
-                  <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
-                  <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.conRemito)}</td>
-                </tr>
+      <div className="space-y-5">
+        {bloquesUrgencias.map((b) => (
+          <div key={b.bloque} className="border border-slate-200 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between flex-wrap gap-2 px-5 py-3.5 bg-slate-50 border-b border-slate-200">
+              <div>
+                <div className="font-bold text-slate-900">{b.bloque}</div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {b.filas.length} contenedor{b.filas.length === 1 ? "" : "es"}
+                  {b.fecha ? ` · fecha ${fmtSoloFecha(b.fecha)}` : ""}
+                </div>
+              </div>
+              <div className="flex items-center gap-5 text-sm">
+                <span className="text-slate-500">
+                  Cajas <span className="font-bold text-slate-800">{fmtNum(b.cajas)}</span>
+                </span>
+                <span className="text-slate-500">
+                  Con Remito <span className="font-bold text-emerald-700">{fmtNum(b.conRemito)}</span>
+                </span>
+              </div>
+            </div>
 
-                {estaExpandido && (
-                  <tr>
-                    <td colSpan={4} className="bg-slate-50 px-4 py-4">
-                      <p className="text-xs font-semibold text-slate-500 mb-2">
-                        Detalle por contenedor — {row.cliente}
-                      </p>
-                      <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
-                        <thead className="text-slate-500 font-medium border-b border-slate-200">
-                          <tr>
-                            <th className="py-2 px-3 text-left">Contenedor</th>
-                            <th className="py-2 px-3 text-left">Tipo</th>
-                            <th className="py-2 px-3 text-left">Curva</th>
-                            <th className="py-2 px-3 text-left">Posición</th>
-                            <th className="py-2 px-3 text-left">Con Remito</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {detalleClienteExpandidoUrgencias.map((d) => (
-                            <tr key={d.contenedor}>
-                              <td className="py-2 px-3 text-left font-medium text-slate-700">{d.contenedor}</td>
-                              <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
-                              <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
-                              <td className="py-2 px-3 text-left text-slate-600">{d.posicion || "—"}</td>
-                              <td className="py-2 px-3 text-left">
-                                <span
-                                  className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                                    d.conRemito ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                                  }`}
-                                >
-                                  {d.conRemito ? "Sí" : "No"}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left whitespace-nowrap">
+                <thead>
+                  <tr className="bg-blue-50 border-b-2 border-blue-200 font-bold text-blue-900">
+                    <td className="py-3 px-4 text-left" colSpan={2}>
+                      Subtotal — {b.clientes.length} cliente{b.clientes.length === 1 ? "" : "s"}
                     </td>
+                    <td className="py-3 px-4 text-left">{fmtNum(b.cajas)}</td>
+                    <td className="py-3 px-4 text-left">{fmtNum(b.conRemito)}</td>
                   </tr>
-                )}
-                </>
-              );
-            })}
-          </tbody>
-        </table>
-        {filasTablaUrgencias.length === 0 && !urgenciasLoading && (
+                  <tr className="text-slate-500 font-medium border-b border-slate-200">
+                    <th className="py-3 px-4 text-left">Canal</th>
+                    <th className="py-3 px-4 text-left">Cliente</th>
+                    <th className="py-3 px-4 text-left">Cajas</th>
+                    <th className="py-3 px-4 text-left">Con Remito</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {b.clientes.map((row) => {
+                    const clave = `${b.bloque}|${row.codigoCliente}`;
+                    const estaExpandido = expandidoUrgencias === clave;
+                    return (
+                      <Fragment key={clave}>
+                        <tr
+                          onClick={() => handleClienteClickUrgencias(clave)}
+                          className={`cursor-pointer transition-colors ${estaExpandido ? "bg-slate-100" : "hover:bg-slate-50"}`}
+                        >
+                          <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.conRemito)}</td>
+                        </tr>
+
+                        {estaExpandido && (
+                          <tr>
+                            <td colSpan={4} className="bg-slate-50 px-4 py-4">
+                              <p className="text-xs font-semibold text-slate-500 mb-2">
+                                Detalle por contenedor — {row.cliente}
+                              </p>
+                              <table className="w-full text-sm text-left bg-white rounded-lg overflow-hidden border border-slate-200">
+                                <thead className="text-slate-500 font-medium border-b border-slate-200">
+                                  <tr>
+                                    <th className="py-2 px-3 text-left">Contenedor</th>
+                                    <th className="py-2 px-3 text-left">Tipo</th>
+                                    <th className="py-2 px-3 text-left">Curva</th>
+                                    <th className="py-2 px-3 text-left">Posición</th>
+                                    <th className="py-2 px-3 text-left">Con Remito</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {b.filas
+                                    .filter((f) => f.codigoCliente === row.codigoCliente)
+                                    .map((d) => (
+                                      <tr key={d.contenedor}>
+                                        <td className="py-2 px-3 text-left font-medium text-slate-700">{d.contenedor}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{d.tipo}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{d.curva}</td>
+                                        <td className="py-2 px-3 text-left text-slate-600">{d.posicion || "—"}</td>
+                                        <td className="py-2 px-3 text-left">
+                                          <span
+                                            className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                              d.conRemito ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
+                                            }`}
+                                          >
+                                            {d.conRemito ? "Sí" : "No"}
+                                          </span>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                </tbody>
+                              </table>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))}
+        {bloquesUrgencias.length === 0 && !urgenciasLoading && (
           <p className="text-sm text-slate-400 text-center py-8">No hay contenedores cargados todavía.</p>
         )}
       </div>

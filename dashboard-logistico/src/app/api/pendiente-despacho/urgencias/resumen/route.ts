@@ -21,6 +21,8 @@ interface UrgenciaContenedorRow {
   id: string;
   contenedor: string;
   nota: string | null;
+  bloque: string | null;
+  fecha: string | null;
   created_at: string;
 }
 
@@ -41,7 +43,7 @@ async function fetchTodosLosContenedores(): Promise<UrgenciaContenedorRow[]> {
   while (true) {
     const { data, error } = await supabaseAdmin
       .from("urgencias_contenedores")
-      .select("id, contenedor, nota, created_at")
+      .select("id, contenedor, nota, bloque, fecha, created_at")
       .order("created_at", { ascending: false })
       .order("id", { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
@@ -120,6 +122,8 @@ export async function GET() {
       return {
         contenedor: c.contenedor,
         nota: c.nota,
+        bloque: c.bloque || "Sin bloque",
+        fecha: c.fecha,
         cargadoEn: c.created_at,
         codigoCliente: noEncontrado ? "DESPACHADO" : codigo || "SIN CODIGO",
         cliente: noEncontrado ? "DESPACHADO" : info?.nombre || (linea?.cliente || "SIN CLIENTE").trim(),
