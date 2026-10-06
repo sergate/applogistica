@@ -16,8 +16,8 @@ interface UrgenciaFila {
   codigoCliente: string;
   cliente: string;
   canal: string;
-  /** Grupo de Clientes (Despacho -> Grupos de Clientes); null = sin grupo determinado ("Clientes"). */
-  grupoCliente: string | null;
+  /** Grupos de Clientes (Despacho -> Grupos de Clientes) del cliente; vacío = sin grupo ("Clientes"). */
+  grupos: string[];
   tipo: string;
   curva: string;
   posicion: string | null;
@@ -32,7 +32,7 @@ interface ClienteConsolidado {
   codigoCliente: string;
   cliente: string;
   canal: string;
-  grupoCliente: string | null;
+  grupos: string[];
   cajas: number;
   conRemito: number;
   despachados: number;
@@ -123,13 +123,11 @@ export default function PDUrgencias() {
   const tiposDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.tipo))).sort();
   const curvasDisponiblesUrgencias = Array.from(new Set((urgenciasData?.filas ?? []).map((f) => f.curva))).sort();
   // Solo los grupos de clientes que aparecen en los contenedores cargados.
-  // "Clientes" es el bucket de los que no tienen grupo determinado (igual que
-  // en Por Pedidos).
-  const hayContenedoresSinGrupoCliente = (urgenciasData?.filas ?? []).some((f) => !f.grupoCliente);
+  // "Clientes" es el bucket de los que no tienen ningún grupo (igual que en
+  // Por Pedidos).
+  const hayContenedoresSinGrupoCliente = (urgenciasData?.filas ?? []).some((f) => f.grupos.length === 0);
   const gruposClientesDisponiblesUrgencias = [
-    ...Array.from(
-      new Set((urgenciasData?.filas ?? []).map((f) => f.grupoCliente).filter((g): g is string => !!g))
-    ).sort(),
+    ...Array.from(new Set((urgenciasData?.filas ?? []).flatMap((f) => f.grupos))).sort(),
     ...(hayContenedoresSinGrupoCliente ? ["Clientes"] : []),
   ];
 
@@ -141,7 +139,7 @@ export default function PDUrgencias() {
         (filtroTipoUrgencias === "TODAS" || f.tipo === filtroTipoUrgencias) &&
         (filtroCurvaUrgencias === "TODAS" || f.curva === filtroCurvaUrgencias) &&
         (filtroGruposClientesUrgencias.length === 0 ||
-          filtroGruposClientesUrgencias.includes(f.grupoCliente || "Clientes")) &&
+          (f.grupos.length > 0 ? f.grupos : ["Clientes"]).some((g) => filtroGruposClientesUrgencias.includes(g))) &&
         (!filtroClienteUrgencias.trim() || f.cliente.toLowerCase().includes(filtroClienteUrgencias.trim().toLowerCase()))
     );
 
@@ -175,7 +173,7 @@ export default function PDUrgencias() {
             codigoCliente: f.codigoCliente,
             cliente: f.cliente,
             canal: f.canal,
-            grupoCliente: f.grupoCliente,
+            grupos: f.grupos,
             cajas: 0,
             conRemito: 0,
             despachados: 0,
@@ -209,7 +207,7 @@ export default function PDUrgencias() {
         Bloque: b.bloque,
         Canal: f.canal,
         Cliente: f.cliente,
-        "Grupo de Clientes": f.grupoCliente || "Clientes",
+        "Grupo de Clientes": f.grupos.length > 0 ? f.grupos.join(", ") : "Clientes",
         Cajas: f.cajas,
         "Con Predespacho": f.conRemito,
         Despachados: f.despachados,
@@ -222,7 +220,7 @@ export default function PDUrgencias() {
         Contenedor: f.contenedor,
         Cliente: f.cliente,
         Canal: f.canal,
-        "Grupo de Clientes": f.grupoCliente || "Clientes",
+        "Grupo de Clientes": f.grupos.length > 0 ? f.grupos.join(", ") : "Clientes",
         Tipo: f.tipo,
         Curva: f.curva,
         Posición: f.posicion || "SIN POSICIÓN",
@@ -469,7 +467,7 @@ export default function PDUrgencias() {
                         >
                           <td className="py-3 px-4 text-left font-bold text-slate-900">{row.canal}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{row.cliente}</td>
-                          <td className="py-3 px-4 text-left text-slate-600">{row.grupoCliente || "Clientes"}</td>
+                          <td className="py-3 px-4 text-left text-slate-600">{row.grupos.length > 0 ? row.grupos.join(", ") : "Clientes"}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.cajas)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.conRemito)}</td>
                           <td className="py-3 px-4 text-left text-slate-600">{fmtNum(row.despachados)}</td>

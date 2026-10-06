@@ -7,7 +7,7 @@ import {
   PendienteDespachoRow,
   PendienteDespachoPropiosRow,
 } from "@/lib/pendienteDespachoHelpers";
-import { fetchClientesInfo, fetchGruposClientesPorCodigo, resolverGrupoClienteUnico } from "@/lib/resumenHelpers";
+import { fetchClientesInfo, fetchGruposClientesPorCodigo } from "@/lib/resumenHelpers";
 import { fetchPosicionesPorContenedor } from "@/lib/almacenHelpers";
 import { requireAuth, esErrorAuth } from "@/lib/auth";
 
@@ -151,15 +151,15 @@ export async function GET() {
       };
     });
 
-    // Grupo de Clientes (Despacho -> Grupos de Clientes), con la misma lógica
-    // que Status de Preparación - Por Pedidos: un único grupo por fila. Si el
-    // cliente está en varios grupos a la vez, esa lógica los desambigua por el
-    // día del nombre del pedido -- un contenedor no tiene nombre de pedido, así
-    // que en ese caso (y si no tiene grupo) queda null = "Clientes".
+    // Grupos de Clientes (Despacho -> Grupos de Clientes), como en Pendiente de
+    // Despacho - Propios: un cliente puede estar en varios grupos a la vez
+    // (ej. entrega martes Y jueves) y se muestran todos. Un contenedor no tiene
+    // nombre de pedido para desambiguar por día (como hace Por Pedidos), así que
+    // no se elige uno. Sin grupo = lista vacía ("Clientes" en pantalla).
     const gruposClientesPorCodigo = await fetchGruposClientesPorCodigo();
     const filas = filasSinGrupo.map((f) => ({
       ...f,
-      grupoCliente: resolverGrupoClienteUnico(null, gruposClientesPorCodigo.get(f.codigoCliente) || []),
+      grupos: gruposClientesPorCodigo.get(f.codigoCliente) || [],
     }));
 
     return NextResponse.json({ success: true, filas, updatedAt, estadosActualizadosEn });
