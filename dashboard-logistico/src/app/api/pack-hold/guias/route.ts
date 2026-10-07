@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAdminPermission } from "@/lib/adminAuth";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
+import { diasHabilesEntre } from "@/lib/diasHabiles";
+
+// Fecha (YYYY-MM-DD) en horario de Argentina: la creación viene en UTC y a la
+// noche cambiaría de día si se cortara en UTC.
+const fechaArgentina = (d: Date): string =>
+  new Intl.DateTimeFormat("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }).format(d);
+
+const DIA_MS = 24 * 60 * 60 * 1000;
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +55,7 @@ export async function GET() {
   }
 
   try {
-    const [guiasTodas, posiciones, planGuias] = await Promise.all([
+    const [guiasTodas, posiciones, planGuias, feriadosRows] = await Promise.all([
       fetchAllPaginated<GuiaRow>(
         "ph_guias",
         "despacho_cab_id, guia, cliente_codigo, cliente_nombre, estado, total_contenedores, fecha_creacion, actualizada_en"
@@ -57,7 +65,11 @@ export async function GET() {
         "posicion, despacho_cab_id, guia, cliente_nombre, registrada_en, registrada_por"
       ),
       fetchAllPaginated<PlanGuiaRow>("ph_plan_guias", "despacho_cab_id, ph_planes(codigo, estado)"),
+      fetchAllPaginated<{ fecha: string }>("feriados", "fecha"),
     ]);
+
+    const feriados = new Set(feriadosRows.map((f) => f.fecha));
+    const hoy = fechaArgentina(new Date());
 
     const guiasPendientes = guiasTodas.filter((g) => g.estado === "pendiente");
 
@@ -93,7 +105,13 @@ export async function GET() {
 
     const guias = guiasPendientes.map((g) => {
       const posicionesGuia = (posicionesPorGuia.get(g.despacho_cab_id) ?? []).sort();
+      // Antigüedad: días hábiles transcurridos desde la creación hasta hoy (creada hoy = 0).
+      const fecha = g.fecha_creacion ? fechaArgentina(new Date(g.fecha_creacion)) : null;
+      const diaSiguiente = fecha ? fechaArgentina(new Date(new Date(`${fecha}T12:00:00Z`).getTime() + DIA_MS)) : null;
+      const antiguedad = fecha && diaSiguiente ? diasHabilesEntre(diaSiguiente, hoy, feriados) : null;
       return {
+        fecha,
+        antiguedad,
         despachoCabId: g.despacho_cab_id,
         guia: g.guia ?? "",
         clienteCodigo: g.cliente_codigo ?? "",

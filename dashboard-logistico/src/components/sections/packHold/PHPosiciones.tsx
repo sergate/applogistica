@@ -14,6 +14,8 @@ interface GuiaFila {
   cliente: string;
   contenedores: number;
   fechaCreacion: string | null;
+  fecha: string | null;
+  antiguedad: number | null;
   posiciones: string[];
   estado: "ubicada" | "sin_ubicar";
   plan: string | null;
@@ -40,6 +42,9 @@ interface DetalleGuia {
   packing: { contenedor: string; sku: string; cantidad: number | null }[];
   posiciones: { posicion: string; contenedorEscaneado: string | null; registradaEn: string | null; registradaPor: string | null }[];
 }
+
+// "YYYY-MM-DD" -> "DD/MM/YYYY" sin pasar por Date (evita corrimientos por huso horario).
+const fmtDia = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
 
 const claseSelect =
   "px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer";
@@ -212,6 +217,8 @@ export default function PHPosiciones() {
     const XLSX = await import("xlsx");
     const hojaGuias = guiasFiltradas.map((g) => ({
       Guía: g.guia,
+      Fecha: fmtDia(g.fecha),
+      "Antigüedad (días hábiles)": g.antiguedad ?? "",
       Cliente: g.cliente,
       Contenedores: g.contenedores,
       Posiciones: g.posiciones.join(", "),
@@ -361,6 +368,8 @@ export default function PHPosiciones() {
               <thead>
                 <tr className="text-slate-500 font-medium border-b border-slate-200">
                   <th className="py-3 px-4 text-left">Guía</th>
+                  <th className="py-3 px-4 text-left">Fecha</th>
+                  <th className="py-3 px-4 text-left" title="Días hábiles desde la creación de la guía">Antigüedad (días háb.)</th>
                   <th className="py-3 px-4 text-left">Cliente</th>
                   <th className="py-3 px-4 text-left">Contenedores (WMS)</th>
                   <th className="py-3 px-4 text-left">Posiciones</th>
@@ -378,6 +387,8 @@ export default function PHPosiciones() {
                         className={`cursor-pointer transition-colors ${abierta ? "bg-slate-100" : "hover:bg-slate-50"}`}
                       >
                         <td className="py-3 px-4 text-left font-bold text-slate-900 font-mono">{g.guia}</td>
+                        <td className="py-3 px-4 text-left text-slate-600">{fmtDia(g.fecha) || "—"}</td>
+                        <td className="py-3 px-4 text-left text-slate-700 font-semibold">{g.antiguedad ?? "—"}</td>
                         <td className="py-3 px-4 text-left text-slate-700">{g.cliente}</td>
                         <td className="py-3 px-4 text-left text-slate-600">{fmtNum(g.contenedores)}</td>
                         <td className="py-3 px-4 text-left">
@@ -405,7 +416,7 @@ export default function PHPosiciones() {
 
                       {abierta && (
                         <tr>
-                          <td colSpan={6} className="bg-slate-50 px-4 py-4">
+                          <td colSpan={8} className="bg-slate-50 px-4 py-4">
                             <p className="text-xs font-semibold text-slate-500 mb-3">
                               Detalle de la guía {g.guia} — {g.cliente}
                             </p>
