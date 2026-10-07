@@ -91,6 +91,11 @@ export default function PHPosiciones() {
       sinUbicar: guias.filter((g) => g.estado === "sin_ubicar").length,
       ocupadas: posiciones.length,
       enPlan: guias.filter((g) => g.plan).length,
+      // Bultos = contenedores de las guías. Como no se sabe cuántos contenedores
+      // hay en cada posición, una guía con al menos una posición cuenta con todos
+      // sus bultos como ubicados (no hay ubicaciones parciales).
+      bultosUbicados: guias.filter((g) => g.estado === "ubicada").reduce((acc, g) => acc + g.contenedores, 0),
+      bultosTotales: guias.reduce((acc, g) => acc + g.contenedores, 0),
     }),
     [guias, posiciones]
   );
@@ -270,16 +275,20 @@ export default function PHPosiciones() {
         </p>
 
         {/* KPIs */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
           {[
-            { n: kpis.pendientes, t: "Guías pendientes" },
-            { n: kpis.ubicadas, t: "Guías ubicadas" },
-            { n: kpis.sinUbicar, t: "Guías sin ubicar" },
-            { n: kpis.ocupadas, t: "Posiciones ocupadas" },
-            { n: kpis.enPlan, t: "Guías en un plan" },
+            { n: fmtNum(kpis.pendientes), t: "Guías pendientes" },
+            { n: fmtNum(kpis.ubicadas), t: "Guías ubicadas" },
+            { n: fmtNum(kpis.sinUbicar), t: "Guías sin ubicar" },
+            {
+              n: `${fmtNum(kpis.bultosUbicados)} / ${fmtNum(kpis.bultosTotales)}`,
+              t: "Bultos ubicados / totales",
+            },
+            { n: fmtNum(kpis.ocupadas), t: "Posiciones ocupadas" },
+            { n: fmtNum(kpis.enPlan), t: "Guías en un plan" },
           ].map((k) => (
             <div key={k.t} className="border border-slate-200 rounded-lg px-4 py-3">
-              <div className="text-2xl font-bold text-slate-900">{fmtNum(k.n)}</div>
+              <div className="text-2xl font-bold text-slate-900 whitespace-nowrap">{k.n}</div>
               <div className="text-xs text-slate-500">{k.t}</div>
             </div>
           ))}
