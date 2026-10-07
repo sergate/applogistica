@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { esErrorAuth, usuarioDesdeTokenAgente } from "@/lib/actualizacionesWms";
 import { normalizarContenedor, registrarEvento } from "@/lib/packHold";
+import { reconciliarPlanesPorGuiasDespachadas } from "@/lib/packHoldPlanes";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +117,10 @@ export async function POST(request: NextRequest) {
           .delete()
           .in("despacho_cab_id", idsDespachadas);
         if (errorLiberar) throw new Error(`Supabase (ph_posiciones): ${errorLiberar.message}`);
+
+        // Si alguna estaba en un plan de recogida activo, sus posiciones del plan
+        // se dan por cumplidas (ya se despachó) y el plan se cierra si queda completo.
+        await reconciliarPlanesPorGuiasDespachadas(idsDespachadas);
 
         for (const g of despachadas as { guia: string | null }[]) {
           await registrarEvento({

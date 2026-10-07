@@ -35,6 +35,11 @@ export default function LoginPage() {
           router.refresh();
           return;
         }
+        if (data.subsecciones[0] === "PH-Handheld") {
+          router.push("/pack-hold");
+          router.refresh();
+          return;
+        }
       }
     } catch {
       // Si falla la consulta de permisos, no bloqueamos el login -- entra al
