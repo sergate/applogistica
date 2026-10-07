@@ -62,6 +62,8 @@ import Dotacion from "@/components/sections/personalCd/Dotacion";
 import Vacaciones from "@/components/sections/personalCd/Vacaciones";
 import Sectores from "@/components/sections/personalCd/Sectores";
 import Auditoria from "@/components/sections/personalCd/Auditoria";
+import PHPosiciones from "@/components/sections/packHold/PHPosiciones";
+import PHZonas from "@/components/sections/packHold/PHZonas";
 export default function DashboardLayout() {
   const router = useRouter();
 
@@ -211,6 +213,10 @@ export default function DashboardLayout() {
     if (typeof window === "undefined") return false;
     return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("PCD-");
   });
+  const [isPackHoldOpen, setIsPackHoldOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return (sessionStorage.getItem("tabDespuesDeRefresh") || "").startsWith("PH-");
+  });
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window === "undefined") return "Resumen";
     return sessionStorage.getItem("tabDespuesDeRefresh") || "Resumen";
@@ -318,6 +324,14 @@ export default function DashboardLayout() {
     { key: "PCD-Vacaciones", label: "Vacaciones" },
     { key: "PCD-Sectores", label: "Sectores (Admin)" },
     { key: "PCD-Auditoria", label: "Auditoría (Admin)" },
+  ];
+
+  // "PH-Importar" y "PH-Liberar" NO van acá -- son permisos de capacidad (botón de
+  // importar y registrar/liberar posiciones dentro de Posiciones y Guías).
+  // "PH-Planes" y "PH-Handheld" se suman con las pantallas de la segunda tanda.
+  const packHoldSubSections = [
+    { key: "PH-Posiciones", label: "Posiciones y Guías" },
+    { key: "PH-Zonas", label: "Zonas habilitadas (Admin)" },
   ];
 
   const expedicionSubSections = [
@@ -1466,6 +1480,28 @@ export default function DashboardLayout() {
           </div>
           )}
 
+          {seccionVisible(packHoldSubSections.map((s) => s.key)) && (
+          <div className="pt-2">
+            <button onClick={() => setIsPackHoldOpen(!isPackHoldOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
+              <div className="flex items-center">
+                <svg className="w-5 h-5 mr-3 opacity-75" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" /></svg>
+                Pack and Hold
+              </div>
+              <svg className={`w-4 h-4 transition-transform duration-200 ${isPackHoldOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
+            </button>
+            {isPackHoldOpen && (
+              <div className="mt-1 mb-2 ml-4 pl-4 border-l border-slate-700 space-y-1">
+                {packHoldSubSections.filter((sub) => tienePermiso(sub.key)).map((sub) => (
+                  <button key={sub.key} onClick={() => irA(sub.key)} className={`w-full flex items-center px-3 py-2 rounded-md transition-colors text-sm ${activeTab === sub.key ? "bg-slate-800 text-blue-400 font-semibold" : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/50"}`}>
+                    <span className="w-1.5 h-1.5 rounded-full bg-current mr-2 opacity-50"></span>
+                    {sub.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          )}
+
           {seccionVisible(personalCdSubSections.map((s) => s.key)) && (
           <div className="pt-2">
             <button onClick={() => setIsPersonalCdOpen(!isPersonalCdOpen)} className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg hover:bg-slate-800 hover:text-white transition-colors text-sm font-medium text-slate-200">
@@ -1574,6 +1610,8 @@ export default function DashboardLayout() {
              activeTab === "EXP-Escaner" ? "Expedición - Control de Bultos (Escáner)" :
              activeTab === "EXP-EscanerCelular" ? "Expedición - Control de Bultos (Escáner Celular)" :
              activeTab === "EXP-EscaneoHistorico" ? "Expedición - Histórico de Escaneos" :
+             activeTab === "PH-Posiciones" ? "Pack and Hold - Posiciones y Guías" :
+             activeTab === "PH-Zonas" ? "Pack and Hold - Zonas habilitadas" :
              activeTab === "PCD-Dotacion" ? "Personal CD - Dotación" :
              activeTab === "PCD-Vacaciones" ? "Personal CD - Vacaciones" :
              activeTab === "PCD-Sectores" ? "Personal CD - Sectores" :
@@ -1641,6 +1679,8 @@ export default function DashboardLayout() {
 
           {/* ================= PESTAÑA: PERSONAL CD - AUDITORÍA (ADMIN) ================= */}
           {activeTab === "PCD-Auditoria" && <Auditoria />}
+          {activeTab === "PH-Posiciones" && <PHPosiciones />}
+          {activeTab === "PH-Zonas" && <PHZonas />}
 
           {/* ================= PESTAÑA: INBOUND - IMPORTAR DATOS ================= */}
           {activeTab === "INB-Importar" && <INBImportar />}
@@ -2823,7 +2863,7 @@ export default function DashboardLayout() {
           {activeTab === "ADMIN-Configuracion" && <AdminConfiguracion />}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "CI-Colecciones", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "DESP-SkuInsumos", "PCD-Dotacion", "PCD-Vacaciones", "PCD-Sectores", "PCD-Auditoria", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "CI-Colecciones", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "DESP-SkuInsumos", "PCD-Dotacion", "PCD-Vacaciones", "PCD-Sectores", "PCD-Auditoria", "PH-Posiciones", "PH-Zonas", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

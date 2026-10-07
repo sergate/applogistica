@@ -117,6 +117,17 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     ],
   },
   {
+    nombre: "Pack and Hold",
+    subsecciones: [
+      { key: "PH-Posiciones", label: "Posiciones y Guías" },
+      { key: "PH-Importar", label: "Importar guías pendientes desde WMS (en Posiciones y Guías)" },
+      { key: "PH-Liberar", label: "Registrar o liberar posiciones desde escritorio (en Posiciones y Guías)" },
+      { key: "PH-Planes", label: "Planes de Recogida" },
+      { key: "PH-Handheld", label: "Handheld (Ubicar y Despacho)" },
+      { key: "PH-Zonas", label: "Zonas habilitadas (Admin)" },
+    ],
+  },
+  {
     nombre: "Personal CD",
     subsecciones: [
       { key: "PCD-Dotacion", label: "Dotación" },

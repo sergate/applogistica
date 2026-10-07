@@ -19,6 +19,7 @@ export const SECCIONES_VALIDAS = [
   "exp_etiquetas",
   "contenedores_wms",
   "urgencias_estados_wms",
+  "pack_hold_importar",
 ] as const;
 export type SeccionActualizacion = (typeof SECCIONES_VALIDAS)[number];
 
@@ -79,6 +80,7 @@ const PERMISO_POR_SECCION: Record<SeccionActualizacion, string> = {
   exp_etiquetas: "EXP-Etiquetas",
   contenedores_wms: "PD-Contenedores-ActualizarWMS",
   urgencias_estados_wms: "PD-Urgencias-ActualizarWMS",
+  pack_hold_importar: "PH-Importar",
 };
 
 /** Chequea que el usuario tenga permiso para disparar la actualización de esa sección. */

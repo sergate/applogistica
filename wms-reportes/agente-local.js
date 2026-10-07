@@ -444,6 +444,139 @@ async function refrescarEstadosUrgenciasAutomatico(config) {
   );
 }
 
+// --- Pack and Hold: importar las guías de franquicias pendientes de despacho ---
+// Solo LEE del WMS (listado de guías + detalle de contenedores + packing list de
+// cada una) y lo sube al Tablero; nunca escribe nada en el WMS. Se queda con las
+// guías tipo FRANQUICIA en estado DP_INICIADO.
+const TIPO_GUIA_PACK_HOLD = "FRANQUICIA";
+const ESTADO_GUIA_PACK_HOLD = "DP_INICIADO";
+const DIAS_ATRAS_PACK_HOLD = 60;
+const DIAS_ADELANTE_PACK_HOLD = 3;
+const GUIAS_POR_LOTE_PACK_HOLD = 8;
+const INTERVALO_REFRESCO_PACK_HOLD_MS = 20 * 60 * 1000;
+
+function fechaISOConDesfase(dias) {
+  const f = new Date(Date.now() + dias * 86400000);
+  return `${f.getFullYear()}-${String(f.getMonth() + 1).padStart(2, "0")}-${String(f.getDate()).padStart(2, "0")}`;
+}
+
+async function postPackHold(config, cuerpo) {
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/pack-hold/importar`, {
+    method: "POST",
+    headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+    body: JSON.stringify(cuerpo),
+  });
+  const data = await res.json().catch(() => null);
+  if (!res.ok || !data?.success) {
+    throw new Error(data?.error || `Error subiendo guías de Pack and Hold al Tablero (HTTP ${res.status}).`);
+  }
+  return data;
+}
+
+// Devuelve { guias, contenedores, omitidas, despachadas }. "omitidas" son guías
+// cuyo detalle no se pudo leer (se reintentan en la próxima corrida).
+async function importarGuiasPackHold(config, paginaWms, onProgreso) {
+  await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+  await paginaWms.waitForTimeout(1000);
+  await descargador.chequearSesion(paginaWms);
+
+  const cabeceras = await reporteDespachos.listarDespachos(
+    paginaWms,
+    fechaISOConDesfase(-DIAS_ATRAS_PACK_HOLD),
+    fechaISOConDesfase(DIAS_ADELANTE_PACK_HOLD)
+  );
+  const guias = cabeceras.filter(
+    (c) =>
+      (c.tipo || "").trim().toUpperCase() === TIPO_GUIA_PACK_HOLD &&
+      (c.estado_nombre || "").trim().toUpperCase() === ESTADO_GUIA_PACK_HOLD
+  );
+  if (guias.length === 0) return { guias: 0, contenedores: 0, omitidas: 0, despachadas: null };
+
+  let contenedoresTotal = 0;
+  let omitidas = 0;
+  for (let i = 0; i < guias.length; i += GUIAS_POR_LOTE_PACK_HOLD) {
+    const armadas = [];
+    for (const cab of guias.slice(i, i + GUIAS_POR_LOTE_PACK_HOLD)) {
+      try {
+        const detalle = await reporteDespachos.detalleDespacho(paginaWms, cab.despacho_cab_id);
+        const packing = await reporteDespachos.obtenerPackingList(paginaWms, cab.despacho_cab_id);
+        const nombreCliente = String(cab.cliente_nombre || "").trim();
+        armadas.push({
+          despacho_cab_id: cab.despacho_cab_id,
+          guia: cab.guia ?? cab.numero_guia,
+          cliente_codigo: (nombreCliente.match(/^(\d+)\b/) || [])[1] || null,
+          cliente_nombre: nombreCliente,
+          estado_wms: cab.estado_nombre,
+          fecha_creacion: cab.fecha_creacion,
+          contenedores: detalle.map((d) => ({ contenedor: d.caja, unidades: d.cantidad, remito: d.remito })),
+          packing: packing.map((p) => ({ contenedor: p.caja, sku: p.sku, cantidad: p.cantidad })),
+        });
+      } catch (err) {
+        omitidas++;
+        console.error(`  (no pude leer el detalle de la guía ${cab.guia}: ${err instanceof Error ? err.message : err})`);
+      }
+    }
+    if (armadas.length > 0) {
+      const r = await postPackHold(config, { fase: "lote", guias: armadas });
+      contenedoresTotal += r.contenedores || 0;
+    }
+    if (onProgreso) await onProgreso(Math.min(i + GUIAS_POR_LOTE_PACK_HOLD, guias.length), guias.length);
+  }
+
+  // Cierre: las guías que ya no están en DP_INICIADO se marcan despachadas y
+  // liberan sus posiciones. Se mandan TODAS las vigentes, también las omitidas.
+  const cierre = await postPackHold(config, { fase: "cierre", ids: guias.map((g) => g.despacho_cab_id) });
+  return { guias: guias.length, contenedores: contenedoresTotal, omitidas, despachadas: cierre.despachadas ?? 0 };
+}
+
+// Pedido manual: botón "Importar guías pendientes (WMS)" de Pack and Hold.
+async function correrPedidoPackHold(config, pedido, paginas) {
+  await avisarProgreso(config.token, pedido.id, 5, "Leyendo guías de franquicias en el WMS...");
+  const r = await importarGuiasPackHold(config, paginas.paginaWms, (hechas, total) =>
+    avisarProgreso(config.token, pedido.id, 10 + Math.round((hechas / total) * 85), `Guías ${hechas}/${total}: contenedores y packing list...`)
+  );
+  console.log(
+    `  -> Pack and Hold: ${r.guias} guías, ${r.contenedores} contenedores` +
+      (r.despachadas ? `, ${r.despachadas} guías ya despachadas (posiciones liberadas)` : "") +
+      (r.omitidas ? `, ${r.omitidas} omitidas` : "") +
+      "."
+  );
+  const avisos = [];
+  if (r.guias === 0) avisos.push("El WMS no devolvió guías de franquicias en DP_INICIADO: no se liberó ninguna posición.");
+  if (r.omitidas > 0) avisos.push(`${r.omitidas} guía(s) no se pudieron leer y se reintentan en la próxima importación.`);
+  if (r.despachadas) avisos.push(`${r.despachadas} guía(s) ya estaban despachadas en el WMS: se liberaron sus posiciones.`);
+  if (avisos.length > 0) pedido.avisoResultado = avisos.join(" ");
+  return [];
+}
+
+// Refresco automático (modoLoop, con el Agente ocioso): mantiene las guías al
+// día y libera las posiciones de las que se despacharon en el WMS. No hace nada
+// si todavía no se corrió el SQL o si nadie importó guías nunca.
+async function refrescarPackHoldAutomatico(config) {
+  const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/pack-hold/importar`, {
+    headers: headersAgente(config.token),
+  });
+  const estado = await res.json().catch(() => null);
+  if (!res.ok || !estado?.success || !estado.listo || !estado.hayGuias) return;
+
+  await conLock(
+    async () => {
+      const contextos = await abrirContextos({ headless: true });
+      try {
+        const r = await importarGuiasPackHold(config, contextos.paginaWms);
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Refresco automático de Pack and Hold: ${r.guias} guías` +
+            (r.despachadas ? `, ${r.despachadas} despachadas` : "") +
+            "."
+        );
+      } finally {
+        await cerrarContextos(contextos);
+      }
+    },
+    { maxEsperaMs: 5_000, silencioso: true }
+  );
+}
+
 // Cuánto esperar como mínimo entre dos descargas del reporte de Contenedores
 // cuando el motivo es "faltan marcas": si faltan contenedores que el WMS no
 // trae como CI, igual no se vuelve a bajar en cada import.
@@ -933,6 +1066,8 @@ async function atenderPedido(config, pedido) {
                 ? await correrPedidoContenedores(config, pedido, contextos)
                 : pedido.seccion === "urgencias_estados_wms"
                 ? await correrPedidoUrgenciasEstados(config, pedido, contextos)
+                : pedido.seccion === "pack_hold_importar"
+                ? await correrPedidoPackHold(config, pedido, contextos)
                 : await correrPedido(config, pedido, contextos);
             await avisarResultado(config.token, pedido.id, true, pedido.avisoResultado || "OK");
             borrarArchivos(archivos);
@@ -997,6 +1132,9 @@ async function modoLoop() {
   let proximoRefrescoEstados = Date.now();
   let proximoCompletarPacking = Date.now();
   let proximoRefrescoUrgencias = Date.now();
+  // Pack and Hold arranca 5 min después de levantar el Agente, para no sumar una
+  // consulta pesada al WMS justo en el arranque.
+  let proximoRefrescoPackHold = Date.now() + 5 * 60 * 1000;
   // Backoff (SOLO se usa sin Realtime): recién arrancado (o apenas terminó
   // un pedido) consulta rápido por si hay otro pedido encolado enseguida;
   // si se queda sin nada por un rato, va espaciando las consultas -- el
@@ -1027,6 +1165,14 @@ async function modoLoop() {
             await refrescarEstadosUrgenciasAutomatico(config);
           } catch (err) {
             console.error("Error en el refresco automático de estados de urgencias:", err instanceof Error ? err.message : err);
+          }
+        }
+        if (Date.now() >= proximoRefrescoPackHold) {
+          proximoRefrescoPackHold = Date.now() + INTERVALO_REFRESCO_PACK_HOLD_MS;
+          try {
+            await refrescarPackHoldAutomatico(config);
+          } catch (err) {
+            console.error("Error en el refresco automático de Pack and Hold:", err instanceof Error ? err.message : err);
           }
         }
         if (Date.now() >= proximoCompletarPacking) {
