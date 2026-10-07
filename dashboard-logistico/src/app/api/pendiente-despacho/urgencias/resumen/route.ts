@@ -119,11 +119,21 @@ export async function GET() {
       // "Con remito": para líneas de Clientes hace falta Pedido Gaci Y Remito
       // cargados; para líneas de Propios (no tienen concepto de Gaci) alcanza
       // con Remito. Si el contenedor no matchea ninguna línea, no tiene remito.
-      const conRemito = lineaClientes
+      const conRemitoEnPendienteDespacho = lineaClientes
         ? !vacio(lineaClientes.pedido_gaci) && !vacio(lineaClientes.remito)
         : lineaPropios
           ? !vacio(lineaPropios.remito)
           : false;
+
+      // Estado real en el WMS: null = todavía no se consultó o no se encontró
+      // (ver "NO ENCONTRADO"), true/false = despachado o no.
+      const despachado =
+        !c.estado_wms || c.estado_wms === "NO ENCONTRADO" ? null : ESTADOS_DESPACHADO.has(c.estado_wms);
+
+      // Un contenedor despachado ya pasó por predespacho, pero al salir deja de
+      // figurar en Pre despacho (y su remito con él): se cuenta como "Con
+      // Predespacho = Sí" por defecto.
+      const conRemito = conRemitoEnPendienteDespacho || despachado === true;
 
       // Si el contenedor no matchea ninguna línea de Pendiente de Despacho, lo
       // más probable es que ya haya sido despachado (salió y ya no figura en
@@ -143,11 +153,8 @@ export async function GET() {
         curva: linea?.curva || "SIN CURVA",
         posicion: posicionesPorContenedor.get(c.contenedor) || null,
         conRemito,
-        // Estado real en el WMS: null = todavía no se consultó o no se
-        // encontró (ver "NO ENCONTRADO"), true/false = despachado o no.
         estadoWms: c.estado_wms,
-        despachado:
-          !c.estado_wms || c.estado_wms === "NO ENCONTRADO" ? null : ESTADOS_DESPACHADO.has(c.estado_wms),
+        despachado,
       };
     });
 
