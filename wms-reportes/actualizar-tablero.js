@@ -97,15 +97,21 @@ async function esperarResultadoImport(page, timeout = 180000) {
   // segundo parámetro es el argumento que recibe la función, no las
   // opciones. Hay que pasar explícitamente "undefined" en el medio para que
   // el timeout se aplique de verdad (si no, usa el default de 30s).
-  await page.waitForFunction(
+  // El texto se captura en el mismo instante en que se detecta el resultado:
+  // la app salta sola a "Resumen" ~800 ms después de un import exitoso, y si
+  // se leía recién después (page.evaluate aparte), a veces ya no estaba el
+  // mensaje de éxito y se daba por fallido un import que había salido bien.
+  const handle = await page.waitForFunction(
     () => {
       const texto = document.body.innerText;
-      return /cargadas correctamente/.test(texto) || /rror al procesar|rror inesperado|no tiene filas de datos/.test(texto);
+      const hayResultado =
+        /cargadas correctamente/.test(texto) || /rror al procesar|rror inesperado|no tiene filas de datos/.test(texto);
+      return hayResultado ? texto : false;
     },
     undefined,
     { timeout }
   );
-  const textoCompleto = await page.evaluate(() => document.body.innerText);
+  const textoCompleto = await handle.jsonValue();
   const exito = /cargadas correctamente/.test(textoCompleto);
   return { exito, textoCompleto };
 }
