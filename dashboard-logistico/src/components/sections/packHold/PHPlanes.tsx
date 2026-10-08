@@ -47,24 +47,63 @@ export default function PHPlanes() {
   const [expandido, setExpandido] = useState<number | null>(null);
   const [trabajando, setTrabajando] = useState(false);
   const [aviso, setAviso] = useState<{ ok: boolean; texto: string } | null>(null);
+  const [filtroCliente, setFiltroCliente] = useState("TODOS");
 
-  const disponibles = useMemo(() => data?.guiasDisponibles ?? [], [data]);
+  const todasDisponibles = useMemo(() => data?.guiasDisponibles ?? [], [data]);
+
+  const clientes = useMemo(() => {
+    const mapa = new Map<string, string>();
+    for (const g of todasDisponibles) mapa.set(g.clienteCodigo, g.cliente);
+    return [...mapa.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [todasDisponibles]);
+
+  // Si el cliente filtrado ya no tiene guías disponibles (ej. se generó el plan), se vuelve a "todos".
+  const clienteFiltro = clientes.some(([codigo]) => codigo === filtroCliente) ? filtroCliente : "TODOS";
+
+  const disponibles = useMemo(
+    () => (clienteFiltro === "TODOS" ? todasDisponibles : todasDisponibles.filter((g) => g.clienteCodigo === clienteFiltro)),
+    [todasDisponibles, clienteFiltro]
+  );
   const planes = useMemo(() => data?.planes ?? [], [data]);
 
   // Un plan es de un solo cliente: al tildar una guía, las de otros clientes quedan bloqueadas.
   const clienteElegido = useMemo(() => {
-    const primera = disponibles.find((g) => seleccion.has(g.despachoCabId));
+    const primera = todasDisponibles.find((g) => seleccion.has(g.despachoCabId));
     return primera ? primera.clienteCodigo : null;
-  }, [disponibles, seleccion]);
+  }, [todasDisponibles, seleccion]);
 
+  // La selección cuenta aunque el filtro oculte alguna fila: es lo que se envía al generar el plan.
   const resumenSeleccion = useMemo(() => {
-    const elegidas = disponibles.filter((g) => seleccion.has(g.despachoCabId));
+    const elegidas = todasDisponibles.filter((g) => seleccion.has(g.despachoCabId));
     return {
       guias: elegidas.length,
       posiciones: elegidas.reduce((acc, g) => acc + g.posiciones.length, 0),
       bultos: elegidas.reduce((acc, g) => acc + g.contenedores, 0),
     };
-  }, [disponibles, seleccion]);
+  }, [todasDisponibles, seleccion]);
+
+  // "Seleccionar todas" aplica a las guías visibles de UN cliente (un plan es de un solo cliente).
+  const clienteParaTodas = clienteElegido ?? (clienteFiltro !== "TODOS" ? clienteFiltro : null);
+  const candidatasTodas = useMemo(
+    () => (clienteParaTodas ? disponibles.filter((g) => g.clienteCodigo === clienteParaTodas) : []),
+    [disponibles, clienteParaTodas]
+  );
+  const todasSeleccionadas =
+    candidatasTodas.length > 0 && candidatasTodas.every((g) => seleccion.has(g.despachoCabId));
+
+  const alternarTodas = () => {
+    setSeleccion((prev) => {
+      const nuevo = new Set(prev);
+      if (todasSeleccionadas) candidatasTodas.forEach((g) => nuevo.delete(g.despachoCabId));
+      else candidatasTodas.forEach((g) => nuevo.add(g.despachoCabId));
+      return nuevo;
+    });
+  };
+
+  const limpiarFiltros = () => {
+    setFiltroCliente("TODOS");
+    setSeleccion(new Set());
+  };
 
   const alternar = (id: number) => {
     setSeleccion((prev) => {
@@ -146,6 +185,40 @@ export default function PHPlanes() {
             <SkeletonTable rows={4} columns={5} />
           </div>
         )}
+
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <select
+            value={clienteFiltro}
+            onChange={(e) => setFiltroCliente(e.target.value)}
+            aria-label="Filtrar por cliente"
+            className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-100 text-slate-600 border-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          >
+            <option value="TODOS">Todos los clientes</option>
+            {clientes.map(([codigo, nombre]) => (
+              <option key={codigo} value={codigo}>
+                {nombre}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={alternarTodas}
+            disabled={candidatasTodas.length === 0 || trabajando}
+            title={clienteParaTodas ? undefined : "Elegí un cliente para seleccionar todas sus guías"}
+            className="px-3 py-1.5 rounded-lg text-sm font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {todasSeleccionadas ? "Quitar selección" : `Seleccionar todas${candidatasTodas.length ? ` (${candidatasTodas.length})` : ""}`}
+          </button>
+          {(clienteFiltro !== "TODOS" || seleccion.size > 0) && (
+            <button
+              type="button"
+              onClick={limpiarFiltros}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-100"
+            >
+              Limpiar filtros
+            </button>
+          )}
+        </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left whitespace-nowrap">
