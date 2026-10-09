@@ -67,6 +67,8 @@ export default function PHEventos() {
   const [resultado, setResultado] = useState("TODOS");
   const [periodo, setPeriodo] = useState("7");
   const [busqueda, setBusqueda] = useState("");
+  // Hora de referencia de los períodos: se fija al abrir la pantalla.
+  const [ahora] = useState(() => Date.now());
 
   const eventos = useMemo(() => data?.eventos ?? [], [data]);
   const usuarios = useMemo(() => [...new Set(eventos.map((e) => e.usuario))].sort(), [eventos]);
@@ -76,8 +78,8 @@ export default function PHEventos() {
     // "Hoy" = desde las 00:00 del día en este navegador; el resto, N días corridos hacia atrás.
     const corte =
       periodo === "0"
-        ? new Date(new Date().setHours(0, 0, 0, 0)).getTime()
-        : Date.now() - Number(periodo) * 24 * 60 * 60 * 1000;
+        ? new Date(new Date(ahora).setHours(0, 0, 0, 0)).getTime()
+        : ahora - Number(periodo) * 24 * 60 * 60 * 1000;
     return eventos.filter(
       (e) =>
         new Date(e.fecha).getTime() >= corte &&
@@ -91,7 +93,7 @@ export default function PHEventos() {
           e.plan.toLowerCase().includes(texto) ||
           e.usuario.toLowerCase().includes(texto))
     );
-  }, [eventos, categoria, usuario, resultado, periodo, texto]);
+  }, [eventos, categoria, usuario, resultado, periodo, texto, ahora]);
 
   const kpis = useMemo(
     () => ({
