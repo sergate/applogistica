@@ -65,6 +65,7 @@ import Auditoria from "@/components/sections/personalCd/Auditoria";
 import PHPosiciones from "@/components/sections/packHold/PHPosiciones";
 import PHZonas from "@/components/sections/packHold/PHZonas";
 import PHPlanes from "@/components/sections/packHold/PHPlanes";
+import PHEventos from "@/components/sections/packHold/PHEventos";
 export default function DashboardLayout() {
   const router = useRouter();
 
@@ -338,6 +339,7 @@ export default function DashboardLayout() {
     { key: "PH-Posiciones", label: "Posiciones y Guías" },
     { key: "PH-Planes", label: "Planes de Recogida" },
     { key: "PH-Zonas", label: "Zonas habilitadas (Admin)" },
+    { key: "PH-Eventos", label: "Registro de eventos (Admin)" },
   ];
 
   const expedicionSubSections = [
@@ -1619,6 +1621,7 @@ export default function DashboardLayout() {
              activeTab === "PH-Posiciones" ? "Pack and Hold - Posiciones y Guías" :
              activeTab === "PH-Planes" ? "Pack and Hold - Planes de Recogida" :
              activeTab === "PH-Zonas" ? "Pack and Hold - Zonas habilitadas" :
+             activeTab === "PH-Eventos" ? "Pack and Hold - Registro de eventos" :
              activeTab === "PCD-Dotacion" ? "Personal CD - Dotación" :
              activeTab === "PCD-Vacaciones" ? "Personal CD - Vacaciones" :
              activeTab === "PCD-Sectores" ? "Personal CD - Sectores" :
@@ -1689,6 +1692,7 @@ export default function DashboardLayout() {
           {activeTab === "PH-Posiciones" && <PHPosiciones />}
           {activeTab === "PH-Planes" && <PHPlanes />}
           {activeTab === "PH-Zonas" && <PHZonas />}
+          {activeTab === "PH-Eventos" && <PHEventos />}
 
           {/* ================= PESTAÑA: INBOUND - IMPORTAR DATOS ================= */}
           {activeTab === "INB-Importar" && <INBImportar />}
@@ -2871,7 +2875,7 @@ export default function DashboardLayout() {
           {activeTab === "ADMIN-Configuracion" && <AdminConfiguracion />}
 
           {/* ================= PESTAÑAS EN DESARROLLO ================= */}
-          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "CI-Colecciones", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "DESP-SkuInsumos", "PCD-Dotacion", "PCD-Vacaciones", "PCD-Sectores", "PCD-Auditoria", "PH-Posiciones", "PH-Planes", "PH-Zonas", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
+          {!["Resumen", "Por fecha", "Por pedidos", "Importar datos", "REMA Manual", "ECOM-Importar", "ECOM-Resumen", "ECOM-PorFecha", "ECOM-PorPedidos", "CI-Importar", "CI-Resumen", "CI-Avance", "CI-Carga", "CI-Colecciones", "REM-Importar", "REM-Resumen", "REM-Avance", "REM-Carga", "PROD-Importar", "PROD-Resumen", "PD-Importar", "PD-Clientes", "PD-Propios", "PD-Urgencias", "PD-CargaDatos", "DESP-Imprimir", "DESP-Reimprimir", "DESP-Grupos", "DESP-SkuInsumos", "PCD-Dotacion", "PCD-Vacaciones", "PCD-Sectores", "PCD-Auditoria", "PH-Posiciones", "PH-Planes", "PH-Zonas", "PH-Eventos", "INB-Importar", "INB-Resumen", "ALM-Importar", "ALM-Resumen", "ALM-Configuracion", "EXP-Interlocales", "EXP-HojaRuta", "EXP-Historico", "EXP-Etiquetas", "EXP-Escaner", "EXP-EscanerCelular", "EXP-EscaneoHistorico", "ADMIN-Perfiles", "ADMIN-Usuarios", "ADMIN-Accesos", "ADMIN-Feriados", "ADMIN-Configuracion"].includes(activeTab) && (
             <div className="bg-white rounded-xl border border-slate-200 p-8 h-full flex flex-col items-center justify-center text-slate-400">
                <svg className="w-16 h-16 mb-4 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" /></svg>
                <h2 className="text-lg font-medium text-slate-600">Sección en desarrollo: {activeTab}</h2>

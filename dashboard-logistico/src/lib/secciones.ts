@@ -125,6 +125,7 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
       { key: "PH-Planes", label: "Planes de Recogida" },
       { key: "PH-Handheld", label: "Handheld (Ubicar y Despacho)" },
       { key: "PH-Zonas", label: "Zonas habilitadas (Admin)" },
+      { key: "PH-Eventos", label: "Registro de eventos (Admin)" },
     ],
   },
   {
