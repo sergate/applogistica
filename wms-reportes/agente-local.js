@@ -279,6 +279,95 @@ async function completarPackingListsFaltantes(config) {
   );
 }
 
+// Guías recientes (últimos 14 días) que no tienen NINGUNA caja en el Tablero
+// (despacho_guias_bultos): el detalle de cajas se baja una sola vez al importar,
+// y si en ese momento la guía todavía se estaba armando o la consulta falló,
+// quedaba sin cajas para siempre y el escáner de la Hoja de Ruta no reconocía
+// sus bultos. Se reintenta solo, sin que nadie apriete ningún botón. Una guía
+// que el WMS realmente tiene vacía se vuelve a consultar como mucho una vez por
+// hora (mapa en memoria), para no repetir la consulta en cada pasada.
+const INTERVALO_COMPLETAR_BULTOS_MS = 10 * 60 * 1000;
+const REINTENTO_GUIA_SIN_CAJAS_MS = 60 * 60 * 1000;
+const MAX_GUIAS_BULTOS_POR_PASADA = 100;
+const ultimoIntentoBultosPorGuia = new Map();
+
+async function completarBultosFaltantes(config) {
+  await conLock(
+    async () => {
+      const res = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/pendientes-bultos`, {
+        headers: headersAgente(config.token),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) throw new Error(data?.error || `HTTP ${res.status}`);
+
+      const ahora = Date.now();
+      const candidatas = (data.pendientes || [])
+        .filter((p) => ahora - (ultimoIntentoBultosPorGuia.get(p.despacho_cab_id) || 0) >= REINTENTO_GUIA_SIN_CAJAS_MS)
+        .slice(0, MAX_GUIAS_BULTOS_POR_PASADA);
+      if (candidatas.length === 0) return;
+
+      const contextos = await abrirContextos({ headless: true });
+      try {
+        const { paginaWms } = contextos;
+        await paginaWms.goto(reporteDespachos.URL_BASE, { waitUntil: "networkidle" });
+        await paginaWms.waitForTimeout(1000);
+        await descargador.chequearSesion(paginaWms);
+
+        let bultos = [];
+        let packingList = [];
+        let guiasConCajas = 0;
+        const GUIAS_POR_LOTE = 25;
+
+        const subirLote = async () => {
+          if (bultos.length === 0 && packingList.length === 0) return;
+          const resSubida = await fetch(`${APP_BASE_URL}/api/actualizaciones/agente/despacho/bultos`, {
+            method: "POST",
+            headers: headersAgente(config.token, { "Content-Type": "application/json" }),
+            body: JSON.stringify({ bultos, packingList }),
+          });
+          const dataSubida = await resSubida.json().catch(() => null);
+          if (!resSubida.ok || !dataSubida?.success) {
+            throw new Error(dataSubida?.error || `Error subiendo cajas (HTTP ${resSubida.status}).`);
+          }
+          bultos = [];
+          packingList = [];
+        };
+
+        for (let i = 0; i < candidatas.length; i++) {
+          const g = candidatas[i];
+          ultimoIntentoBultosPorGuia.set(g.despacho_cab_id, Date.now());
+          try {
+            const detalles = await reporteDespachos.detalleDespacho(paginaWms, g.despacho_cab_id);
+            if (detalles.length > 0) guiasConCajas++;
+            for (const det of detalles) {
+              bultos.push({ despacho_cab_id: g.despacho_cab_id, caja: det.caja, remito: det.remito, cantidad: det.cantidad });
+            }
+            // Igual que en el import: las guías PROPIO llevan también el packing
+            // list (si no, el servidor les limpia los contadores de insumos).
+            if (detalles.length > 0 && (g.tipo || "").trim().toUpperCase() === "PROPIO") {
+              const filasPacking = await reporteDespachos.obtenerPackingList(paginaWms, g.despacho_cab_id);
+              for (const fp of filasPacking) {
+                packingList.push({ despacho_cab_id: g.despacho_cab_id, caja: fp.caja, sku: fp.sku, cantidad: fp.cantidad });
+              }
+            }
+          } catch (err) {
+            console.error(`  (no pude completar las cajas de la guía ${g.guia || g.numero_guia}: ${err.message})`);
+          }
+          if ((i + 1) % GUIAS_POR_LOTE === 0) await subirLote();
+        }
+        await subirLote();
+
+        console.log(
+          `[${new Date().toLocaleTimeString()}] Cajas faltantes completadas: ${guiasConCajas}/${candidatas.length} guías.`
+        );
+      } finally {
+        await cerrarContextos(contextos);
+      }
+    },
+    { maxEsperaMs: 5_000, silencioso: true }
+  );
+}
+
 async function modoLogin() {
   await conLock(async () => {
     const contextos = await abrirContextos({ headless: false });
@@ -1131,6 +1220,7 @@ async function modoLoop() {
   // INTERVALO_REFRESCO_ESTADOS_MS -- ver refrescarEstadosDespachoAutomatico.
   let proximoRefrescoEstados = Date.now();
   let proximoCompletarPacking = Date.now();
+  let proximoCompletarBultos = Date.now() + 60_000;
   let proximoRefrescoUrgencias = Date.now();
   // Pack and Hold arranca 5 min después de levantar el Agente, para no sumar una
   // consulta pesada al WMS justo en el arranque.
@@ -1181,6 +1271,14 @@ async function modoLoop() {
             await completarPackingListsFaltantes(config);
           } catch (err) {
             console.error("Error completando packing lists pendientes:", err instanceof Error ? err.message : err);
+          }
+        }
+        if (Date.now() >= proximoCompletarBultos) {
+          proximoCompletarBultos = Date.now() + INTERVALO_COMPLETAR_BULTOS_MS;
+          try {
+            await completarBultosFaltantes(config);
+          } catch (err) {
+            console.error("Error completando cajas faltantes:", err instanceof Error ? err.message : err);
           }
         }
       }
