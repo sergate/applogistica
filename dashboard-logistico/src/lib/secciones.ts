@@ -129,6 +129,12 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     ],
   },
   {
+    nombre: "Lolea",
+    subsecciones: [
+      { key: "LOL-Stock", label: "Stock" },
+    ],
+  },
+  {
     nombre: "Personal CD",
     subsecciones: [
       { key: "PCD-Dotacion", label: "Dotación" },
