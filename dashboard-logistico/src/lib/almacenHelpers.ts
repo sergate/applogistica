@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabaseClient";
 import { getCached } from "@/lib/queryCache";
 import { fetchAllPaginated } from "@/lib/fetchAllPaginated";
+import { ZONA_LOLEA } from "@/lib/lolea";
 
 // Ver el mismo comentario en resumenHelpers.ts (MAESTROS_TTL_MS): un TTL
 // más largo no muestra datos más viejos que la última importación (que
@@ -46,11 +47,17 @@ export const CATALOGO_ZONAS_ALMACEN: { grupo: string; subzona: string }[] = Arra
   new Map(Object.values(MAPA_ZONAS).map((z) => [`${z.grupo}__${z.subzona}`, z])).values()
 );
 
-/** Trae TODO el layout del almacén (paginado, Supabase pagina de a 1000). */
+/**
+ * Trae TODO el layout del almacén de Altatex (paginado, Supabase pagina de a
+ * 1000). La zona LOLEA (posiciones del módulo Lolea, con stock propio que no
+ * está en el WMS) queda afuera: no cuenta para Ocupación Almacén ni para las
+ * zonas de Pack and Hold.
+ */
 export async function fetchAlmacenLayout(): Promise<AlmacenLayoutRow[]> {
-  return getCached("almacen_layout:all", ALMACEN_TTL_MS, () =>
-    fetchAllPaginated<AlmacenLayoutRow>("almacen_layout", "nave, ubicacion, zona")
-  );
+  return getCached("almacen_layout:all", ALMACEN_TTL_MS, async () => {
+    const filas = await fetchAllPaginated<AlmacenLayoutRow>("almacen_layout", "nave, ubicacion, zona");
+    return filas.filter((f) => (f.zona || "").trim().toUpperCase() !== ZONA_LOLEA);
+  });
 }
 
 export interface AlmacenOcupacionInfo {

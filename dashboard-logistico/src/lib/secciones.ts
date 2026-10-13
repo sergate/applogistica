@@ -132,6 +132,8 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     nombre: "Lolea",
     subsecciones: [
       { key: "LOL-Stock", label: "Stock" },
+      { key: "LOL-Ingreso", label: "Ingreso" },
+      { key: "LOL-Layout", label: "Layout Lolea (Admin)" },
     ],
   },
   {

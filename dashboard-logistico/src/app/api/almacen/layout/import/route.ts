@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, supabaseEnvOk } from "@/lib/supabaseClient";
 import { requireAdminPermission } from "@/lib/adminAuth";
 import { invalidateCache } from "@/lib/queryCache";
+import { ZONA_LOLEA } from "@/lib/lolea";
 
 export const runtime = "nodejs";
 
@@ -34,10 +35,17 @@ export async function POST(request: NextRequest) {
         ubicacion: typeof f?.ubicacion === "string" ? f.ubicacion.trim() : "",
         zona: typeof f?.zona === "string" ? f.zona.trim() : "",
       }))
-      .filter((f) => f.ubicacion && f.zona);
+      // La zona LOLEA es del módulo Lolea y se carga desde su propia pantalla: se
+      // ignora si el archivo general la trae, para no duplicarla ni pisarla.
+      .filter((f) => f.ubicacion && f.zona && f.zona.trim().toUpperCase() !== ZONA_LOLEA);
 
-    // El layout es una foto completa y vigente del almacén -- se reemplaza entero.
-    const { error: delError } = await supabaseAdmin.from("almacen_layout").delete().not("id", "is", null);
+    // El layout es una foto completa y vigente del almacén de Altatex -- se
+    // reemplaza entero, salvo la zona LOLEA (posiciones del módulo Lolea).
+    const { error: delError } = await supabaseAdmin
+      .from("almacen_layout")
+      .delete()
+      .not("id", "is", null)
+      .neq("zona", ZONA_LOLEA);
     if (delError) throw new Error(`Supabase (almacen_layout - borrado total): ${delError.message}`);
 
     for (let i = 0; i < limpio.length; i += INSERT_CHUNK) {

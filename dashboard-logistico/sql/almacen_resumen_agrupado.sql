@@ -52,6 +52,9 @@ as $$
         else coalesce(nullif(trim(l.zona), ''), 'SIN ZONA')
       end as subzona
     from almacen_layout l
+    -- La zona LOLEA es del módulo Lolea (stock propio, no está en el WMS): no
+    -- cuenta como capacidad ni ocupación del almacén de Altatex.
+    where upper(trim(l.zona)) <> 'LOLEA'
   ),
   contenedores_por_ubicacion as (
     select ubicacion, count(*) as cant
