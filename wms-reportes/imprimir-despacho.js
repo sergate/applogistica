@@ -40,6 +40,22 @@ function leerImpresoraConfigurada() {
   }
 }
 
+// Cuántas copias del REMITO se piden en el modal del WMS ("Cantidad de
+// impresiones"). Por default 1. Se puede cambiar con "copiasRemito" en
+// agente-config.json. Hace falta fijarlo a mano: el campo del WMS queda "pegado"
+// al valor de la guía anterior (ej. 2 en un local propio) y el remito salía con
+// esas mismas copias.
+const COPIAS_REMITO_POR_DEFECTO = 1;
+function leerCopiasRemito() {
+  try {
+    const config = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    const n = Number(config.copiasRemito);
+    return Number.isInteger(n) && n >= 1 && n <= 10 ? n : COPIAS_REMITO_POR_DEFECTO;
+  } catch {
+    return COPIAS_REMITO_POR_DEFECTO;
+  }
+}
+
 const CODIGOS_SALIDA_SUMATRA = {
   2: "no se pudo abrir el archivo (no encontrado o formato no soportado)",
   3: "el documento no permite imprimir",
@@ -145,10 +161,14 @@ async function descargarPdf(page, textoBotonImprimir, tituloModal, nombreArchivo
   if (cantidadCopias != null) {
     const campoCantidad = modalLoc.locator('input[name="cantidad"]:visible').first();
     if (await campoCantidad.count()) {
+      const valorAnterior = await campoCantidad.inputValue().catch(() => "?");
+      console.log(`  ("Cantidad de impresiones" de "${tituloModal}": venía en ${valorAnterior}, se fija en ${cantidadCopias})`);
       await campoCantidad.click();
       await page.keyboard.press("Control+A");
       await page.keyboard.type(String(cantidadCopias));
       await page.keyboard.press("Tab");
+    } else {
+      console.log(`  (el modal "${tituloModal}" no tiene el campo "Cantidad de impresiones": se descarga con lo que trae el WMS)`);
     }
   }
 
@@ -344,7 +364,13 @@ async function imprimirGuia(
   await buscarYSeleccionarFila(page, numeroGuia);
 
   console.log(`> Descargando remito de la guía ${numeroGuia}...`);
-  const remitoPdf = await descargarPdf(page, "Imprimir remito", "Imprimir remitos", `remito_${numeroGuia}_${timestamp()}.pdf`);
+  const remitoPdf = await descargarPdf(
+    page,
+    "Imprimir remito",
+    "Imprimir remitos",
+    `remito_${numeroGuia}_${timestamp()}.pdf`,
+    leerCopiasRemito()
+  );
   console.log(`  -> ${remitoPdf}`);
   console.log("  Enviando remito a la impresora predeterminada...");
   await imprimirPdf(remitoPdf, impresoraConfigurada);

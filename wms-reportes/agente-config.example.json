@@ -3,6 +3,7 @@
   "supabaseUrl": "OPCIONAL: NEXT_PUBLIC_SUPABASE_URL del Tablero -- si falta, el Agente vuelve a poleaer como antes en vez de escuchar por Realtime",
   "supabaseAnonKey": "OPCIONAL: NEXT_PUBLIC_SUPABASE_ANON_KEY del Tablero (misma clave pública que usa el navegador, no la Service Role)",
   "impresora": "OPCIONAL: nombre exacto de la impresora para despacho (si no está, usa la predeterminada de esta PC)",
+  "copiasRemito": "OPCIONAL: copias del remito que se piden al WMS al imprimir un despacho (entero de 1 a 10, por defecto 1). Poné un número, sin comillas, para cambiarlo",
   "wmsUsuario": "OPCIONAL: solo si usás el Chromium propio de Playwright (sin contraseñas guardadas) y querés relogin automático",
   "wmsClave": "OPCIONAL: idem, la contraseña del WMS -- se guarda en texto plano en este archivo, que NO se sube al repo",
   "tableroEmail": "OPCIONAL: idem wmsUsuario/wmsClave, pero para el login del Tablero (panellogistico.com.ar) -- relogin automático si se pierde la sesión",
