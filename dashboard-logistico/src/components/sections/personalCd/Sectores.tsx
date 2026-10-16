@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
+import PuestosMaestro from "./PuestosMaestro";
 
 interface SectorFila {
   id: number;
@@ -223,6 +224,8 @@ export default function Sectores() {
           </table>
         )}
       </div>
+
+      <PuestosMaestro visible={activeTab === "PCD-Sectores"} />
     </div>
   );
 }

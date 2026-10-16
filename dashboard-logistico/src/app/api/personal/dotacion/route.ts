@@ -46,10 +46,19 @@ export async function GET() {
       antiguedad: formatAntiguedad(calcularAntiguedadAnios(d.fecha_ingreso, hoy)),
     }));
 
+    // Puestos de la lista maestra (se mantiene en Sectores). Si la tabla todavía no
+    // existe se ignora el error: Dotación sigue mostrando los puestos en uso.
+    const { data: puestosMaestro } = await supabaseAdmin
+      .from("personal_cd_puestos")
+      .select("nombre")
+      .eq("activo", true)
+      .order("nombre");
+
     return NextResponse.json({
       success: true,
       empleados: filas,
       sectores: (sectores || []).filter((s) => s.activo),
+      puestos: (puestosMaestro || []).map((p) => p.nombre),
     });
   } catch (err) {
     return NextResponse.json(

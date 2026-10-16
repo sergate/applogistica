@@ -65,6 +65,8 @@ export default function Dotacion() {
 
   const [empleados, setEmpleados] = useState<Empleado[] | null>(null);
   const [sectores, setSectores] = useState<Sector[]>([]);
+  // Puestos activos de la lista maestra (se mantiene en Sectores).
+  const [puestosMaestro, setPuestosMaestro] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
 
@@ -98,6 +100,7 @@ export default function Dotacion() {
       if (!res.ok || !data.success) throw new Error(data.error || "No se pudo cargar la dotación.");
       setEmpleados(data.empleados);
       setSectores(data.sectores);
+      setPuestosMaestro(data.puestos ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error inesperado.");
     } finally {
@@ -225,9 +228,13 @@ export default function Dotacion() {
     }
   };
 
+  // Puestos a elegir: los de la lista maestra más los que ya tienen empleados
+  // (así un puesto cargado antes de existir la lista no desaparece del combo).
   const puestos = useMemo(() => {
-    return [...new Set((empleados || []).map((e) => e.puesto).filter((p): p is string => !!p))].sort();
-  }, [empleados]);
+    const enUso = (empleados || []).map((e) => e.puesto).filter((p): p is string => !!p);
+    return [...new Set([...puestosMaestro, ...enUso])].sort((a, b) => a.localeCompare(b));
+  }, [empleados, puestosMaestro]);
+
 
   const filtrados = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
@@ -241,6 +248,31 @@ export default function Dotacion() {
       return true;
     });
   }, [empleados, busqueda, filtroSector, filtroTurno, filtroEstado, filtroPuesto, filtroContrato]);
+
+  const fmtDia = (iso: string | null) => (iso ? iso.split("-").reverse().join("/") : "");
+
+  // Exporta los empleados que se ven con los filtros actuales.
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx");
+    const filas = filtrados.map((e) => ({
+      Legajo: e.legajo,
+      "Apellido y Nombre": e.apellido_nombre,
+      DNI: e.dni ?? "",
+      "Fecha de nacimiento": fmtDia(e.fecha_nacimiento),
+      "Fecha de ingreso": fmtDia(e.fecha_ingreso),
+      Antigüedad: e.antiguedad,
+      Sector: e.sectorNombre ?? "",
+      Puesto: e.puesto ?? "",
+      Turno: e.turno ?? "",
+      "Tipo de contrato": e.tipo_contrato ?? "",
+      Estado: e.estado,
+      Teléfono: e.telefono ?? "",
+      Email: e.email ?? "",
+    }));
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filas), "Dotación");
+    XLSX.writeFile(libro, `personal_cd_dotacion_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
 
   const kpis = useMemo(() => {
     const lista = empleados || [];
@@ -266,6 +298,17 @@ export default function Dotacion() {
           <p className="text-sm text-slate-500">Padrón de personal del Centro de Distribución</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={exportarExcel}
+            disabled={filtrados.length === 0}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+              filtrados.length === 0
+                ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+                : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+            }`}
+          >
+            Exportar a Excel
+          </button>
           <button
             onClick={() => {
               setMostrarImport((v) => !v);
@@ -346,7 +389,10 @@ export default function Dotacion() {
               <option value="">Sector...</option>
               {sectores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </select>
-            <input placeholder="Puesto" value={nuevoEmpleado.puesto} onChange={(e) => setNuevoEmpleado({ ...nuevoEmpleado, puesto: e.target.value })} className="px-3 py-2 rounded-lg border border-slate-300 text-sm" />
+            <select value={nuevoEmpleado.puesto} onChange={(e) => setNuevoEmpleado({ ...nuevoEmpleado, puesto: e.target.value })} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
+              <option value="">Puesto...</option>
+              {puestos.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
             <select value={nuevoEmpleado.turno} onChange={(e) => setNuevoEmpleado({ ...nuevoEmpleado, turno: e.target.value })} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
               <option value="">Turno...</option>
               {TURNOS.map((t) => <option key={t} value={t}>{t}</option>)}

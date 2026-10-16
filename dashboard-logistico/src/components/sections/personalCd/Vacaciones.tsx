@@ -73,6 +73,38 @@ export default function Vacaciones() {
     });
   }, [empleados, busqueda, filtroSector]);
 
+  // Exporta los empleados filtrados con UNA columna por cada semana de todo el
+  // ciclo (no solo del trimestre que se está mirando); las semanas sin días
+  // cargados quedan en blanco.
+  const exportarExcel = async () => {
+    const XLSX = await import("xlsx");
+    const semanasCiclo = new Map<string, Date>();
+    for (const t of TRIMESTRES) {
+      for (const s of getSemanas(t.inicio, t.fin)) semanasCiclo.set(semanaISO(s), s);
+    }
+    const ordenadas = [...semanasCiclo.entries()].sort(([a], [b]) => a.localeCompare(b));
+
+    const filas = filtrados.map((e) => {
+      const fila: Record<string, string | number> = {
+        Legajo: e.legajo,
+        "Apellido y Nombre": e.apellidoNombre,
+        Sector: e.sector ?? "",
+        "Vac. adeudadas": e.adeudadas,
+        "Vac. actuales": e.actualesFinal,
+        Saldo: e.saldo,
+      };
+      for (const [iso, s] of ordenadas) {
+        const dias = e.cargas[iso] || 0;
+        fila[`Sem. ${semanaLabel(s)}/${s.getFullYear()}`] = dias > 0 ? dias : "";
+      }
+      return fila;
+    });
+
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, XLSX.utils.json_to_sheet(filas), "Vacaciones");
+    XLSX.writeFile(libro, `personal_cd_vacaciones_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   const guardarCarga = async (empleadoId: number, semanaInicioISO: string, dias: number) => {
     const key = `${empleadoId}-${semanaInicioISO}`;
     setGuardandoKey(key);
@@ -162,6 +194,17 @@ export default function Vacaciones() {
           <option value="">Todos los sectores</option>
           {sectores.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <button
+          onClick={exportarExcel}
+          disabled={filtrados.length === 0}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+            filtrados.length === 0
+              ? "bg-slate-100 text-slate-300 cursor-not-allowed"
+              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+          }`}
+        >
+          Exportar a Excel
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
