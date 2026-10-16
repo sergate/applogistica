@@ -141,6 +141,9 @@ export const REGISTRO_SECCIONES: SeccionRegistro[] = [
     subsecciones: [
       { key: "PCD-Dotacion", label: "Dotación" },
       { key: "PCD-Vacaciones", label: "Vacaciones" },
+      { key: "PCD-Cupos", label: "Cupos Vacaciones" },
+      { key: "PCD-CuposEditar", label: "Asignar cupos de vacaciones (en Cupos Vacaciones)" },
+      { key: "PCD-CuposComparar", label: "Armar tarjetas de comparación (en Cupos Vacaciones)" },
       { key: "PCD-Sectores", label: "Sectores (Admin)" },
       { key: "PCD-Auditoria", label: "Auditoría (Admin)" },
     ],
