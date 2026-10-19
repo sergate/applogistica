@@ -25,7 +25,7 @@ export async function GET() {
     const [{ data: dotacion, error: errorDotacion }, { data: sectores, error: errorSectores }] = await Promise.all([
       supabaseAdmin
         .from("personal_cd_dotacion")
-        .select("id, legajo, apellido_nombre, sector_id, fecha_ingreso, estado, tipo_contrato")
+        .select("id, legajo, apellido_nombre, sector_id, puesto, fecha_ingreso, estado, tipo_contrato")
         .in("estado", ["Activo", "Licencia"])
         .order("apellido_nombre"),
       supabaseAdmin.from("personal_cd_sectores").select("id, nombre"),
@@ -85,6 +85,7 @@ export async function GET() {
         legajo: d.legajo,
         apellidoNombre: d.apellido_nombre,
         sector: d.sector_id != null ? nombrePorSector.get(d.sector_id) || null : null,
+        puesto: d.puesto ? String(d.puesto).trim() || null : null,
         adeudadas,
         actualesCalculado,
         actualesManual,

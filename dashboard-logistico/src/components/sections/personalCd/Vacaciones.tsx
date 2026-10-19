@@ -9,6 +9,7 @@ interface EmpleadoVacaciones {
   legajo: string;
   apellidoNombre: string;
   sector: string | null;
+  puesto: string | null;
   adeudadas: number;
   actualesCalculado: number;
   actualesManual: number | null;
@@ -33,6 +34,7 @@ export default function Vacaciones() {
   const [guardandoKey, setGuardandoKey] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [filtroSector, setFiltroSector] = useState("");
+  const [filtroPuesto, setFiltroPuesto] = useState("");
 
   const cargarVacaciones = async () => {
     setCargando(true);
@@ -63,15 +65,21 @@ export default function Vacaciones() {
     return [...new Set(empleados.map((e) => e.sector).filter((s): s is string => !!s))].sort();
   }, [empleados]);
 
+  const puestos = useMemo(() => {
+    if (!empleados) return [];
+    return [...new Set(empleados.map((e) => e.puesto).filter((s): s is string => !!s))].sort();
+  }, [empleados]);
+
   const filtrados = useMemo(() => {
     if (!empleados) return [];
     const q = busqueda.trim().toLowerCase();
     return empleados.filter((e) => {
       if (q && !e.legajo.toLowerCase().includes(q) && !e.apellidoNombre.toLowerCase().includes(q)) return false;
       if (filtroSector && e.sector !== filtroSector) return false;
+      if (filtroPuesto && e.puesto !== filtroPuesto) return false;
       return true;
     });
-  }, [empleados, busqueda, filtroSector]);
+  }, [empleados, busqueda, filtroSector, filtroPuesto]);
 
   // Exporta los empleados filtrados con UNA columna por cada semana de todo el
   // ciclo (no solo del trimestre que se está mirando); las semanas sin días
@@ -89,6 +97,7 @@ export default function Vacaciones() {
         Legajo: e.legajo,
         "Apellido y Nombre": e.apellidoNombre,
         Sector: e.sector ?? "",
+        Puesto: e.puesto ?? "",
         "Vac. adeudadas": e.adeudadas,
         "Vac. actuales": e.actualesFinal,
         Saldo: e.saldo,
@@ -194,6 +203,10 @@ export default function Vacaciones() {
           <option value="">Todos los sectores</option>
           {sectores.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select value={filtroPuesto} onChange={(e) => setFiltroPuesto(e.target.value)} className="px-3 py-2 rounded-lg border border-slate-300 text-sm">
+          <option value="">Todos los puestos</option>
+          {puestos.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
         <button
           onClick={exportarExcel}
           disabled={filtrados.length === 0}
@@ -218,6 +231,7 @@ export default function Vacaciones() {
                 <th className="sticky left-0 z-10 bg-slate-50 text-left py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap">Legajo</th>
                 <th className="sticky left-[62px] z-10 bg-slate-50 text-left py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap">Apellido y Nombre</th>
                 <th className="text-left py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap">Sector</th>
+                <th className="text-left py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap">Puesto</th>
                 <th className="text-right py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap">Vac. Adeud.</th>
                 <th className="text-right py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap">Vac. Actuales</th>
                 <th className="text-right py-2.5 px-3 text-slate-500 font-semibold whitespace-nowrap border-r-2 border-slate-200">Saldo</th>
@@ -236,6 +250,7 @@ export default function Vacaciones() {
                     <td className="sticky left-0 bg-white py-2 px-3 text-slate-500 whitespace-nowrap">{e.legajo}</td>
                     <td className="sticky left-[62px] bg-white py-2 px-3 font-semibold text-slate-800 whitespace-nowrap">{e.apellidoNombre}</td>
                     <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{e.sector || "—"}</td>
+                    <td className="py-2 px-3 text-slate-700 whitespace-nowrap">{e.puesto || "—"}</td>
                     <td className="py-1.5 px-3 text-right">
                       <input
                         type="number"
