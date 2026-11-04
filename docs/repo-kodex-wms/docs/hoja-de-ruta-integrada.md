@@ -1,7 +1,7 @@
 # Hoja de ruta integrada – Kodex WMS (spec inicial + capa GS1)
 
-Versión 1.0. Integra `wms-saas-spec-inicial.md` (v0.1, J. Manuel) con la capa
-GS1 / multi-país descripta en `arquitectura-wms-saas.md`.
+Versión 1.0. Integra `spec-inicial.md` (v0.1, J. Manuel) con la capa
+GS1 / multi-país descripta en `arquitectura-kodex-wms.md`.
 
 **Producto: Kodex WMS (repo `kodex-wms`).**
 
