@@ -1,4 +1,4 @@
-# Prompt para la primera sesión en el repo wms-saas
+# Prompt para la primera sesión en el repo kodex-wms
 
 Pegar como primer mensaje:
 

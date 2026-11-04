@@ -1,4 +1,4 @@
-# Arquitectura base – WMS SaaS nativo GS1
+# Arquitectura base – Kodex WMS nativo GS1
 
 > **Nota:** este borrador queda subordinado a `hoja-de-ruta-integrada.md`. Donde difieran (stack, nombres de tablas, `owner_id`, LPN, orden de fases), manda ese documento y el spec inicial.
 

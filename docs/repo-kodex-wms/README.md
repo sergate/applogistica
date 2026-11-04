@@ -1,9 +1,9 @@
-# wms-saas
+# Kodex WMS
 
-WMS SaaS multi-cliente, nativo GS1 (GTIN, SSCC, GLN, QR Digital Link), pensado
+Kodex WMS es un WMS SaaS multi-cliente, nativo GS1 (GTIN, SSCC, GLN, QR Digital Link), pensado
 para empresas con stock propio y operadores 3PL. Mercado inicial: Argentina.
 
-> Nombre de trabajo, renombrable. Estado: etapa de desarrollo, **solo datos de prueba**.
+> Repositorio: `kodex-wms`. Estado: etapa de desarrollo, **solo datos de prueba**.
 
 ## Documentación
 

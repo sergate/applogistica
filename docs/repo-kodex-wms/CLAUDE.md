@@ -1,6 +1,6 @@
-# CLAUDE.md – wms-saas
+# CLAUDE.md – Kodex WMS (repo `kodex-wms`)
 
-WMS SaaS multi-cliente, nativo GS1, primer módulo de una suite (WMS → TMS → ERP).
+Kodex WMS: WMS SaaS multi-cliente, nativo GS1, primer módulo de una suite (WMS → TMS → ERP).
 Mercado inicial: Argentina (stock propio y 3PL). Luego otros países de Sudamérica.
 
 ## Antes de escribir código

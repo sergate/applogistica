@@ -1,6 +1,6 @@
-# WMS SaaS — Especificación inicial para desarrollo
+# Kodex WMS — Especificación inicial para desarrollo
 
-> Documento para Claude Code. Nombre de trabajo del producto: `wms-saas` (renombrable).
+> Documento para Claude Code. Producto: **Kodex WMS** (repo `kodex-wms`).
 > Autor: José Manuel. Fecha: 2026-10-05. Estado: v0.1, alcance del MVP en definición.
 
 ---
@@ -81,7 +81,7 @@ Construir un **WMS en formato SaaS multi-cliente**, primer módulo de una suite 
 ## 3. Estructura del monorepo
 
 ```
-wms-saas/
+kodex-wms/
 ├─ apps/
 │  ├─ web/                  # Next.js — supervisión y administración (escritorio)
 │  ├─ floor/                # React + Vite — PWA del operario (escaneo, tareas)

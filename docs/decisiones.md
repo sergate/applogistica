@@ -1,4 +1,4 @@
-# Registro de decisiones (borrador para copiar al repo `wms-saas`)
+# Registro de decisiones (borrador para copiar al repo `kodex-wms`)
 
 | # | Tema | Decisión | Estado |
 |---|---|---|---|
@@ -16,3 +16,4 @@
 | D5 | GS1 por tenant | `core.tenant_gs1` con prefijo y serial de SSCC con bloqueo transaccional. Modo sin prefijo con identificadores internos marcados no interoperables. | Aprobada |
 | D6 | País | `country` y `timezone` en tenants y depósitos; lo fiscal fuera del núcleo. Argentina primero. | Aprobada |
 | D7 | Pooling | Probar `set_config` por transacción con el pooler de Supabase desde la fase 0. | Aprobada |
+| D8 | Nombre | El producto se llama **Kodex WMS**; repo `kodex-wms`. Pendiente: verificar disponibilidad de dominio y marca (INPI) antes de comunicarlo. | Aprobada |
